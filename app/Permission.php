@@ -18,6 +18,8 @@ enum Permission: string
     case StockAdjustments = 'stock_adjustments';
     case StockChecks = 'stock_checks';
     case StockTransfers = 'stock_transfers';
+    case WarrantySearch = 'warranty_search';
+    case SalesTargets = 'sales_targets';
 
     public function label(): string
     {
@@ -36,6 +38,8 @@ enum Permission: string
             self::StockAdjustments => 'Manual stock adjustments',
             self::StockChecks => 'Stock checks',
             self::StockTransfers => 'Stock transfers',
+            self::WarrantySearch => 'Warranty search',
+            self::SalesTargets => 'Sales targets',
         };
     }
 }

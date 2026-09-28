@@ -5,8 +5,10 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\SupportImpersonationController;
 use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +46,11 @@ Route::prefix('api')->group(function () {
             Route::post('stock-checks/{stockCheck}/complete', [StockCheckController::class, 'complete'])->middleware('permission:stock_checks');
             Route::get('stock-transfers', [StockTransferController::class, 'index'])->middleware('permission:stock_transfers');
             Route::post('stock-transfers', [StockTransferController::class, 'store'])->middleware('permission:stock_transfers');
+            Route::get('warranties', [WarrantyController::class, 'index'])->middleware('permission:warranty_search');
+            Route::get('sales-targets', [SalesTargetController::class, 'index'])->middleware('permission:sales_targets');
+            Route::post('sales-targets', [SalesTargetController::class, 'store'])->middleware('permission:sales_targets');
+            Route::put('sales-targets/{salesTarget}', [SalesTargetController::class, 'update'])->middleware('permission:sales_targets');
+            Route::delete('sales-targets/{salesTarget}', [SalesTargetController::class, 'destroy'])->middleware('permission:sales_targets');
 
             Route::middleware('role:superadmin,admin')->group(function () {
                 Route::get('users', [UserManagementController::class, 'index']);

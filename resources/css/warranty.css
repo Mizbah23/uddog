@@ -1,0 +1,32 @@
+.warranty-toolbar {
+  align-items: center;
+}
+
+.warranty-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .45px;
+  white-space: nowrap;
+}
+
+.warranty-status.active { background: #e8f8f0; color: #238d62; }
+.warranty-status.expired { background: #fff0ed; color: #c85d50; }
+.warranty-status.no_warranty { background: #f0f0f4; color: #767988; }
+
+.warranty-term {
+  display: block;
+  color: #9598a6;
+  font-size: 9.5px;
+  margin-top: 3px;
+}
+
+@media (max-width: 760px) {
+  .warranty-toolbar { align-items: flex-start; flex-direction: column; }
+  .warranty-toolbar .company-toolbar-actions { width: 100%; }
+  .warranty-toolbar .search-box { flex: 1; }
+}

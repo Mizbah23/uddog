@@ -147,6 +147,7 @@ class InventoryService
                     'quantity' => self::quantity($quantity),
                     'unit_price' => self::money($unitCents),
                     'cost_price' => $capturedCost,
+                    'warranty_months' => in_array($type, ['sale', 'resale'], true) ? $product->warranty_months : null,
                     'line_total' => self::money($lineCents),
                 ]);
                 StockMovement::create([

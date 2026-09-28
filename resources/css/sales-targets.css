@@ -1,0 +1,51 @@
+.target-period {
+  height: 39px;
+  border: 1px solid #e3e2eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #515567;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.target-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 135px;
+}
+
+.target-progress > span {
+  display: block;
+  width: 78px;
+  height: 7px;
+  overflow: hidden;
+  background: #ecebf2;
+  border-radius: 99px;
+}
+
+.target-progress i { display: block; height: 100%; background: #7367f0; border-radius: inherit; }
+.target-progress strong { color: #505467; font-size: 10.5px; }
+
+.sales-target-status {
+  display: inline-flex;
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: #737689;
+  background: #f0f0f4;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sales-target-status.achieved { color: #238d62; background: #e8f8f0; }
+.sales-target-status.on_track { color: #4763bb; background: #eaf0ff; }
+.sales-target-status.behind, .sales-target-status.missed { color: #c85d50; background: #fff0ed; }
+.sales-target-status.upcoming { color: #b17820; background: #fff4df; }
+
+@media (max-width: 760px) {
+  .sales-target-stats { grid-template-columns: 1fr; }
+}

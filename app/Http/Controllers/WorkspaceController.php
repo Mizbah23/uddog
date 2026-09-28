@@ -173,6 +173,7 @@ class WorkspaceController extends Controller
             'cost_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'sale_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'reorder_level' => ['required', 'numeric', 'min:0', 'decimal:0,3'],
+            'warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
             'active' => ['boolean'],
         ]);
         $data['cost_price'] = $data['cost_price'] ?? $savedProduct?->cost_price ?? 0;
