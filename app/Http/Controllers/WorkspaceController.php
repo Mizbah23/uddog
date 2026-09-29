@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\BranchAccess;
 use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
@@ -198,7 +199,13 @@ class WorkspaceController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string', 'max:1000'],
+            'company' => ['nullable', 'string', 'max:255'],
+            'area' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'credit_limit' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'active' => ['boolean'],
         ]);
+        $data['credit_limit'] = $data['credit_limit'] ?? $savedContact?->credit_limit ?? 0;
         $saved = $savedContact ? tap($savedContact)->update($data) : Contact::create([...$data, 'organization_id' => $organizationId]);
 
         return response()->json($saved, $savedContact ? 200 : 201);
@@ -301,15 +308,7 @@ class WorkspaceController extends Controller
 
     private function branchId(Request $request, int $organizationId): int
     {
-        $branch = Branch::query()->where('organization_id', $organizationId)
-            ->when($request->input('branch_id'), fn ($query, $branchId) => $query->whereKey($branchId), fn ($query) => $query->where('is_default', true))
-            ->where('active', true)
-            ->first();
-        if (! $branch) {
-            throw ValidationException::withMessages(['branch_id' => 'Select an active branch.']);
-        }
-
-        return $branch->id;
+        return app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
     }
 
     private function productsForBranch(int $organizationId, int $branchId, ?string $search = null)

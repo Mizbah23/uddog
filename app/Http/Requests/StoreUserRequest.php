@@ -35,6 +35,8 @@ class StoreUserRequest extends FormRequest
             'active' => ['sometimes', 'boolean'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', 'distinct', Rule::enum(Permission::class)],
+            'branch_ids' => ['nullable', 'array'],
+            'branch_ids.*' => ['integer', 'distinct'],
         ];
     }
 }

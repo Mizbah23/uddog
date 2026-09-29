@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
+use App\Models\Branch;
 use App\Models\User;
 use App\UserRole;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +16,7 @@ class UserManagementController extends Controller
     {
         $actor = request()->user();
         $users = User::query()
-            ->with('organization:id,name,subscription_status,subscription_ends_at')
+            ->with('organization:id,name,subscription_status,subscription_ends_at', 'accessibleBranches:id,name,code')
             ->when(! $actor->isSuperadmin(), fn ($query) => $query
                 ->where('organization_id', $actor->organization_id)
                 ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value]))
@@ -29,6 +30,8 @@ class UserManagementController extends Controller
     {
         $actor = $request->user();
         $data = $request->validated();
+        $branchIds = $data['branch_ids'] ?? [];
+        unset($data['branch_ids']);
 
         if (! $actor->isSuperadmin()) {
             if (! in_array($data['role'], [UserRole::Manager->value, UserRole::Staff->value], true)) {
@@ -43,11 +46,15 @@ class UserManagementController extends Controller
 
         if (in_array($data['role'], [UserRole::Superadmin->value, UserRole::Admin->value], true)) {
             $data['permissions'] = null;
+            $branchIds = [];
         }
 
-        $user = User::create($data);
+        $this->validateBranchAccess($branchIds, $data['role'], (int) $data['organization_id']);
 
-        return response()->json($user->load('organization:id,name'), 201);
+        $user = User::create($data);
+        $user->accessibleBranches()->sync($branchIds);
+
+        return response()->json($user->load('organization:id,name', 'accessibleBranches:id,name,code'), 201);
     }
 
     public function update(UpdateUserRequest $request, int $managedUser): JsonResponse
@@ -59,6 +66,8 @@ class UserManagementController extends Controller
                 ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value]))
             ->findOrFail($managedUser);
         $data = $request->validated();
+        $branchIds = $data['branch_ids'] ?? $user->accessibleBranches()->pluck('branches.id')->all();
+        unset($data['branch_ids']);
 
         if (! $actor->isSuperadmin()) {
             if (! in_array($data['role'], [UserRole::Manager->value, UserRole::Staff->value], true)) {
@@ -82,10 +91,27 @@ class UserManagementController extends Controller
         }
         if (in_array($data['role'], [UserRole::Superadmin->value, UserRole::Admin->value], true)) {
             $data['permissions'] = null;
+            $branchIds = [];
         }
 
-        $user->update($data);
+        $this->validateBranchAccess($branchIds, $data['role'], (int) $data['organization_id']);
 
-        return response()->json($user->fresh()->load('organization:id,name'));
+        $user->update($data);
+        $user->accessibleBranches()->sync($branchIds);
+
+        return response()->json($user->fresh()->load('organization:id,name', 'accessibleBranches:id,name,code'));
+    }
+
+    private function validateBranchAccess(array $branchIds, string $role, int $organizationId): void
+    {
+        if (! in_array($role, [UserRole::Manager->value, UserRole::Staff->value], true)) {
+            return;
+        }
+        if ($branchIds === []) {
+            throw ValidationException::withMessages(['branch_ids' => 'Select at least one branch for a manager or staff member.']);
+        }
+        if (Branch::query()->where('organization_id', $organizationId)->where('active', true)->whereIn('id', $branchIds)->count() !== count($branchIds)) {
+            throw ValidationException::withMessages(['branch_ids' => 'Every selected branch must be an active branch in this company.']);
+        }
     }
 }

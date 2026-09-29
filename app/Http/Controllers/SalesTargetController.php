@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\BranchAccess;
 use App\Models\Document;
 use App\Models\SalesTarget;
 use App\Models\SupportImpersonation;
@@ -18,14 +19,16 @@ class SalesTargetController extends Controller
     {
         $organizationId = $this->organizationId();
         $period = $this->period($request);
+        $branchIds = app(BranchAccess::class)->ids(Auth::user(), $organizationId);
         $targets = SalesTarget::query()
             ->where('organization_id', $organizationId)
+            ->whereIn('branch_id', $branchIds)
             ->whereDate('period', $period)
             ->with(['branch:id,name,code', 'user:id,name,email', 'creator:id,name'])
             ->orderBy('branch_id')
             ->orderBy('user_id')
             ->get();
-        $actuals = $this->actualsForPeriod($organizationId, $period);
+        $actuals = $this->actualsForPeriod($organizationId, $period, $branchIds);
 
         $targets = $targets->map(function (SalesTarget $target) use ($actuals, $period) {
             $actual = $actuals[$target->branch_id.'|'.($target->user_id ?? 'all')]
@@ -51,6 +54,7 @@ class SalesTargetController extends Controller
     {
         $organizationId = $this->organizationId();
         $data = $this->validated($request, $organizationId);
+        app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $data['branch_id']);
         $target = SalesTarget::query()->firstOrNew([
             'organization_id' => $organizationId,
             'branch_id' => $data['branch_id'],
@@ -67,8 +71,12 @@ class SalesTargetController extends Controller
     public function update(Request $request, int $salesTarget): JsonResponse
     {
         $organizationId = $this->organizationId();
-        $target = SalesTarget::query()->where('organization_id', $organizationId)->findOrFail($salesTarget);
+        $target = SalesTarget::query()
+            ->where('organization_id', $organizationId)
+            ->whereIn('branch_id', app(BranchAccess::class)->ids(Auth::user(), $organizationId))
+            ->findOrFail($salesTarget);
         $data = $this->validated($request, $organizationId);
+        app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $data['branch_id']);
         $target->update([...$data, 'period' => $data['period'].'-01']);
 
         return response()->json($target->fresh()->load(['branch:id,name,code', 'user:id,name,email', 'creator:id,name']));
@@ -76,7 +84,11 @@ class SalesTargetController extends Controller
 
     public function destroy(int $salesTarget): JsonResponse
     {
-        $target = SalesTarget::query()->where('organization_id', $this->organizationId())->findOrFail($salesTarget);
+        $organizationId = $this->organizationId();
+        $target = SalesTarget::query()
+            ->where('organization_id', $organizationId)
+            ->whereIn('branch_id', app(BranchAccess::class)->ids(Auth::user(), $organizationId))
+            ->findOrFail($salesTarget);
         $target->delete();
 
         return response()->json(['ok' => true]);
@@ -100,12 +112,13 @@ class SalesTargetController extends Controller
         return Carbon::createFromFormat('Y-m', $value)->startOfMonth();
     }
 
-    private function actualsForPeriod(int $organizationId, Carbon $period): array
+    private function actualsForPeriod(int $organizationId, Carbon $period, array $branchIds): array
     {
         $actuals = [];
         Document::query()
             ->selectRaw('branch_id, created_by, type, SUM(total) as total')
             ->where('organization_id', $organizationId)
+            ->whereIn('branch_id', $branchIds)
             ->whereBetween('document_date', [$period->toDateString(), $period->copy()->endOfMonth()->toDateString()])
             ->whereIn('type', ['sale', 'resale', 'sale_return'])
             ->groupBy('branch_id', 'created_by', 'type')

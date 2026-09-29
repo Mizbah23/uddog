@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\BranchAccess;
 use App\Models\DocumentItem;
 use App\Models\SupportImpersonation;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,7 @@ class WarrantyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $organizationId = $this->organizationId();
+        $branchIds = app(BranchAccess::class)->ids(Auth::user(), $organizationId);
         $data = $request->validate([
             'search' => ['nullable', 'string', 'max:120'],
             'status' => ['nullable', Rule::in(['all', 'active', 'expired', 'no_warranty'])],
@@ -21,8 +23,10 @@ class WarrantyController extends Controller
         $search = trim($data['search'] ?? '');
 
         $items = DocumentItem::query()
-            ->whereHas('document', function ($query) use ($organizationId) {
-                $query->where('organization_id', $organizationId)->whereIn('type', ['sale', 'resale']);
+            ->whereHas('document', function ($query) use ($organizationId, $branchIds) {
+                $query->where('organization_id', $organizationId)
+                    ->whereIn('branch_id', $branchIds)
+                    ->whereIn('type', ['sale', 'resale']);
             })
             ->with([
                 'product:id,name,sku,barcode,unit',

@@ -1,0 +1,20 @@
+.directory-stats { margin-bottom: 18px; }
+
+.directory-table table { min-width: 1320px; }
+.directory-table th { white-space: nowrap; }
+.directory-table td { vertical-align: middle; }
+.directory-table td > small,
+.directory-table .name-cell small { display: block; margin-top: 3px; color: #9699a8; font-size: 10px; }
+
+.directory-address { min-width: 210px; max-width: 285px; }
+.directory-address strong { display: block; color: #5e6274; font-size: 11px; font-weight: 600; line-height: 1.45; white-space: normal; }
+.directory-address small { display: block; margin-top: 5px; color: #a1a4b0; font-size: 9.5px; }
+
+.directory-balance { color: #22a46d; font-weight: 750; }
+.directory-balance.due { color: #d2773a; }
+.directory-table tfoot td { border-top: 2px solid #e9e8f0; background: #fafafe; color: #343849; }
+.directory-table tfoot td:first-child { text-align: right; }
+
+@media (max-width: 760px) {
+  .directory-stats { grid-template-columns: 1fr; }
+}

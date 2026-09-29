@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\BranchAccess;
 use App\Models\Branch;
 use App\Models\SupportImpersonation;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +16,9 @@ class BranchController extends Controller
 {
     public function index(): JsonResponse
     {
-        return response()->json(Branch::query()->where('organization_id', $this->organizationId())
+        $organizationId = $this->organizationId();
+
+        return response()->json(app(BranchAccess::class)->query(Auth::user(), $organizationId)
             ->withCount('documents')->withSum('stocks', 'quantity_on_hand')
             ->orderByDesc('is_default')->orderBy('name')->get());
     }
@@ -41,7 +44,7 @@ class BranchController extends Controller
     public function update(Request $request, int $branch): JsonResponse
     {
         $organizationId = $this->organizationId();
-        $saved = Branch::query()->where('organization_id', $organizationId)->findOrFail($branch);
+        $saved = app(BranchAccess::class)->query(Auth::user(), $organizationId)->findOrFail($branch);
         $data = $this->validated($request, $organizationId, $saved->id);
         if ($data['is_default'] && ! $data['active']) {
             throw ValidationException::withMessages(['active' => 'The default branch must remain active.']);
@@ -61,7 +64,11 @@ class BranchController extends Controller
 
     public function destroy(int $branch): JsonResponse
     {
-        $saved = Branch::query()->where('organization_id', $this->organizationId())->withCount('documents')->withSum('stocks', 'quantity_on_hand')->findOrFail($branch);
+        $organizationId = $this->organizationId();
+        $saved = app(BranchAccess::class)->query(Auth::user(), $organizationId)
+            ->withCount('documents')
+            ->withSum('stocks', 'quantity_on_hand')
+            ->findOrFail($branch);
         if ($saved->is_default || $saved->documents_count > 0 || (float) $saved->stocks_sum_quantity_on_hand !== 0.0) {
             throw ValidationException::withMessages(['branch' => 'Default branches and branches with transactions or stock cannot be deleted.']);
         }

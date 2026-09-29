@@ -1,0 +1,10 @@
+.branch-access-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.branch-access-option { display:flex; align-items:center; gap:10px; min-height:58px; padding:10px 12px; border:1px solid #e8e7ef; border-radius:8px; background:#fafafe; cursor:pointer; }
+.branch-access-option:has(input:checked) { border-color:#a79ef6; background:#f5f3ff; }
+.branch-access-option input { width:16px; height:16px; accent-color:#7367f0; }
+.branch-access-option > span:last-child { display:flex; flex-direction:column; gap:3px; }
+.branch-access-option strong { color:#414557; font-size:11.5px; }
+.branch-access-option small { color:#979aa9; font-size:9.5px; }
+.branch-access-help { margin-top:-4px; color:#8e91a0; font-size:10.5px; line-height:1.45; }
+.assigned-branches { display:block; margin-top:3px; color:#8e91a0; font-size:10.5px; line-height:1.4; }
+@media(max-width:560px){.branch-access-grid{grid-template-columns:1fr}}

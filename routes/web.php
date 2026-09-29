@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ContactDirectoryController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
@@ -34,6 +35,8 @@ Route::prefix('api')->group(function () {
             Route::put('categories/{category}', [CategoryController::class, 'update'])->middleware('permission:categories');
             Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->middleware('permission:categories');
             Route::get('contacts', [WorkspaceController::class, 'contacts'])->middleware('permission:contacts,purchases,sales,resales,purchase_returns');
+            Route::get('customers', [ContactDirectoryController::class, 'customers'])->middleware('permission:contacts');
+            Route::get('suppliers', [ContactDirectoryController::class, 'suppliers'])->middleware('permission:contacts');
             Route::post('contacts', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts,purchases,sales,resales,purchase_returns');
             Route::put('contacts/{contact}', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts');
             Route::get('documents', [WorkspaceController::class, 'documents'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');

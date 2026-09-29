@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\BranchAccess;
 use App\Models\Branch;
 use App\Models\Product;
 use App\Models\ProductStock;
@@ -73,7 +74,7 @@ class StockCheckController extends Controller
     public function update(Request $request, int $stockCheck): JsonResponse
     {
         $organizationId = $this->organizationId();
-        $saved = StockCheck::query()->where('organization_id', $organizationId)->findOrFail($stockCheck);
+        $saved = StockCheck::query()->where('organization_id', $organizationId)->where('branch_id', $this->branchId($request, $organizationId))->findOrFail($stockCheck);
         if ($saved->status !== 'draft') {
             throw ValidationException::withMessages(['status' => 'Completed stock checks cannot be edited.']);
         }
@@ -118,13 +119,6 @@ class StockCheckController extends Controller
 
     private function branchId(Request $request, int $organizationId): int
     {
-        $branch = Branch::query()->where('organization_id', $organizationId)
-            ->when($request->input('branch_id'), fn ($query, $branchId) => $query->whereKey($branchId), fn ($query) => $query->where('is_default', true))
-            ->where('active', true)->first();
-        if (! $branch) {
-            throw ValidationException::withMessages(['branch_id' => 'Select an active branch.']);
-        }
-
-        return $branch->id;
+        return app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
     }
 }

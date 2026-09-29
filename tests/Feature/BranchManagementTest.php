@@ -48,6 +48,7 @@ class BranchManagementTest extends TestCase
             'code' => 'SECOND',
             'active' => true,
         ]);
+        $user->accessibleBranches()->sync([$main->id, $second->id]);
         $supplier = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Supplier', 'type' => 'supplier']);
         $customer = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Customer', 'type' => 'customer']);
         $product = Product::create(['organization_id' => $user->organization_id, 'name' => 'Branch item', 'unit' => 'pc', 'reorder_level' => 0]);

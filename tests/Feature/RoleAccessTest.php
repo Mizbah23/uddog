@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Organization;
+use App\Models\Branch;
 use App\Models\User;
 use App\SubscriptionStatus;
 use App\UserRole;
@@ -25,6 +26,7 @@ class RoleAccessTest extends TestCase
     public function test_admin_manages_only_non_superadmin_users_in_their_client(): void
     {
         $admin = User::factory()->admin()->create();
+        $mainBranch = Branch::query()->where('organization_id', $admin->organization_id)->where('is_default', true)->firstOrFail();
         $otherOrganization = Organization::factory()->create();
         $otherUser = User::factory()->for($otherOrganization)->create();
 
@@ -39,6 +41,7 @@ class RoleAccessTest extends TestCase
             'role' => UserRole::Manager->value,
             'organization_id' => $otherOrganization->id,
             'active' => true,
+            'branch_ids' => [$mainBranch->id],
         ])->assertCreated()->assertJsonPath('organization_id', $admin->organization_id);
 
         $this->actingAs($admin)->postJson('/api/users', [

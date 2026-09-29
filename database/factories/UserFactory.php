@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Organization;
+use App\Models\Branch;
 use App\Models\User;
 use App\Permission;
 use App\UserRole;
@@ -19,6 +20,15 @@ class UserFactory extends Factory
      * The current password being used by the factory.
      */
     protected static ?string $password;
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user) {
+            if (in_array($user->role, [UserRole::Manager, UserRole::Staff], true)) {
+                $user->accessibleBranches()->sync(Branch::query()->where('organization_id', $user->organization_id)->pluck('id'));
+            }
+        });
+    }
 
     /**
      * Define the model's default state.

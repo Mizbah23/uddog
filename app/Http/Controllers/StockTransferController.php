@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\BranchAccess;
 use App\Models\Branch;
 use App\Models\StockTransfer;
 use App\Models\SupportImpersonation;
@@ -37,6 +38,8 @@ class StockTransferController extends Controller
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001', 'decimal:0,3'],
         ]);
+        app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $data['from_branch_id']);
+        app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $data['to_branch_id']);
 
         return response()->json($service->create($data, $organizationId, Auth::id()), 201);
     }
@@ -53,13 +56,6 @@ class StockTransferController extends Controller
 
     private function branchId(Request $request, int $organizationId): int
     {
-        $branch = Branch::query()->where('organization_id', $organizationId)
-            ->when($request->input('branch_id'), fn ($query, $branchId) => $query->whereKey($branchId), fn ($query) => $query->where('is_default', true))
-            ->where('active', true)->first();
-        if (! $branch) {
-            throw ValidationException::withMessages(['branch_id' => 'Select an active branch.']);
-        }
-
-        return $branch->id;
+        return app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
     }
 }

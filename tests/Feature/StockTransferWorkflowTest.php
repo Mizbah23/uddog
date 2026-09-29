@@ -101,7 +101,7 @@ class StockTransferWorkflowTest extends TestCase
             'to_branch_id' => $foreignBranch->id,
             'transfer_date' => '2026-09-28',
             'items' => [['product_id' => $foreignProduct->id, 'quantity' => 1]],
-        ])->assertUnprocessable()->assertJsonValidationErrors('to_branch_id');
+        ])->assertUnprocessable()->assertJsonValidationErrors('branch_id');
     }
 
     public function test_a_product_from_another_company_cannot_be_transferred_between_valid_branches(): void
