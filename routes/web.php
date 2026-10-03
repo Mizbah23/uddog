@@ -2,11 +2,13 @@
 
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\ContactDirectoryController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ContactDirectoryController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
-use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\SupportImpersonationController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarrantyController;
@@ -19,6 +21,8 @@ Route::prefix('api')->group(function () {
     Route::post('login', [WorkspaceController::class, 'login'])->middleware('throttle:5,1');
     Route::middleware(['auth', 'active'])->group(function () {
         Route::post('logout', [WorkspaceController::class, 'logout']);
+        Route::get('profile', [ProfileController::class, 'show']);
+        Route::put('profile', [ProfileController::class, 'update']);
         Route::delete('support-session', [SupportImpersonationController::class, 'destroy']);
 
         Route::middleware('subscribed')->group(function () {
@@ -27,6 +31,7 @@ Route::prefix('api')->group(function () {
             Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('permission:branches');
             Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->middleware('permission:branches');
             Route::get('overview', [WorkspaceController::class, 'overview'])->middleware('permission:dashboard');
+            Route::get('reports', [ReportController::class, 'index']);
             Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,resales,purchase_returns,inventory,stock_adjustments,stock_transfers');
             Route::post('products', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products,purchases');
             Route::put('products/{product}', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products');
@@ -41,6 +46,7 @@ Route::prefix('api')->group(function () {
             Route::put('contacts/{contact}', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts');
             Route::get('documents', [WorkspaceController::class, 'documents'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
             Route::post('documents', [WorkspaceController::class, 'saveDocument'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
+            Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,resales');
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');
             Route::get('stock-checks', [StockCheckController::class, 'index'])->middleware('permission:stock_checks');

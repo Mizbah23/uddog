@@ -3,16 +3,17 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Document extends Model
 {
-    protected $fillable = ['organization_id', 'branch_id', 'number', 'type', 'sale_channel', 'contact_id', 'purchase_id', 'sale_id', 'document_date', 'subtotal', 'discount', 'tax', 'total', 'payment_method', 'amount_paid', 'notes', 'created_by'];
+    protected $fillable = ['organization_id', 'branch_id', 'number', 'type', 'sale_channel', 'contact_id', 'purchase_id', 'sale_id', 'document_date', 'subtotal', 'discount', 'tax', 'total', 'payment_method', 'payment_type', 'amount_paid', 'down_payment', 'installment_count', 'installment_frequency', 'first_installment_date', 'notes', 'created_by'];
 
-    protected $appends = ['stock_profit', 'total_profit', 'balance_due'];
+    protected $appends = ['stock_profit', 'total_profit', 'balance_due', 'payment_status'];
 
     protected function casts(): array
     {
-        return ['document_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount' => 'decimal:2', 'tax' => 'decimal:2', 'total' => 'decimal:2', 'amount_paid' => 'decimal:2'];
+        return ['document_date' => 'date:Y-m-d', 'first_installment_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount' => 'decimal:2', 'tax' => 'decimal:2', 'total' => 'decimal:2', 'amount_paid' => 'decimal:2', 'down_payment' => 'decimal:2'];
     }
 
     public function contact()
@@ -28,6 +29,16 @@ class Document extends Model
     public function items()
     {
         return $this->hasMany(DocumentItem::class);
+    }
+
+    public function installments(): HasMany
+    {
+        return $this->hasMany(SaleInstallment::class)->orderBy('sequence');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SalePayment::class)->latest('payment_date')->latest('id');
     }
 
     public function purchase()
@@ -69,5 +80,18 @@ class Document extends Model
     public function getBalanceDueAttribute(): string
     {
         return number_format(max(0, (float) $this->total - (float) $this->amount_paid), 2, '.', '');
+    }
+
+    public function getPaymentStatusAttribute(): string
+    {
+        if (! in_array($this->type, ['sale', 'resale'], true)) {
+            return 'not_applicable';
+        }
+
+        if ((float) $this->balance_due === 0.0) {
+            return 'paid';
+        }
+
+        return (float) $this->amount_paid > 0 ? 'partial' : 'due';
     }
 }

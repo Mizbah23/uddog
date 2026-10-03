@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\BranchAccess;
-use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Organization;
@@ -115,16 +114,41 @@ class WorkspaceController extends Controller
         $organizationId = $this->organizationId();
         $branchId = $this->branchId($request, $organizationId);
         $products = $this->productsForBranch($organizationId, $branchId)->where('active', true);
+        $user = Auth::user();
+        $canViewSales = $user->hasPermission(Permission::Sales) || $user->hasPermission(Permission::Resales) || $user->hasPermission(Permission::SalesReturns);
+        $canViewPurchases = $user->hasPermission(Permission::Purchases) || $user->hasPermission(Permission::PurchaseReturns);
+        $visibleSaleTypes = $canViewSales ? ['sale', 'resale', 'sale_return'] : [];
+        $visiblePurchaseTypes = $canViewPurchases ? ['purchase', 'purchase_return'] : [];
+        $visibleTypes = [...$visibleSaleTypes, ...$visiblePurchaseTypes];
         $documents = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId);
+        $yearDocuments = (clone $documents)->whereIn('type', $visibleTypes)->whereYear('document_date', now()->year)->with(['items.product.category:id,name'])->get();
+        $monthlyTotals = collect(range(1, 12))->mapWithKeys(fn (int $month) => [$month => ['month' => now()->setMonth($month)->format('M'), 'sales' => 0, 'purchases' => 0]]);
+        $categoryTotals = [];
+        foreach ($yearDocuments as $document) {
+            $month = (int) $document->document_date->format('n');
+            if (in_array($document->type, ['sale', 'resale', 'sale_return'], true)) {
+                $sign = $document->type === 'sale_return' ? -1 : 1;
+                $monthlyTotals[$month]['sales'] += $sign * (float) $document->total;
+                foreach ($document->items as $item) {
+                    $category = $item->product?->category?->name ?? 'Uncategorized';
+                    $categoryTotals[$category] = ($categoryTotals[$category] ?? 0) + ($sign * (float) $item->line_total);
+                }
+            } elseif (in_array($document->type, ['purchase', 'purchase_return'], true)) {
+                $monthlyTotals[$month]['purchases'] += ($document->type === 'purchase_return' ? -1 : 1) * (float) $document->total;
+            }
+        }
+        $topCategories = collect($categoryTotals)->map(fn (float $total, string $name) => ['name' => $name, 'sales' => $total])->sortByDesc('sales')->take(5)->values();
 
         return response()->json([
             'products' => $products->count(),
             'stock_value' => $products->sum(fn (Product $product) => (float) $product->quantity_on_hand * (float) $product->cost_price),
             'low_stock' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
-            'sales_total' => (clone $documents)->whereIn('type', ['sale', 'resale'])->sum('total') - (clone $documents)->where('type', 'sale_return')->sum('total'),
-            'purchase_total' => (clone $documents)->where('type', 'purchase')->sum('total'),
-            'recent_documents' => (clone $documents)->with('contact')->latest()->limit(6)->get(),
+            'sales_total' => $canViewSales ? (clone $documents)->whereIn('type', ['sale', 'resale'])->sum('total') - (clone $documents)->where('type', 'sale_return')->sum('total') : 0,
+            'purchase_total' => $canViewPurchases ? (clone $documents)->where('type', 'purchase')->sum('total') : 0,
+            'recent_documents' => (clone $documents)->when($visibleTypes, fn ($query) => $query->whereIn('type', $visibleTypes), fn ($query) => $query->whereRaw('1 = 0'))->with('contact')->latest()->limit(6)->get(),
             'low_stock_products' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values(),
+            'monthly_totals' => $monthlyTotals->values(),
+            'top_categories' => $topCategories,
         ]);
     }
 
@@ -233,7 +257,7 @@ class WorkspaceController extends Controller
             ->where('organization_id', $this->organizationId())
             ->where('branch_id', $this->branchId($request, $this->organizationId()))
             ->whereIn('type', $readableTypes)
-            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name')
+            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'payments.receiver')
             ->when($type, fn ($q) => $q->where('type', $type))
             ->latest()
             ->get());
@@ -254,6 +278,11 @@ class WorkspaceController extends Controller
             'tax' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'payment_method' => ['required_if:sale_channel,pos', 'nullable', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer', 'credit'])],
             'amount_paid' => ['required_if:sale_channel,pos', 'nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'payment_type' => ['nullable', Rule::in(['full', 'installment', 'due'])],
+            'down_payment' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'installment_count' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'installment_frequency' => ['nullable', Rule::in(['weekly', 'monthly'])],
+            'first_installment_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', Rule::exists('products', 'id')->where('organization_id', $organizationId), 'distinct'],
@@ -271,6 +300,25 @@ class WorkspaceController extends Controller
         }
 
         return response()->json($inventory->createDocument($data, Auth::id(), $organizationId, $branchId), 201);
+    }
+
+    public function recordSalePayment(Request $request, int $document, InventoryService $inventory): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $sale = Document::query()
+            ->where('organization_id', $organizationId)
+            ->whereIn('type', ['sale', 'resale'])
+            ->findOrFail($document);
+        app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $sale->branch_id);
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
+            'payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
+            'payment_date' => ['nullable', 'date'],
+            'sale_installment_id' => ['nullable', 'integer'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        return response()->json($inventory->recordSalePayment($sale, $data, Auth::id(), $organizationId), 201);
     }
 
     public function movements(Request $request): JsonResponse
