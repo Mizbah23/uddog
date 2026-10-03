@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
 use App\Permission;
+use App\ReportType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class ReportController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'report' => ['required', Rule::in(['sales', 'purchases', 'profit_loss', 'employee_sales', 'stock', 'adjustments', 'barcode_products', 'barcode_sales', 'categories', 'customers', 'customer_ledger', 'customer_due'])],
+            'report' => ['required', Rule::enum(ReportType::class)],
             'branch_id' => ['nullable', 'integer'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
@@ -36,18 +37,7 @@ class ReportController extends Controller
         abort_unless($organizationId, 403, 'Select a client account before using reports.');
 
         $report = $data['report'];
-        $permissions = match ($report) {
-            'sales' => [Permission::Sales, Permission::Resales, Permission::SalesReturns],
-            'employee_sales', 'barcode_sales', 'profit_loss' => [Permission::Sales, Permission::Resales],
-            'customer_due' => [Permission::Sales, Permission::Resales],
-            'purchases' => [Permission::Purchases, Permission::PurchaseReturns],
-            'stock' => [Permission::Inventory, Permission::Products],
-            'adjustments' => [Permission::StockAdjustments],
-            'barcode_products' => [Permission::Products],
-            'categories' => [Permission::Categories, Permission::Products],
-            'customers', 'customer_ledger' => [Permission::Contacts],
-        };
-        abort_unless(collect($permissions)->contains(fn (Permission $permission) => Auth::user()->hasPermission($permission)), 403, 'Your owner has not granted access to this report.');
+        abort_unless(Auth::user()->hasReportAccess(ReportType::from($report)), 403, 'Your owner has not granted access to this report.');
 
         $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
         $dateFrom = $data['date_from'] ?? null;

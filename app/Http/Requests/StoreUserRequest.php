@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Permission;
+use App\ReportType;
 use App\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -35,6 +36,8 @@ class StoreUserRequest extends FormRequest
             'active' => ['sometimes', 'boolean'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', 'distinct', Rule::enum(Permission::class)],
+            'report_permissions' => ['nullable', 'array'],
+            'report_permissions.*' => ['string', 'distinct', Rule::enum(ReportType::class)],
             'branch_ids' => ['nullable', 'array'],
             'branch_ids.*' => ['integer', 'distinct'],
         ];

@@ -17,6 +17,7 @@ class SupportImpersonationController extends Controller
         $owner = $client->users()
             ->where('role', UserRole::Admin->value)
             ->where('active', true)
+            ->where('access_paused', false)
             ->oldest()
             ->first();
 

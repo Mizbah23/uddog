@@ -6,7 +6,7 @@ import '../css/sales-targets.css';
 import '../css/design-refresh.css';
 import '../css/contact-directory.css';
 import '../css/branch-access.css';
-import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined } from '@lucide/vue';
+import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
 
 const workspaceNav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, abilities: ['dashboard'] },
@@ -31,7 +31,9 @@ const workspaceNav = [
 const managementNav = [
   { id: 'admin_dashboard', label: 'Overview', icon: LayoutDashboard, permission: 'manage_clients' },
   { id: 'clients', label: 'Companies', icon: Building2, permission: 'manage_clients' },
+  { id: 'access_control', label: 'Access control', icon: ShieldCheck, permission: 'manage_clients' },
   { id: 'users', label: 'Users', icon: UserCog, permission: 'manage_users' },
+  { id: 'system_setup', label: 'Settings / System Setup', icon: Settings2, permission: 'manage_settings' },
   { id: 'roadmap', label: 'Work progress', icon: ClipboardList, permission: 'manage_clients' },
 ];
 const titles = { ...Object.fromEntries([...workspaceNav, ...managementNav].map(item => [item.id, item.label])), profile: 'My profile' };
@@ -42,6 +44,7 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const page = ref(location.hash.replace('#', '') || 'dashboard');
+const reportsExpanded = ref(page.value === 'reports');
 const mobileOpen = ref(false);
 const modal = ref('');
 const documentCreateContext = ref('');
@@ -60,18 +63,18 @@ const suppliers = ref([]);
 const documents = ref([]);
 const movements = ref([]);
 const reportKinds = [
-  { id: 'sales', label: 'Sales', permission: 'sales', description: 'Sales, returns, collections and customer balances.' },
-  { id: 'purchases', label: 'Purchases', permission: 'purchases', description: 'Purchases and supplier returns for the selected period.' },
-  { id: 'profit_loss', label: 'Profit & loss', permission: 'sales', description: 'Net sales and gross profit from recorded sale line costs.' },
-  { id: 'employee_sales', label: 'Employee-wise sales', permission: 'sales', description: 'Sales totals and collections by the employee who created each sale.' },
-  { id: 'stock', label: 'Stock', permission: 'inventory', description: 'Current branch stock, reorder levels and inventory values.' },
-  { id: 'adjustments', label: 'Stock adjustments', permission: 'stock_adjustments', description: 'Manual adjustments and stock check variances.' },
-  { id: 'barcode_products', label: 'Barcode-wise products', permission: 'products', description: 'Search products by barcode and review current quantity and price.' },
-  { id: 'barcode_sales', label: 'Barcode-wise sales', permission: 'sales', description: 'Sold product lines matched by barcode or product name.' },
-  { id: 'categories', label: 'Categories', permission: 'categories', description: 'Product counts, current stock and sales grouped by category.' },
-  { id: 'customers', label: 'Customers', permission: 'contacts', description: 'Customer sales, collections, balances and credit limits.' },
-  { id: 'customer_ledger', label: 'Customer ledger', permission: 'contacts', description: 'Customer transaction debit and credit history.' },
-  { id: 'customer_due', label: 'Customer due', permission: 'sales', description: 'Unpaid and partially paid customer invoices.' },
+  { id: 'sales', label: 'Sales', abilities: ['sales', 'resales', 'sales_returns'], description: 'Sales, returns, collections and customer balances.' },
+  { id: 'purchases', label: 'Purchases', abilities: ['purchases', 'purchase_returns'], description: 'Purchases and supplier returns for the selected period.' },
+  { id: 'profit_loss', label: 'Profit & loss', abilities: ['sales', 'resales'], description: 'Net sales and gross profit from recorded sale line costs.' },
+  { id: 'employee_sales', label: 'Employee-wise sales', abilities: ['sales', 'resales'], description: 'Sales totals and collections by the employee who created each sale.' },
+  { id: 'stock', label: 'Stock', abilities: ['inventory', 'products'], description: 'Current branch stock, reorder levels and inventory values.' },
+  { id: 'adjustments', label: 'Stock adjustments', abilities: ['stock_adjustments'], description: 'Manual adjustments and stock check variances.' },
+  { id: 'barcode_products', label: 'Barcode-wise products', abilities: ['products'], description: 'Search products by barcode and review current quantity and price.' },
+  { id: 'barcode_sales', label: 'Barcode-wise sales', abilities: ['sales', 'resales'], description: 'Sold product lines matched by barcode or product name.' },
+  { id: 'categories', label: 'Categories', abilities: ['categories', 'products'], description: 'Product counts, current stock and sales grouped by category.' },
+  { id: 'customers', label: 'Customers', abilities: ['contacts'], description: 'Customer sales, collections, balances and credit limits.' },
+  { id: 'customer_ledger', label: 'Customer ledger', abilities: ['contacts'], description: 'Customer transaction debit and credit history.' },
+  { id: 'customer_due', label: 'Customer due', abilities: ['sales', 'resales'], description: 'Unpaid and partially paid customer invoices.' },
 ];
 const reportKind = ref('sales');
 const reportToday = new Date().toLocaleDateString('en-CA');
@@ -90,7 +93,11 @@ const clients = ref([]);
 const selectedClient = ref(null);
 const selectedDocument = ref(null);
 const clientStatusFilter = ref('all');
+const accessCompanySearch = ref('');
+const accessUserSearch = ref('');
+const accessCompanyFilter = ref('all');
 const users = ref([]);
+const systemSetup = ref(null);
 const profileMenuOpen = ref(false);
 const profileForm = ref({ name: '', mobile: '', current_password: '', password: '' });
 const authForm = ref({ name: '', email: '', password: '' });
@@ -112,7 +119,7 @@ const branchForm = ref({ name: '', code: '', phone: '', address: '', is_default:
 const contactForm = ref({ name: '', company: '', type: 'customer', phone: '', email: '', address: '', area: '', category: '', credit_limit: '0', active: true });
 const adjustmentForm = ref({ product_id: '', quantity_change: '', notes: '' });
 const clientForm = ref({ name: '', plan_name: '', subscription_status: 'trial', subscription_ends_at: '', notes: '', owner_name: '', owner_email: '', owner_password: '', owner_active: true, owner_exists: false });
-const userForm = ref({ name: '', email: '', password: '', role: 'manager', organization_id: '', active: true, permissions: [], branch_ids: [] });
+const userForm = ref({ name: '', email: '', password: '', role: 'manager', organization_id: '', active: true, permissions: [], report_permissions: [], branch_ids: [] });
 const salesTargetForm = ref({ branch_id: '', user_id: '', period: new Date().toISOString().slice(0, 7), target_amount: '', notes: '' });
 const permissionOptions = [
   { value: 'dashboard', label: 'Dashboard overview' },
@@ -164,17 +171,29 @@ function initial(name) { return (name || 'U').trim().charAt(0).toUpperCase(); }
 function productOption(product) { return product.sku ? `${product.name} · ${product.sku}` : product.name; }
 function roleLabel(role) { return translate(({ superadmin: 'Superadmin', admin: 'Owner admin', manager: 'Manager', staff: 'Staff' })[role] || role, language.value); }
 function statusLabel(status) { return ({ trial: 'Trial', active: 'Active', past_due: 'Past due', suspended: 'Suspended', cancelled: 'Cancelled' })[status] || status; }
+const currentSubscription = computed(() => session.value?.subscription);
+const subscriptionDisplayStatus = computed(() => {
+  const subscription = currentSubscription.value;
+  if (!subscription) return 'Not assigned';
+  if (subscription.access_paused) return 'Paused by admin';
+  if (!subscription.active && ['trial', 'active'].includes(subscription.status) && subscription.days_remaining < 0) return 'Expired';
+  return statusLabel(subscription.status) || 'Not assigned';
+});
 function paymentLabel(method) { return translate(({ cash: 'Cash', card: 'Card', mobile_banking: 'Mobile banking', bank_transfer: 'Bank transfer', credit: 'Credit' })[method] || '—', language.value); }
 function checkVariance(stockCheck) { return stockCheck.items.reduce((total, item) => total + Number(item.variance || 0), 0); }
 function clientValidityLabel(client) {
   if (!client.subscription_active && ['trial', 'active'].includes(client.subscription_status) && client.subscription_ends_at) return 'Expired';
   return statusLabel(client.subscription_status);
 }
+function clientAccessLabel(client) {
+  if (client.access_paused) return 'Paused by admin';
+  return client.subscription_active ? 'Available' : 'Subscription inactive';
+}
 
 function hasAbility(...abilities) { return abilities.some(ability => session.value?.permissions?.abilities?.includes(ability)); }
 const nav = computed(() => [
-  ...(session.value?.permissions?.use_workspace ? workspaceNav.filter(item => item.abilities.some(ability => hasAbility(ability))) : []),
-  ...managementNav.filter(item => session.value?.permissions?.[item.permission]),
+  ...(session.value?.permissions?.use_workspace ? workspaceNav.filter(item => item.id === 'reports' ? !!session.value?.permissions?.reports?.length : item.abilities.some(ability => hasAbility(ability))) : []),
+  ...managementNav.filter(item => session.value?.permissions?.[item.permission] && (session.value?.permissions?.use_workspace || session.value?.permissions?.manage_clients)),
 ]);
 
 async function api(path, options = {}) {
@@ -187,7 +206,15 @@ async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401) { session.value = { user: null, setup_required: false }; }
-    throw new Error(data.errors ? Object.values(data.errors).flat().join(' ') : data.message || 'Something went wrong.');
+    if (response.status === 403 && ['user_access_paused', 'user_inactive'].includes(data.code)) {
+      session.value = { user: null, setup_required: false };
+    }
+    if (response.status === 403 && ['company_access_paused', 'subscription_inactive'].includes(data.code)) {
+      session.value = await api('session');
+    }
+    throw new Error(data.errors
+      ? Object.values(data.errors).flat().map(message => translate(message, language.value)).join(' ')
+      : translate(data.message || 'Something went wrong.', language.value));
   }
   return data;
 }
@@ -219,19 +246,25 @@ async function refresh() {
     if (hasAbility('sales_targets')) requests.push(refreshSalesTargets());
   }
   if (session.value?.permissions?.manage_clients) requests.push(api('clients').then(data => { clients.value = data; }));
-  if (session.value?.permissions?.manage_users) requests.push(api('users').then(data => { users.value = data; }));
+  if (session.value?.permissions?.manage_users && (session.value?.permissions?.use_workspace || session.value?.permissions?.manage_clients)) requests.push(api('users').then(data => { users.value = data; }));
+  if (session.value?.permissions?.use_workspace && session.value?.permissions?.manage_settings) requests.push(api('system-setup').then(data => { systemSetup.value = data; }));
   await Promise.all(requests);
 }
 async function initialize() {
   try {
     session.value = await api('session');
+    if (session.value.account_disabled) error.value = 'Your user account has been paused. Contact your company administrator or platform support.';
     if (session.value.user) {
-      if (!nav.value.some(item => item.id === page.value)) {
+      if (page.value !== 'profile' && !nav.value.some(item => item.id === page.value)) {
         page.value = nav.value[0]?.id || 'dashboard';
         history.replaceState(null, '', `#${page.value}`);
       }
       await refresh();
       if (page.value === 'reports') await loadReport();
+      if (page.value === 'profile') {
+        const profile = await api('profile');
+        profileForm.value = { name: profile.name, mobile: profile.mobile || '', current_password: '', password: '' };
+      }
     }
   } catch (e) { error.value = e.message; }
   finally { loading.value = false; }
@@ -240,6 +273,7 @@ let localization;
 async function applyLanguage() {
   localStorage.setItem('uddog-language', language.value);
   document.documentElement.lang = language.value === 'bn' ? 'bn' : 'en';
+  document.title = language.value === 'bn' ? 'uddog · ইনভেন্টরি' : 'Uddog Inventory';
   await nextTick();
   localization?.apply();
 }
@@ -249,17 +283,41 @@ onMounted(async () => {
   await applyLanguage();
 });
 watch(language, applyLanguage);
-window.addEventListener('hashchange', () => { const requested = location.hash.replace('#', '') || 'dashboard'; page.value = nav.value.some(item => item.id === requested) ? requested : nav.value[0]?.id || 'dashboard'; mobileOpen.value = false; });
-function navigate(id) { page.value = id; location.hash = id; mobileOpen.value = false; profileMenuOpen.value = false; search.value = ''; if (id === 'reports') loadReport(); }
+window.addEventListener('hashchange', () => { const requested = location.hash.replace('#', '') || 'dashboard'; page.value = requested === 'profile' || nav.value.some(item => item.id === requested) ? requested : nav.value[0]?.id || 'dashboard'; reportsExpanded.value = page.value === 'reports'; mobileOpen.value = false; });
+function navigate(id) { page.value = id; location.hash = id; mobileOpen.value = false; profileMenuOpen.value = false; search.value = ''; if (id !== 'reports') reportsExpanded.value = false; if (id === 'reports') loadReport(); }
+function toggleReportsMenu() {
+  if (page.value !== 'reports') {
+    reportsExpanded.value = true;
+    navigate('reports');
+  } else {
+    reportsExpanded.value = !reportsExpanded.value;
+  }
+  if (reportsExpanded.value) nextTick(() => document.querySelector('.report-subnav-item')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+}
+function selectReport(id) {
+  reportKind.value = id;
+  reportsExpanded.value = true;
+  navigate('reports');
+}
 function canOpenReport(report) {
-  if (report.id === 'sales') return hasAbility('sales', 'resales', 'sales_returns');
-  if (report.id === 'purchases') return hasAbility('purchases', 'purchase_returns');
-  if (report.id === 'stock') return hasAbility('inventory', 'products');
-  if (report.id === 'categories') return hasAbility('categories', 'products');
-  if (['sales', 'employee_sales', 'barcode_sales', 'profit_loss', 'customer_due'].includes(report.id)) return hasAbility('sales', 'resales');
-  return hasAbility(report.permission);
+  return session.value?.permissions?.reports?.includes(report.id);
 }
 const availableReportKinds = computed(() => reportKinds.filter(canOpenReport));
+function canGrantReport(report) {
+  return !['manager', 'staff'].includes(userForm.value.role) || report.abilities.some(ability => userForm.value.permissions.includes(ability));
+}
+const userAccessibleReports = computed(() => {
+  if (!['manager', 'staff'].includes(userForm.value.role)) return reportKinds;
+  return reportKinds.filter(report => userForm.value.report_permissions.includes(report.id) && canGrantReport(report));
+});
+watch(() => [...userForm.value.permissions], () => {
+  if (modal.value === 'user' && ['manager', 'staff'].includes(userForm.value.role)) {
+    userForm.value.report_permissions = userForm.value.report_permissions.filter(id => {
+      const report = reportKinds.find(item => item.id === id);
+      return report && canGrantReport(report);
+    });
+  }
+});
 const activeReport = computed(() => reportKinds.find(report => report.id === reportKind.value) || reportKinds[0]);
 async function loadReport() {
   if (!availableReportKinds.value.some(report => report.id === reportKind.value)) {
@@ -293,7 +351,6 @@ function reportCell(column, value) {
   if (/quantity|stock|change|reorder|units|on hand/i.test(column) && !/status/i.test(column)) return qty(value);
   return value;
 }
-watch(reportKind, () => { if (page.value === 'reports') loadReport(); });
 async function switchBranch() {
   localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(activeBranchId.value));
   error.value = ''; busy.value = true;
@@ -321,8 +378,7 @@ async function openProfile() {
   try {
     const user = await api('profile');
     profileForm.value = { name: user.name, mobile: user.mobile || '', current_password: '', password: '' };
-    page.value = 'profile';
-    profileMenuOpen.value = false;
+    navigate('profile');
   } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 async function saveProfile() {
@@ -335,7 +391,7 @@ async function saveProfile() {
   } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 function clearMessages() { error.value = ''; notice.value = ''; }
-function toast(message) { notice.value = message; setTimeout(() => { notice.value = ''; }, 4000); }
+function toast(message) { notice.value = translate(message, language.value); setTimeout(() => { notice.value = ''; }, 4000); }
 
 const filteredProducts = computed(() => products.value.filter(p => `${p.name} ${p.sku || ''} ${p.barcode || ''} ${p.category?.name || ''}`.toLowerCase().includes(search.value.toLowerCase())));
 const filteredCategories = computed(() => categories.value.filter(category => `${category.name} ${category.description || ''}`.toLowerCase().includes(search.value.toLowerCase())));
@@ -357,6 +413,8 @@ const filteredClients = computed(() => clients.value.filter(client => {
   return client.subscription_status === clientStatusFilter.value;
 }));
 const filteredUsers = computed(() => users.value.filter(user => `${user.name} ${user.email} ${user.role} ${user.organization?.name || ''}`.toLowerCase().includes(search.value.toLowerCase())));
+const accessClients = computed(() => clients.value.filter(client => `${client.name} ${client.plan_name || ''}`.toLowerCase().includes(accessCompanySearch.value.toLowerCase())));
+const accessUsers = computed(() => users.value.filter(user => user.role !== 'superadmin' && user.organization_id && (accessCompanyFilter.value === 'all' || String(user.organization_id) === String(accessCompanyFilter.value)) && `${user.name} ${user.email} ${user.role} ${user.organization?.name || ''}`.toLowerCase().includes(accessUserSearch.value.toLowerCase())));
 const clientStats = computed(() => {
   const now = new Date();
   const inThirtyDays = new Date();
@@ -453,8 +511,13 @@ const stockTransferCanSave = computed(() => {
 const lowStock = p => Number(p.quantity_on_hand) <= Number(p.reorder_level);
 
 function resetPos() {
-  posForm.value = { contact_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: 'cash', down_payment: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', amount_paid: '0', notes: '', items: [] };
+  posForm.value = { contact_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: session.value?.operational_setup?.sales?.default_payment_method || 'cash', down_payment: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', amount_paid: '0', notes: '', items: [] };
   posSearch.value = '';
+}
+function operationEnabled(type) {
+  const setup = session.value?.operational_setup;
+  if (!setup) return true;
+  return ({ resale: setup.sales?.allow_resales, sale_return: setup.sales?.allow_sales_returns, purchase_return: setup.purchases?.allow_purchase_returns, adjustment: setup.store?.allow_stock_adjustments, stock_transfer: setup.store?.allow_stock_transfers })[type] !== false;
 }
 function ean13CheckDigit(base) {
   const digits = String(base).slice(0, 12).padStart(12, '0').split('').map(Number);
@@ -537,7 +600,7 @@ function setDocumentPayment() {
 function openProduct(product = null, context = '') {
   clearMessages(); editingId.value = product?.id || null;
   documentCreateContext.value = context;
-  productForm.value = product ? { sku: product.sku || '', barcode: product.barcode || '', name: product.name, category_id: product.category_id || '', unit: product.unit === 'pcs' ? 'pc' : product.unit, cost_price: product.cost_price, sale_price: product.sale_price, reorder_level: product.reorder_level, warranty_months: product.warranty_months ?? '', active: product.active } : { sku: '', barcode: '', name: '', category_id: '', unit: 'pc', cost_price: '', sale_price: '', reorder_level: '0', warranty_months: '', active: true };
+  productForm.value = product ? { sku: product.sku || '', barcode: product.barcode || '', name: product.name, category_id: product.category_id || '', unit: product.unit === 'pcs' ? 'pc' : product.unit, cost_price: product.cost_price, sale_price: product.sale_price, reorder_level: product.reorder_level, warranty_months: product.warranty_months ?? '', active: product.active } : { sku: '', barcode: '', name: '', category_id: '', unit: 'pc', cost_price: '', sale_price: '', reorder_level: String(session.value?.operational_setup?.store?.default_reorder_level ?? 0), warranty_months: '', active: true };
   modal.value = 'product';
 }
 function openCategory(category = null, context = '') {
@@ -572,9 +635,10 @@ function openContact(contact = null, context = '') {
   modal.value = 'contact';
 }
 function openDocument(type = page.value) {
+  if (!operationEnabled(type)) { error.value = 'This workflow is disabled in System Setup.'; return; }
   clearMessages();
   documentCreateContext.value = '';
-  documentForm.value = { type, contact_id: '', purchase_id: '', sale_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: 'cash', down_payment: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', notes: '', items: [{ product_id: '', quantity: 1, unit_price: '0.00' }] };
+  documentForm.value = { type, contact_id: '', purchase_id: '', sale_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: session.value?.operational_setup?.sales?.default_payment_method || 'cash', down_payment: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', notes: '', items: [{ product_id: '', quantity: 1, unit_price: '0.00' }] };
   modal.value = 'document';
 }
 function openInvoice(document) {
@@ -619,9 +683,11 @@ function closeModal() {
   error.value = '';
 }
 function openAdjustment(product = null) {
+  if (!operationEnabled('adjustment')) { error.value = 'This workflow is disabled in System Setup.'; return; }
   clearMessages(); adjustmentForm.value = { product_id: product?.id || '', quantity_change: '', notes: '' }; modal.value = 'adjustment';
 }
 function openStockTransfer() {
+  if (!operationEnabled('stock_transfer')) { error.value = 'This workflow is disabled in System Setup.'; return; }
   clearMessages();
   stockTransferForm.value = { to_branch_id: transferDestinations.value[0]?.id || '', transfer_date: today(), notes: '', items: [{ product_id: '', quantity: 1 }] };
   modal.value = 'stock_transfer';
@@ -641,7 +707,10 @@ async function openClientDetails(client) {
 }
 function openUser(user = null) {
   clearMessages(); editingId.value = user?.id || null;
-  userForm.value = user ? { name: user.name, email: user.email, password: '', role: user.role, organization_id: user.organization_id || '', active: user.active, permissions: [...(user.permissions || [])], branch_ids: user.accessible_branches?.map(branch => branch.id) || [] } : { name: '', email: '', password: '', role: session.value.user.role === 'superadmin' ? 'admin' : 'manager', organization_id: session.value.user.role === 'superadmin' ? '' : session.value.user.organization_id, active: true, permissions: [], branch_ids: [] };
+  const inheritedReports = user && ['manager', 'staff'].includes(user.role)
+    ? reportKinds.filter(report => report.abilities.some(ability => (user.permissions || []).includes(ability))).map(report => report.id)
+    : [];
+  userForm.value = user ? { name: user.name, email: user.email, password: '', role: user.role, organization_id: user.organization_id || '', active: user.active, permissions: [...(user.permissions || [])], report_permissions: [...(user.report_permissions ?? inheritedReports)], branch_ids: user.accessible_branches?.map(branch => branch.id) || [] } : { name: '', email: '', password: '', role: session.value.user.role === 'superadmin' ? 'admin' : 'manager', organization_id: session.value.user.role === 'superadmin' ? '' : session.value.user.organization_id, active: true, permissions: [], report_permissions: [], branch_ids: [] };
   modal.value = 'user';
 }
 function chooseProduct(item) {
@@ -890,11 +959,42 @@ async function renewClient(client, months) {
     toast(`${updated.name} renewed for ${months} ${months === 1 ? 'month' : 'months'}.`);
   } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
+async function setClientAccess(client) {
+  const paused = !client.access_paused;
+  if (paused && !window.confirm(`Pause access for ${client.name} and all its users? Their saved data and subscription dates will stay unchanged.`)) return;
+  error.value = ''; busy.value = true;
+  try {
+    const updated = await api(`clients/${client.id}/access`, { method: 'PUT', body: { paused } });
+    if (selectedClient.value?.id === updated.id) selectedClient.value = { ...selectedClient.value, ...updated };
+    await refresh();
+    toast(paused ? `${updated.name} access paused.` : updated.subscription_active ? `${updated.name} access restored.` : `${updated.name} company pause removed. Subscription remains inactive.`);
+  } catch (e) { error.value = e.message; } finally { busy.value = false; }
+}
+async function setUserAccess(user) {
+  const paused = !user.access_paused;
+  if (paused && !window.confirm(`Pause ${user.name}'s account? They will lose access immediately, without changing other users.`)) return;
+  error.value = ''; busy.value = true;
+  try {
+    const updated = await api(`users/${user.id}/access`, { method: 'PUT', body: { paused } });
+    if (selectedClient.value?.users) selectedClient.value.users = selectedClient.value.users.map(item => item.id === updated.id ? { ...item, access_paused: paused } : item);
+    await refresh();
+    toast(paused ? `${updated.name} account paused.` : updated.active && !updated.organization?.access_paused ? `${updated.name} account restored.` : `${updated.name} platform pause removed. Other access restrictions still apply.`);
+  } catch (e) { error.value = e.message; } finally { busy.value = false; }
+}
 async function saveUser() {
   error.value = ''; busy.value = true;
   try {
     await api(editingId.value ? `users/${editingId.value}` : 'users', { method: editingId.value ? 'PUT' : 'POST', body: userForm.value });
     modal.value = ''; await refresh(); toast('User account saved.');
+  } catch (e) { error.value = e.message; } finally { busy.value = false; }
+}
+
+async function saveSystemSetup() {
+  error.value = ''; busy.value = true;
+  try {
+    systemSetup.value = await api('system-setup', { method: 'PUT', body: systemSetup.value });
+    session.value.operational_setup = { sales: systemSetup.value.sales, purchases: systemSetup.value.purchases, store: systemSetup.value.store };
+    toast('System setup saved successfully.');
   } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 
@@ -931,14 +1031,24 @@ async function stopSupportSession() {
     <div class="auth-art"><div class="auth-art-content"><div class="brand brand-light"><span class="brand-mark">U</span><span>uddog<span class="brand-dot">.</span></span></div><h1>Keep every product<br>and transaction<br>in focus.</h1><p>A simple workspace for buying, selling, returning, and tracking stock.</p><div class="auth-art-footer">INVENTORY MANAGEMENT, MADE CLEAR</div></div></div>
     <div class="auth-panel"><form class="auth-card" @submit.prevent="authenticate"><label class="language-switcher auth-language"><Languages :size="15" /><select v-model="language" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select></label><div class="auth-mobile-brand brand"><span class="brand-mark">U</span><span>uddog<span class="brand-dot">.</span></span></div><span class="eyebrow">{{ session?.setup_required ? 'GET STARTED' : 'WELCOME BACK' }}</span><h2>{{ session?.setup_required ? 'Create your workspace' : 'Sign in to your workspace' }}</h2><p class="muted">{{ session?.setup_required ? 'Set up the first administrator account.' : 'Enter your account details to continue.' }}</p><div v-if="error" class="alert-box error">{{ error }}</div><label v-if="session?.setup_required" class="field"><span>Full name</span><input v-model="authForm.name" required autocomplete="name" placeholder="Your name"></label><label class="field"><span>Email address</span><input v-model="authForm.email" type="email" required autocomplete="email" placeholder="name@company.com"></label><label class="field"><span>Password</span><input v-model="authForm.password" type="password" required :minlength="session?.setup_required ? 8 : undefined" :autocomplete="session?.setup_required ? 'new-password' : 'current-password'" :placeholder="session?.setup_required ? 'At least 8 characters' : 'Your password'"></label><button class="btn-primary-app full" :disabled="busy">{{ busy ? 'Please wait...' : session?.setup_required ? 'Create workspace' : 'Sign in' }} <ArrowUpRight :size="18" /></button></form></div>
   </div>
-  <div v-else-if="!session?.permissions?.use_workspace && !session?.permissions?.manage_clients" class="loading-screen subscription-lock"><ShieldCheck :size="42" /><h2>Subscription access paused</h2><p>{{ session.user.organization?.name || 'Your client account' }} does not have an active subscription. Please contact the superadmin for support.</p><button class="btn-secondary-app" @click="logout"><LogOut :size="17" /> Sign out</button></div>
-  <div v-else-if="!session?.permissions?.abilities?.length && !session?.permissions?.manage_clients && !session?.permissions?.manage_users" class="loading-screen subscription-lock"><ShieldCheck :size="42" /><h2>No access assigned yet</h2><p>Your company owner has not assigned any workspace permissions to this account.</p><button class="btn-secondary-app" @click="logout"><LogOut :size="17" /> Sign out</button></div>
+  <div v-else-if="!session?.permissions?.use_workspace && !session?.permissions?.manage_clients && page !== 'profile'" class="loading-screen subscription-lock"><ShieldCheck :size="42" /><h2>{{ session.user.organization?.access_paused ? 'Company access paused' : 'Subscription access paused' }}</h2><p v-if="session.user.organization?.access_paused"><strong>{{ session.user.organization?.name || 'Your company' }}</strong> has been paused by the platform superadmin.</p><p v-else><strong>{{ session.user.organization?.name || 'Your client account' }}</strong> does not have an active subscription.</p><p>{{ session.user.organization?.access_paused ? 'Your company workspace is unavailable until the platform superadmin restores access. Your saved data and subscription dates remain unchanged.' : 'Sales, purchases, inventory, reports and settings are unavailable until the platform superadmin renews or reactivates the company.' }}</p><p v-if="session.subscription?.ends_on" class="subscription-lock-date">Valid until {{ date(session.subscription.ends_on) }}</p><div class="subscription-lock-actions"><button class="btn-primary-app" @click="openProfile"><UserCog :size="17" /> View profile</button><button class="btn-secondary-app" @click="logout"><LogOut :size="17" /> Sign out</button></div></div>
+  <div v-else-if="!session?.permissions?.abilities?.length && !session?.permissions?.manage_clients && !session?.permissions?.manage_users && page !== 'profile'" class="loading-screen subscription-lock"><ShieldCheck :size="42" /><h2>No access assigned yet</h2><p>Your company owner has not assigned any workspace permissions to this account.</p><button class="btn-secondary-app" @click="logout"><LogOut :size="17" /> Sign out</button></div>
   <div v-else class="app-shell">
     <div v-if="mobileOpen" class="mobile-scrim" @click="mobileOpen = false"></div>
     <aside class="sidebar" :class="{ 'sidebar-open': mobileOpen }">
       <div class="brand"><span class="brand-mark">U</span><span>uddog<span class="brand-dot">.</span></span><button class="icon-button sidebar-close" @click="mobileOpen = false"><X :size="20" /></button></div>
       <div class="sidebar-caption">{{ session.user.role === 'superadmin' && !session.impersonation ? 'SAAS CONTROL' : 'WORKSPACE' }}</div>
-      <nav class="nav-list"><button v-for="item in nav" :key="item.id" class="nav-item-app" :class="{ active: page === item.id }" @click="navigate(item.id)"><component :is="item.icon" :size="18" :stroke-width="1.9" /><span>{{ item.label }}</span><span v-if="item.id === 'purchase_return'" class="nav-spacer"></span></button></nav>
+      <nav class="nav-list">
+        <template v-for="item in nav" :key="item.id">
+          <div v-if="item.id === 'reports'" class="report-nav-group">
+            <button class="nav-item-app report-nav-toggle" :class="{ active: page === 'reports' }" :aria-expanded="reportsExpanded" aria-controls="report-subnav" @click="toggleReportsMenu"><component :is="item.icon" :size="18" :stroke-width="1.9" /><span>{{ item.label }}</span><ChevronDown :size="16" class="report-nav-chevron" :class="{ open: reportsExpanded }" /></button>
+            <div v-if="reportsExpanded" id="report-subnav" class="report-subnav" aria-label="Report types">
+              <button v-for="report in availableReportKinds" :key="report.id" class="report-subnav-item" :class="{ active: page === 'reports' && reportKind === report.id }" :aria-current="page === 'reports' && reportKind === report.id ? 'page' : undefined" @click="selectReport(report.id)">{{ report.label }}</button>
+            </div>
+          </div>
+          <button v-else class="nav-item-app" :class="{ active: page === item.id }" @click="navigate(item.id)"><component :is="item.icon" :size="18" :stroke-width="1.9" /><span>{{ item.label }}</span><span v-if="item.id === 'purchase_return'" class="nav-spacer"></span></button>
+        </template>
+      </nav>
       <div class="sidebar-bottom"><div class="sidebar-help"><div class="help-icon"><component :is="session.user.role === 'superadmin' && !session.impersonation ? Building2 : Boxes" :size="20" /></div><strong>{{ session.user.role === 'superadmin' && !session.impersonation ? 'Subscription control' : 'Inventory at a glance' }}</strong><p>{{ session.user.role === 'superadmin' && !session.impersonation ? 'Manage companies, validity and owner support.' : 'Track every movement from purchase to sale.' }}</p></div><div class="sidebar-user"><div class="avatar">{{ initial(session.user.name) }}</div><div class="user-copy"><strong>{{ session.user.name }}</strong><span>{{ roleLabel(session.user.role) }}</span></div><button class="icon-button" title="Sign out" @click="logout"><LogOut :size="18" /></button></div></div>
     </aside>
     <div class="main-wrap">
@@ -950,7 +1060,7 @@ async function stopSupportSession() {
           <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>Reports</h1><p>Review sales, stock, customer balances and team activity for this branch.</p></div><button class="btn-secondary-app" :disabled="!reportResult.rows.length || reportLoading" @click="exportReportCsv"><ArrowDownRight :size="17" /> Export CSV</button></div>
           <section class="panel report-filter-panel">
             <div class="report-filter-grid">
-              <label class="field"><span>Report</span><select v-model="reportKind"><option v-for="report in availableReportKinds" :key="report.id" :value="report.id">{{ report.label }}</option></select></label>
+              <div class="report-current"><span>Report</span><strong>{{ activeReport.label }}</strong></div>
               <label class="field"><span>From</span><input v-model="reportFilters.date_from" type="date" :disabled="['stock', 'barcode_products', 'customers'].includes(reportKind)"></label>
               <label class="field"><span>To</span><input v-model="reportFilters.date_to" type="date" :disabled="['stock', 'barcode_products', 'customers'].includes(reportKind)"></label>
               <label v-if="['stock', 'barcode_products', 'barcode_sales'].includes(reportKind)" class="field"><span>Product or barcode</span><input v-model="reportFilters.search" placeholder="Enter a name or barcode"></label>
@@ -1017,6 +1127,17 @@ async function stopSupportSession() {
           <section class="panel table-panel"><div class="table-toolbar"><div><h2>Stock check history</h2><p>{{ stockChecks.length }} records in {{ branches.find(branch => branch.id === Number(activeBranchId))?.name || 'current branch' }}</p></div></div><div class="table-scroll"><table><thead><tr><th>SL</th><th>NUMBER</th><th>DATE</th><th>PRODUCTS</th><th>COUNTED</th><th>VARIANCE</th><th>STATUS</th><th>CREATED BY</th><th></th></tr></thead><tbody><tr v-for="(stockCheck, index) in stockChecks" :key="stockCheck.id"><td class="mono strong">{{ index + 1 }}</td><td class="mono strong">{{ stockCheck.number }}</td><td>{{ date(stockCheck.check_date) }}</td><td>{{ stockCheck.items.length }}</td><td>{{ stockCheck.items.filter(item => item.counted_quantity !== null).length }} / {{ stockCheck.items.length }}</td><td><span class="stock-check-variance" :class="{ positive: checkVariance(stockCheck) > 0, negative: checkVariance(stockCheck) < 0 }">{{ checkVariance(stockCheck) > 0 ? '+' : '' }}{{ qty(checkVariance(stockCheck)) }}</span></td><td><span class="stock-pill" :class="stockCheck.status === 'completed' ? 'good' : 'pending'">{{ stockCheck.status === 'completed' ? 'Completed' : 'Draft' }}</span></td><td>{{ stockCheck.creator?.name || '—' }}</td><td><button class="btn-secondary-app small" @click="openStockCheck(stockCheck)"><Eye :size="15" /> {{ stockCheck.status === 'draft' ? 'Continue count' : 'View' }}</button></td></tr></tbody></table></div><div v-if="!stockChecks.length" class="empty-state"><ClipboardCheck :size="32" /><strong>No stock checks yet</strong><span>Start a physical count for the selected branch.</span></div></section>
         </template>
 
+        <template v-else-if="page === 'system_setup'">
+          <div class="page-heading"><div><span class="eyebrow">COMPANY PREFERENCES</span><h1>Settings / System Setup</h1><p>Simple defaults for the way your company sells, buys and manages stock.</p></div></div>
+          <div v-if="error" class="alert-box error">{{ error }}</div>
+          <form v-if="systemSetup" class="setup-layout" @submit.prevent="saveSystemSetup">
+            <div class="setup-intro"><div class="setup-intro-icon"><Settings2 :size="22" /></div><div><strong>How your workspace works</strong><p>These preferences apply company-wide. Manage each team member’s access on the Users page.</p></div><button type="button" class="btn-secondary-app" @click="navigate('users')"><UserCog :size="16" /> Manage users</button></div>
+            <section class="panel setup-panel setup-sales"><div class="setup-panel-heading"><span class="setup-section-icon sales"><ShoppingCart :size="20" /></span><div><h2>Sales</h2><p>Payment choices and optional sale types</p></div></div><div class="setup-options"><label class="setup-option"><span><strong>Due sales</strong><small>Let customers pay the full amount later</small></span><input v-model="systemSetup.sales.allow_due_sales" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Installments</strong><small>Accept a down payment and schedule the rest</small></span><input v-model="systemSetup.sales.allow_installment_sales" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Sales returns</strong><small>Allow refunds against earlier sales</small></span><input v-model="systemSetup.sales.allow_sales_returns" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Resales</strong><small>Allow resale transactions</small></span><input v-model="systemSetup.sales.allow_resales" type="checkbox" role="switch"></label></div><label class="field setup-field"><span>Default payment method</span><select v-model="systemSetup.sales.default_payment_method"><option value="cash">Cash</option><option value="card">Card</option><option value="mobile_banking">Mobile banking</option><option value="bank_transfer">Bank transfer</option></select><small>Preselected for new sales; staff can change it per transaction.</small></label></section>
+            <div class="setup-side"><section class="panel setup-panel"><div class="setup-panel-heading"><span class="setup-section-icon purchases"><ShoppingBag :size="20" /></span><div><h2>Purchases</h2><p>Supplier return preferences</p></div></div><label class="setup-option"><span><strong>Purchase returns</strong><small>Return purchased items to suppliers</small></span><input v-model="systemSetup.purchases.allow_purchase_returns" type="checkbox" role="switch"></label></section><section class="panel setup-panel"><div class="setup-panel-heading"><span class="setup-section-icon store"><Boxes :size="20" /></span><div><h2>Store &amp; stock</h2><p>Inventory movement controls</p></div></div><div class="setup-options"><label class="setup-option"><span><strong>Stock adjustments</strong><small>Correct quantities manually</small></span><input v-model="systemSetup.store.allow_stock_adjustments" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Stock transfers</strong><small>Move items between branches</small></span><input v-model="systemSetup.store.allow_stock_transfers" type="checkbox" role="switch"></label></div><label class="field setup-field"><span>Default reorder level</span><input v-model="systemSetup.store.default_reorder_level" type="number" min="0" max="999999" step="0.001" required><small>Suggested minimum stock for each new product.</small></label></section></div>
+            <div class="setup-actions"><span>Changes take effect after you save.</span><button class="btn-primary-app" :disabled="busy" type="submit"><Check :size="17" /> {{ busy ? 'Saving...' : 'Save settings' }}</button></div>
+          </form>
+        </template>
+
         <template v-else-if="page === 'stock_transfers'">
           <div class="page-heading"><div><span class="eyebrow">BRANCH INVENTORY</span><h1>Stock Transfer</h1><p>Move available products from the current branch to another company branch.</p></div><button class="btn-primary-app" :disabled="busy || !transferDestinations.length" :title="!transferDestinations.length ? 'Create another active branch before transferring stock' : 'Transfer stock to another branch'" @click="openStockTransfer"><Plus :size="18" /> New transfer</button></div>
           <div class="transfer-route-banner"><div class="transfer-branch"><span class="stat-icon violet"><MapPin :size="19" /></span><div><small>TRANSFER FROM</small><strong>{{ branches.find(branch => branch.id === Number(activeBranchId))?.name }}</strong></div></div><ArrowLeftRight :size="22" /><div><strong>{{ transferDestinations.length }}</strong><span>available destination {{ transferDestinations.length === 1 ? 'branch' : 'branches' }}</span></div></div>
@@ -1036,16 +1157,37 @@ async function stopSupportSession() {
 
         <template v-else-if="page === 'clients'"><div class="page-heading"><div><span class="eyebrow">SUPERADMIN</span><h1>Companies</h1><p>Manage store owners, subscription validity and support access.</p></div><button class="btn-primary-app" @click="openClient()"><Plus :size="18" /> Add company</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h2>All companies</h2><p>{{ filteredClients.length }} of {{ clients.length }} companies</p></div><div class="company-toolbar-actions"><select v-model="clientStatusFilter" class="filter-select" aria-label="Filter companies by subscription"><option value="all">All subscriptions</option><option value="active">Currently valid</option><option value="expiring">Expiring in 30 days</option><option value="expired">Expired</option><option value="past_due">Past due</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select><div class="search-box"><Search :size="17" /><input v-model="search" placeholder="Search companies..."></div></div></div><div class="table-scroll"><table><thead><tr><th>COMPANY</th><th>OWNER ADMIN</th><th>PLAN</th><th>SUBSCRIPTION</th><th>VALID UNTIL</th><th>ACTIVITY</th><th></th></tr></thead><tbody><tr v-for="client in filteredClients" :key="client.id"><td><button class="company-name-button" @click="openClientDetails(client)"><span class="product-avatar contact-avatar">{{ initial(client.name) }}</span><strong>{{ client.name }}</strong></button></td><td><div v-if="client.admins?.length" class="name-cell"><div><strong>{{ client.admins[0].name }}</strong><small>{{ client.admins[0].email }}</small></div></div><span v-else>Not assigned</span></td><td>{{ client.plan_name || '—' }}</td><td><span class="stock-pill" :class="client.subscription_active ? 'good' : 'low'">{{ clientValidityLabel(client) }}</span></td><td>{{ date(client.subscription_ends_at) }}</td><td><span class="activity-summary">{{ client.users_count }} users · {{ client.products_count }} products · {{ client.documents_count }} transactions</span></td><td><div class="row-actions"><button class="icon-button" title="View company details" @click="openClientDetails(client)"><Info :size="17" /></button><button v-if="client.admins?.some(owner => owner.active)" class="btn-secondary-app small" :disabled="busy" title="Open this company as its owner administrator" @click="startSupportSession(client)"><Eye :size="15" /> View as owner</button><button v-else class="btn-secondary-app small" title="Create or activate this company's owner administrator" @click="openClient(client)"><UserCog :size="15" /> Set up owner</button><button class="icon-button" title="Edit company" @click="openClient(client)"><Pencil :size="17" /></button></div></td></tr></tbody></table></div><div v-if="!filteredClients.length" class="empty-state"><Building2 :size="32" /><strong>No companies found</strong><span>Add a subscribed company or change your filters.</span></div></section></template>
 
-        <template v-else-if="page === 'users'"><div class="page-heading"><div><span class="eyebrow">ACCESS CONTROL</span><h1>Users</h1><p>{{ session.user.role === 'superadmin' ? 'Manage owner admins and users across every company.' : 'Create manager and staff accounts and choose exactly what they can use.' }}</p></div><button class="btn-primary-app" @click="openUser()"><Plus :size="18" /> Add user</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h2>User accounts</h2><p>{{ users.length }} users</p></div><div class="search-box"><Search :size="17" /><input v-model="search" placeholder="Search users..."></div></div><div class="table-scroll"><table><thead><tr><th>USER</th><th>ROLE</th><th v-if="session.user.role === 'superadmin'">COMPANY</th><th>ACCESS</th><th>STATUS</th><th></th></tr></thead><tbody><tr v-for="user in filteredUsers" :key="user.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(user.name) }}</span><div><strong>{{ user.name }}</strong><small>{{ user.email }}</small></div></div></td><td><span class="type-pill">{{ roleLabel(user.role) }}</span></td><td v-if="session.user.role === 'superadmin'">{{ user.organization?.name || 'System' }}</td><td><div v-if="['superadmin', 'admin'].includes(user.role)">Full access</div><div v-else><div>{{ user.permissions?.length || 0 }} permissions</div><small class="assigned-branches">{{ user.accessible_branches?.map(branch => branch.name).join(', ') || 'No branches assigned' }}</small></div></td><td><span class="stock-pill" :class="user.active ? 'good' : 'low'">{{ user.active ? 'Active' : 'Inactive' }}</span></td><td><button class="icon-button" title="Edit user" @click="openUser(user)"><Pencil :size="17" /></button></td></tr></tbody></table></div><div v-if="!filteredUsers.length" class="empty-state"><UserCog :size="32" /><strong>No staff found</strong><span>Add a manager or staff account to begin delegating access.</span></div></section></template>
+        <template v-else-if="page === 'users'">
+          <div class="page-heading"><div><span class="eyebrow">ACCESS CONTROL</span><h1>Users</h1><p>{{ session.user.role === 'superadmin' ? 'Manage owner admins and users across every company.' : 'Create manager and staff accounts and choose exactly what they can use.' }}</p></div><button class="btn-primary-app" @click="openUser()"><Plus :size="18" /> Add user</button></div>
+          <section class="panel table-panel"><div class="table-toolbar"><div><h2>User accounts</h2><p>{{ users.length }} users</p></div><div class="search-box"><Search :size="17" /><input v-model="search" placeholder="Search users..."></div></div><div class="table-scroll"><table><thead><tr><th>USER</th><th>ROLE</th><th v-if="session.user.role === 'superadmin'">COMPANY</th><th>ACCESS</th><th>STATUS</th><th></th></tr></thead><tbody><tr v-for="user in filteredUsers" :key="user.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(user.name) }}</span><div><strong>{{ user.name }}</strong><small>{{ user.email }}</small></div></div></td><td><span class="type-pill">{{ roleLabel(user.role) }}</span></td><td v-if="session.user.role === 'superadmin'">{{ user.organization?.name || 'System' }}</td><td><div v-if="['superadmin', 'admin'].includes(user.role)">Full access</div><div v-else><div>{{ user.permissions?.length || 0 }} permissions</div><small class="assigned-branches">{{ user.accessible_branches?.map(branch => branch.name).join(', ') || 'No branches assigned' }}</small></div></td><td><span class="stock-pill" :class="user.active && !user.access_paused && !user.organization?.access_paused ? 'good' : 'low'">{{ user.access_paused ? 'Paused by admin' : !user.active ? 'Inactive' : user.organization?.access_paused ? 'Company paused' : 'Active' }}</span></td><td><button class="icon-button" title="Edit user" @click="openUser(user)"><Pencil :size="17" /></button></td></tr></tbody></table></div><div v-if="!filteredUsers.length" class="empty-state"><UserCog :size="32" /><strong>No staff found</strong><span>Add a manager or staff account to begin delegating access.</span></div></section>
+        </template>
 
+        <template v-else-if="page === 'access_control'">
+          <div class="page-heading"><div><span class="eyebrow">SUPERADMIN · ACCESS</span><h1>Access control</h1><p>Pause or restore a company or one of its users without changing the subscription plan, expiry date, or saved data.</p></div></div>
+          <div class="access-control-explainer"><ShieldCheck :size="21" /><div><strong>How access works</strong><p>Pausing a company blocks its entire team. Pausing one user blocks only that account. Restoring a company does not extend an expired subscription, and individually paused users stay paused.</p></div></div>
+          <section class="panel table-panel access-control-panel"><div class="table-toolbar"><div><h2>Company access</h2><p>{{ accessClients.length }} companies · a pause takes effect on the next request.</p></div><div class="search-box"><Search :size="17" /><input v-model="accessCompanySearch" aria-label="Search companies for access control" placeholder="Search companies..."></div></div><div class="table-scroll"><table><thead><tr><th>COMPANY</th><th>PLAN & VALIDITY</th><th>ACCESS</th><th>ACTION</th></tr></thead><tbody><tr v-for="client in accessClients" :key="client.id"><td><div class="name-cell"><span class="product-avatar contact-avatar">{{ initial(client.name) }}</span><div><strong>{{ client.name }}</strong><small>{{ client.users_count }} users</small></div></div></td><td><strong>{{ client.plan_name || 'No plan assigned' }}</strong><small class="access-cell-subline">{{ clientValidityLabel(client) }} · {{ client.subscription_ends_at ? date(client.subscription_ends_at) : 'No expiry date' }}</small></td><td><span class="stock-pill" :class="client.access_paused || !client.subscription_active ? 'low' : 'good'">{{ clientAccessLabel(client) }}</span></td><td><button class="btn-secondary-app small access-action" :class="{ 'access-action-danger': !client.access_paused }" :disabled="busy" :aria-label="`${client.access_paused ? 'Restore' : 'Pause'} access for ${client.name}`" @click="setClientAccess(client)"><ShieldCheck v-if="client.access_paused" :size="15" /><AlertTriangle v-else :size="15" /> {{ client.access_paused ? 'Restore access' : 'Pause company' }}</button></td></tr></tbody></table></div><div v-if="!accessClients.length" class="empty-state"><Building2 :size="32" /><strong>No companies found</strong><span>Try another company name.</span></div></section>
+          <section class="panel table-panel access-control-panel">
+            <div class="table-toolbar"><div><h2>Individual user access</h2><p>{{ accessUsers.length }} owner, manager, and staff accounts shown.</p></div><div class="access-control-filters"><select v-model="accessCompanyFilter" class="filter-select" aria-label="Filter users by company"><option value="all">All companies</option><option v-for="client in clients" :key="client.id" :value="client.id">{{ client.name }}</option></select><div class="search-box"><Search :size="17" /><input v-model="accessUserSearch" aria-label="Search users for access control" placeholder="Search users..."></div></div></div>
+            <div class="table-scroll"><table><thead><tr><th>USER</th><th>COMPANY</th><th>ROLE</th><th>ACCESS</th><th>ACTION</th></tr></thead><tbody><tr v-for="user in accessUsers" :key="user.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(user.name) }}</span><div><strong>{{ user.name }}</strong><small>{{ user.email }}</small></div></div></td><td>{{ user.organization?.name || '—' }}</td><td>{{ roleLabel(user.role) }}</td><td><span class="stock-pill" :class="user.active && !user.access_paused && !user.organization?.access_paused ? 'good' : 'low'">{{ user.access_paused ? 'User paused' : !user.active ? 'Inactive' : user.organization?.access_paused ? 'Company paused' : 'Active' }}</span></td><td><button class="btn-secondary-app small access-action" :class="{ 'access-action-danger': !user.access_paused }" :disabled="busy" :aria-label="`${user.access_paused ? 'Restore' : 'Pause'} ${user.name}'s account`" @click="setUserAccess(user)"><ShieldCheck v-if="user.access_paused" :size="15" /><AlertTriangle v-else :size="15" /> {{ user.access_paused ? 'Restore user' : 'Pause user' }}</button></td></tr></tbody></table></div>
+            <div v-if="!accessUsers.length" class="empty-state"><UserCog :size="32" /><strong>No users found</strong><span>Change the company filter or search term.</span></div>
+          </section>
+        </template>
         <template v-else-if="page === 'profile'">
-          <div class="page-heading"><div><span class="eyebrow">MY ACCOUNT</span><h1>My profile</h1><p>Update your personal account details.</p></div><button class="btn-secondary-app" @click="page = nav[0]?.id || 'dashboard'">Back to workspace</button></div>
-          <section class="panel profile-card"><div class="profile-summary"><span class="profile-avatar">{{ initial(session.user.name) }}</span><div><strong>{{ session.user.name }}</strong><span>{{ roleLabel(session.user.role) }}</span><small v-if="session.user.organization?.name">{{ session.user.organization.name }}</small></div></div><form class="form-grid profile-form" @submit.prevent="saveProfile"><label class="field"><span>Full name *</span><input v-model="profileForm.name" required maxlength="100" autocomplete="name"></label><label class="field"><span>Email address</span><input :value="session.user.email" readonly aria-readonly="true"></label><label class="field"><span>Mobile number</span><input v-model="profileForm.mobile" type="tel" maxlength="30" autocomplete="tel" placeholder="e.g. 01700000000"></label><label class="field"><span>Current password</span><input v-model="profileForm.current_password" type="password" :required="!!profileForm.password" autocomplete="current-password" placeholder="Required to change password"></label><label class="field span-2"><span>New password</span><input v-model="profileForm.password" type="password" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"><small>Enter your current password before setting a new password. Leave both password fields empty to keep your current password.</small></label><div class="span-2 profile-actions"><button class="btn-primary-app" :disabled="busy"><UserCog :size="17" /> {{ busy ? 'Saving...' : 'Update profile' }}</button></div></form></section>
+          <div class="page-heading"><div><span class="eyebrow">MY ACCOUNT</span><h1>My profile</h1><p>Update your personal account details.</p></div><button class="btn-secondary-app" @click="navigate(nav[0]?.id || 'dashboard')">{{ session.permissions.use_workspace ? 'Back to workspace' : 'Back to subscription notice' }}</button></div>
+          <div class="profile-layout" :class="{ 'with-subscription': session.user.role === 'admin' }">
+            <section class="panel profile-card"><div class="profile-summary"><span class="profile-avatar">{{ initial(session.user.name) }}</span><div><strong>{{ session.user.name }}</strong><span>{{ roleLabel(session.user.role) }}</span><small v-if="session.user.organization?.name">{{ session.user.organization.name }}</small></div></div><form class="form-grid profile-form" @submit.prevent="saveProfile"><label class="field"><span>Full name *</span><input v-model="profileForm.name" required maxlength="100" autocomplete="name"></label><label class="field"><span>Email address</span><input :value="session.user.email" readonly aria-readonly="true"></label><label class="field"><span>Mobile number</span><input v-model="profileForm.mobile" type="tel" maxlength="30" autocomplete="tel" placeholder="e.g. 01700000000"></label><label class="field"><span>Current password</span><input v-model="profileForm.current_password" type="password" :required="!!profileForm.password" autocomplete="current-password" placeholder="Required to change password"></label><label class="field span-2"><span>New password</span><input v-model="profileForm.password" type="password" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"><small>Enter your current password before setting a new password. Leave both password fields empty to keep your current password.</small></label><div class="span-2 profile-actions"><button class="btn-primary-app" :disabled="busy"><UserCog :size="17" /> {{ busy ? 'Saving...' : 'Update profile' }}</button></div></form></section>
+            <section v-if="session.user.role === 'admin' && currentSubscription" class="panel subscription-card" :class="{ inactive: !currentSubscription.active }">
+              <div class="subscription-card-header"><span class="subscription-card-icon"><CalendarPlus :size="22" /></span><span class="stock-pill" :class="currentSubscription.active ? 'good' : 'low'">{{ subscriptionDisplayStatus }}</span></div>
+              <span class="eyebrow">YOUR SUBSCRIPTION</span><h2>{{ currentSubscription.plan_name || 'No plan assigned' }}</h2><p class="subscription-company">{{ session.user.organization?.name }}</p>
+              <div class="subscription-facts"><div><span>Valid until</span><strong>{{ currentSubscription.ends_on ? date(currentSubscription.ends_on) : 'No expiry date' }}</strong></div><div><span>Time remaining</span><strong v-if="currentSubscription.days_remaining === null">No fixed expiry</strong><strong v-else-if="currentSubscription.days_remaining > 0">{{ currentSubscription.days_remaining }} {{ currentSubscription.days_remaining === 1 ? 'day left' : 'days left' }}</strong><strong v-else-if="currentSubscription.days_remaining === 0">Expires today</strong><strong v-else>Expired {{ Math.abs(currentSubscription.days_remaining) }} {{ Math.abs(currentSubscription.days_remaining) === 1 ? 'day ago' : 'days ago' }}</strong></div></div>
+              <div class="subscription-note" :class="{ warning: !currentSubscription.active || currentSubscription.days_remaining === 0 }"><AlertTriangle v-if="!currentSubscription.active || currentSubscription.days_remaining === 0" :size="17" /><ShieldCheck v-else :size="17" /><p v-if="currentSubscription.access_paused">Company access is paused by the platform superadmin. Your plan and validity date are unchanged.</p><p v-else-if="!currentSubscription.active">Workspace access is paused. Contact the platform superadmin to renew or reactivate your company.</p><p v-else-if="currentSubscription.days_remaining === 0">Your plan is valid through today. Contact the platform superadmin to renew it.</p><p v-else>Your workspace remains available while the subscription is active.</p></div>
+            </section>
+          </div>
         </template>
       </main>
     </div>
 
-    <div v-if="modal" class="modal-backdrop-app" @click.self="closeModal()"><div class="modal-card" :class="{ wide: ['document', 'client_details', 'invoice', 'stock_check', 'stock_transfer'].includes(modal) }"><div class="modal-head"><div><span class="eyebrow">{{ modal === 'document' ? 'NEW TRANSACTION' : modal === 'invoice' ? 'INVOICE' : modal === 'stock_check' ? 'PHYSICAL COUNT' : modal === 'stock_transfer' ? 'BRANCH INVENTORY' : modal === 'barcode' ? 'PRODUCT LABEL' : modal === 'category' ? 'CATALOG SETUP' : modal === 'branch' ? 'COMPANY LOCATION' : modal === 'adjustment' ? 'STOCK CONTROL' : modal === 'client_details' ? 'COMPANY DETAILS' : ['client', 'user'].includes(modal) ? 'ACCESS MANAGEMENT' : 'DETAILS' }}</span><h2>{{ modal === 'product' ? (editingId ? 'Edit product' : 'Add product') : modal === 'category' ? (editingId ? 'Edit category' : 'Add category') : modal === 'branch' ? (editingId ? 'Edit branch' : 'Add branch') : modal === 'stock_check' ? selectedStockCheck?.number : modal === 'stock_transfer' ? 'New stock transfer' : modal === 'barcode' ? 'Print barcode' : modal === 'contact' ? (editingId ? 'Edit contact' : documentCreateContext === 'contact' ? (relatedContactName === 'supplier' ? 'Add supplier' : 'Add customer') : 'Add contact') : modal === 'adjustment' ? 'Adjust stock' : modal === 'client' ? (editingId ? 'Edit company' : 'Add company') : modal === 'user' ? (editingId ? 'Edit user' : 'Add user') : modal === 'client_details' ? selectedClient?.name : modal === 'invoice' ? selectedDocument?.number : `New ${label(documentForm.type).toLowerCase()}` }}</h2></div><button class="icon-button" @click="closeModal()"><X :size="20" /></button></div><div v-if="error" class="alert-box error">{{ error }}</div>
+    <div v-if="modal" class="modal-backdrop-app" @click.self="closeModal()"><div class="modal-card" :class="{ wide: ['document', 'client_details', 'invoice', 'stock_check', 'stock_transfer', 'user'].includes(modal) }"><div class="modal-head"><div><span class="eyebrow">{{ modal === 'document' ? 'NEW TRANSACTION' : modal === 'invoice' ? 'INVOICE' : modal === 'stock_check' ? 'PHYSICAL COUNT' : modal === 'stock_transfer' ? 'BRANCH INVENTORY' : modal === 'barcode' ? 'PRODUCT LABEL' : modal === 'category' ? 'CATALOG SETUP' : modal === 'branch' ? 'COMPANY LOCATION' : modal === 'adjustment' ? 'STOCK CONTROL' : modal === 'client_details' ? 'COMPANY DETAILS' : ['client', 'user'].includes(modal) ? 'ACCESS MANAGEMENT' : 'DETAILS' }}</span><h2>{{ modal === 'product' ? (editingId ? 'Edit product' : 'Add product') : modal === 'category' ? (editingId ? 'Edit category' : 'Add category') : modal === 'branch' ? (editingId ? 'Edit branch' : 'Add branch') : modal === 'stock_check' ? selectedStockCheck?.number : modal === 'stock_transfer' ? 'New stock transfer' : modal === 'barcode' ? 'Print barcode' : modal === 'contact' ? (editingId ? 'Edit contact' : documentCreateContext === 'contact' ? (relatedContactName === 'supplier' ? 'Add supplier' : 'Add customer') : 'Add contact') : modal === 'adjustment' ? 'Adjust stock' : modal === 'client' ? (editingId ? 'Edit company' : 'Add company') : modal === 'user' ? (editingId ? 'Edit user' : 'Add user') : modal === 'client_details' ? selectedClient?.name : modal === 'invoice' ? selectedDocument?.number : `New ${label(documentForm.type).toLowerCase()}` }}</h2></div><button class="icon-button" @click="closeModal()"><X :size="20" /></button></div><div v-if="error" class="alert-box error">{{ error }}</div>
       <form v-if="modal === 'stock_transfer'" class="stock-transfer-sheet" @submit.prevent="saveStockTransfer">
         <div class="stock-transfer-route"><div><span>FROM BRANCH</span><strong>{{ branches.find(branch => branch.id === Number(activeBranchId))?.name }}</strong><small>{{ products.filter(product => product.active && Number(product.quantity_on_hand) > 0).length }} products available</small></div><ArrowLeftRight :size="24" /><label><span>TO BRANCH *</span><select v-model="stockTransferForm.to_branch_id" required><option value="" disabled>Select destination</option><option v-for="branch in transferDestinations" :key="branch.id" :value="branch.id">{{ branch.name }} · {{ branch.code }}</option></select></label></div>
         <div class="form-grid transfer-details"><label class="field"><span>Transfer date *</span><input v-model="stockTransferForm.transfer_date" type="date" required></label><label class="field"><span>Notes</span><input v-model="stockTransferForm.notes" maxlength="2000" placeholder="Optional transfer notes"></label></div>
@@ -1071,7 +1213,7 @@ async function stopSupportSession() {
       <form v-else-if="modal === 'adjustment'" @submit.prevent="saveAdjustment"><div class="form-grid"><label class="field span-2"><span>Product *</span><select v-model="adjustmentForm.product_id" required><option value="" disabled>Select a product</option><option v-for="product in products" :key="product.id" :value="product.id">{{ product.name }} ({{ qty(product.quantity_on_hand) }} {{ product.unit }} available)</option></select></label><label class="field span-2"><span>Quantity change *</span><input v-model="adjustmentForm.quantity_change" type="number" step="0.001" required placeholder="Use + to add or − to remove"><small>Positive adds stock; negative removes stock.</small></label><label class="field span-2"><span>Reason *</span><textarea v-model="adjustmentForm.notes" rows="3" required placeholder="Explain why stock is being adjusted"></textarea></label></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy">{{ busy ? 'Saving...' : 'Save adjustment' }}</button></div></form>
       <div v-else-if="modal === 'client_details' && selectedClient" class="company-details"><div class="company-detail-hero"><div><span class="stock-pill" :class="selectedClient.subscription_active ? 'good' : 'low'">{{ clientValidityLabel(selectedClient) }}</span><p>{{ selectedClient.plan_name || 'No plan assigned' }} · valid until {{ date(selectedClient.subscription_ends_at) }}</p></div><div class="renew-control"><strong>Extend subscription</strong><div><button v-for="months in [1, 3, 6, 12]" :key="months" class="btn-secondary-app small" :disabled="busy" @click="renewClient(selectedClient, months)"><CalendarPlus :size="15" /> {{ months }}{{ months === 1 ? ' month' : ' months' }}</button></div></div></div><div class="company-detail-stats"><div><span>Users</span><strong>{{ selectedClient.users_count }}</strong></div><div><span>Products</span><strong>{{ selectedClient.products_count }}</strong></div><div><span>Contacts</span><strong>{{ selectedClient.contacts_count }}</strong></div><div><span>Transactions</span><strong>{{ selectedClient.documents_count }}</strong></div></div><div class="company-detail-grid"><section class="detail-section"><div class="detail-section-head"><div><h3>Owner and team</h3><p>Accounts currently assigned to this company.</p></div></div><div v-if="selectedClient.users?.length" class="team-list"><div v-for="user in selectedClient.users" :key="user.id" class="team-row"><span class="avatar small">{{ initial(user.name) }}</span><div><strong>{{ user.name }}</strong><span>{{ user.email }} · {{ roleLabel(user.role) }}</span></div><span class="stock-pill" :class="user.active ? 'good' : 'low'">{{ user.active ? 'Active' : 'Inactive' }}</span></div></div><div v-else class="detail-empty">No users assigned.</div></section><section class="detail-section"><div class="detail-section-head"><div><h3>Support history</h3><p>Latest superadmin support sessions.</p></div></div><div v-if="selectedClient.support_impersonations?.length" class="support-history"><div v-for="entry in selectedClient.support_impersonations" :key="entry.id" class="support-history-row"><Clock3 :size="16" /><div><strong>{{ entry.impersonator?.name || 'Superadmin' }}</strong><span>Started {{ date(entry.started_at) }}<template v-if="entry.ended_at"> · ended {{ date(entry.ended_at) }}</template><template v-else> · active session</template></span></div></div></div><div v-else class="detail-empty">No support sessions recorded.</div></section></div><section v-if="selectedClient.notes" class="company-notes"><strong>Support notes</strong><p>{{ selectedClient.notes }}</p></section><div class="modal-actions"><button class="btn-secondary-app" @click="openClient(selectedClient)"><Pencil :size="16" /> Edit company</button><button v-if="selectedClient.admins?.some(owner => owner.active)" class="btn-secondary-app" :disabled="busy" @click="startSupportSession(selectedClient)"><Eye :size="16" /> View as owner</button><button v-else class="btn-secondary-app" @click="openClient(selectedClient)"><UserCog :size="16" /> Set up owner</button><button class="btn-primary-app" @click="closeModal()">Close</button></div></div>
       <form v-else-if="modal === 'client'" @submit.prevent="saveClient"><div class="form-grid"><label class="field"><span>Company name *</span><input v-model="clientForm.name" required placeholder="Business name"></label><label class="field"><span>Subscription plan</span><input v-model="clientForm.plan_name" placeholder="e.g. Standard"></label><label class="field"><span>Subscription status *</span><select v-model="clientForm.subscription_status" required><option value="trial">Trial</option><option value="active">Active</option><option value="past_due">Past due</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select></label><label class="field"><span>Valid until</span><input v-model="clientForm.subscription_ends_at" type="date"></label><div class="form-section-title span-2">Owner administrator</div><label class="field"><span>Owner name *</span><input v-model="clientForm.owner_name" required placeholder="Full name"></label><label class="field"><span>Owner email *</span><input v-model="clientForm.owner_email" type="email" required placeholder="owner@company.com"></label><label class="field" :class="{ 'span-2': !editingId }"><span>{{ clientForm.owner_exists ? 'New owner password (optional)' : 'Temporary password *' }}</span><input v-model="clientForm.owner_password" type="password" :required="!clientForm.owner_exists" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label><label v-if="editingId" class="field checkbox-field"><input v-model="clientForm.owner_active" type="checkbox"><span>Owner account active</span></label><label class="field span-2"><span>Support notes</span><textarea v-model="clientForm.notes" rows="3" placeholder="Subscription or company support notes"></textarea></label></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy">{{ busy ? 'Saving...' : editingId ? 'Save company and owner' : 'Create company and owner' }}</button></div></form>
-      <form v-else-if="modal === 'user'" @submit.prevent="saveUser"><div class="form-grid"><label class="field"><span>Full name *</span><input v-model="userForm.name" required autocomplete="name" placeholder="User name"></label><label class="field"><span>Email address *</span><input v-model="userForm.email" type="email" required autocomplete="email" placeholder="name@company.com"></label><label class="field"><span>{{ editingId ? 'New password (optional)' : 'Password *' }}</span><input v-model="userForm.password" type="password" :required="!editingId" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label><label class="field"><span>Role *</span><select v-model="userForm.role" required><option v-if="session.user.role === 'superadmin'" value="superadmin">Superadmin</option><option v-if="session.user.role === 'superadmin'" value="admin">Owner admin</option><option value="manager">Manager</option><option value="staff">Staff</option></select></label><label v-if="session.user.role === 'superadmin' && userForm.role !== 'superadmin'" class="field"><span>Company *</span><select v-model="userForm.organization_id" required><option value="" disabled>Select a company</option><option v-for="client in clients" :key="client.id" :value="client.id">{{ client.name }}</option></select></label><label class="field checkbox-field"><input v-model="userForm.active" type="checkbox"><span>Active user</span></label><template v-if="['manager', 'staff'].includes(userForm.role)"><div class="form-section-title span-2">Allowed branches *</div><div class="branch-access-grid span-2"><label v-for="branch in branches.filter(branch => branch.active)" :key="branch.id" class="branch-access-option"><input v-model="userForm.branch_ids" type="checkbox" :value="branch.id"><span class="product-avatar category-avatar"><MapPin :size="16" /></span><span><strong>{{ branch.name }}</strong><small>{{ branch.code }}</small></span></label></div><p class="branch-access-help span-2">This user can view and operate only in the selected branches. Select every branch they should be able to use.</p><div class="form-section-title span-2">Workspace permissions</div><div class="permission-grid span-2"><label v-for="permission in permissionOptions" :key="permission.value" class="permission-option"><input v-model="userForm.permissions" type="checkbox" :value="permission.value"><span>{{ permission.label }}</span></label></div></template></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy">{{ busy ? 'Saving...' : 'Save user and access' }}</button></div></form>
+      <form v-else-if="modal === 'user'" @submit.prevent="saveUser"><div class="form-grid"><label class="field"><span>Full name *</span><input v-model="userForm.name" required autocomplete="name" placeholder="User name"></label><label class="field"><span>Email address *</span><input v-model="userForm.email" type="email" required autocomplete="email" placeholder="name@company.com"></label><label class="field"><span>{{ editingId ? 'New password (optional)' : 'Password *' }}</span><input v-model="userForm.password" type="password" :required="!editingId" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label><label class="field"><span>Role *</span><select v-model="userForm.role" required><option v-if="session.user.role === 'superadmin'" value="superadmin">Superadmin</option><option v-if="session.user.role === 'superadmin'" value="admin">Owner admin</option><option value="manager">Manager</option><option value="staff">Staff</option></select></label><label v-if="session.user.role === 'superadmin' && userForm.role !== 'superadmin'" class="field"><span>Company *</span><select v-model="userForm.organization_id" required><option value="" disabled>Select a company</option><option v-for="client in clients" :key="client.id" :value="client.id">{{ client.name }}</option></select></label><label class="field checkbox-field"><input v-model="userForm.active" type="checkbox"><span>Active user</span></label><template v-if="['manager', 'staff'].includes(userForm.role)"><div class="form-section-title span-2">Allowed branches *</div><div class="branch-access-grid span-2"><label v-for="branch in branches.filter(branch => branch.active)" :key="branch.id" class="branch-access-option"><input v-model="userForm.branch_ids" type="checkbox" :value="branch.id"><span class="product-avatar category-avatar"><MapPin :size="16" /></span><span><strong>{{ branch.name }}</strong><small>{{ branch.code }}</small></span></label></div><p class="branch-access-help span-2">This user can view and operate only in the selected branches. Select every branch they should be able to use.</p><div class="form-section-title span-2">Workspace permissions</div><div class="permission-grid span-2"><label v-for="permission in permissionOptions" :key="permission.value" class="permission-option"><input v-model="userForm.permissions" type="checkbox" :value="permission.value"><span>{{ permission.label }}</span></label></div></template><section class="user-report-preview span-2"><div class="user-report-preview-head"><strong>Report access</strong><span>{{ userAccessibleReports.length }} of {{ reportKinds.length }} selected</span></div><p v-if="['manager', 'staff'].includes(userForm.role)">Choose which reports this user can open. First select a related workspace permission above.</p><p v-else>Owner and superadmin roles can access every report.</p><div class="permission-grid report-permission-grid"><label v-for="report in reportKinds" :key="report.id" class="permission-option" :class="{ 'report-permission-locked': !canGrantReport(report) }" :title="canGrantReport(report) ? '' : 'Select a related workspace permission above first.'"><input v-if="['manager', 'staff'].includes(userForm.role)" v-model="userForm.report_permissions" type="checkbox" :value="report.id" :disabled="!canGrantReport(report)"><input v-else type="checkbox" checked disabled><span>{{ report.label }}</span></label></div></section></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy">{{ busy ? 'Saving...' : 'Save user and access' }}</button></div></form>
       <form v-else @submit.prevent="saveDocument"><div class="form-grid"><label v-if="documentForm.type === 'purchase_return'" class="field span-2"><span>Original purchase *</span><select v-model="documentForm.purchase_id" required @change="choosePurchase"><option value="" disabled>Select a purchase</option><option v-for="purchase in purchaseOptions" :key="purchase.id" :value="purchase.id">{{ purchase.number }} · {{ purchase.contact?.name }} · {{ date(purchase.document_date) }}</option></select></label><label v-if="documentForm.type === 'sale_return'" class="field span-2"><span>Original sale *</span><select v-model="documentForm.sale_id" required @change="chooseSale"><option value="" disabled>Select a sale with returnable items</option><option v-for="sale in saleOptions" :key="sale.id" :value="sale.id">{{ sale.number }} · {{ sale.contact?.name }} · {{ date(sale.document_date) }}</option></select></label><div class="field"><span>{{ relatedContactName === 'supplier' ? 'Supplier' : 'Customer' }} *</span><div class="field-action"><select v-model="documentForm.contact_id" required :disabled="['purchase_return', 'sale_return'].includes(documentForm.type)" :aria-label="relatedContactName"><option value="" disabled>Select a {{ relatedContactName }}</option><option v-for="contact in availableContacts" :key="contact.id" :value="contact.id">{{ contact.name }}</option></select><button v-if="!['purchase_return', 'sale_return'].includes(documentForm.type)" type="button" class="btn-secondary-app small create-inline" @click="createRelatedContact"><Plus :size="16" /> Create new {{ relatedContactName }}</button></div></div><label class="field"><span>Date *</span><input v-model="documentForm.document_date" type="date" required></label></div><div v-if="documentForm.type === 'purchase' && purchaseStep < 3" class="workflow-banner"><span class="workflow-step">{{ purchaseStep }}</span><div><strong>{{ purchaseStep === 1 ? 'Start with a supplier' : 'Next, choose a product' }}</strong><p>{{ purchaseStep === 1 ? 'Select a supplier or create a new one to continue.' : 'Select a product or create a new one. Your purchase draft will be kept.' }}</p></div></div><div class="items-heading"><div><h3>Line items</h3><p>{{ documentForm.type === 'sale_return' ? 'Choose quantities to refund. Prices come from the original sale.' : 'Choose products and enter quantities.' }}</p></div><button v-if="!['purchase_return', 'sale_return'].includes(documentForm.type)" type="button" class="btn-secondary-app small" :disabled="documentForm.type === 'purchase' && !documentForm.contact_id" @click="documentForm.items.push({ product_id: '', quantity: 1, unit_price: '0.00' })"><Plus :size="16" /> Add line</button></div><div class="items-list"><div v-for="(item, index) in documentForm.items" :key="index" class="item-row"><div class="field"><span>Product</span><div class="field-action"><select v-model="item.product_id" required :disabled="documentForm.type === 'purchase' && !documentForm.contact_id" aria-label="Product" @change="chooseProduct(item)"><option value="" disabled>Select product</option><option v-for="product in availableProducts" :key="product.id" :value="product.id">{{ productOption(product) }}</option></select><button v-if="!['purchase_return', 'sale_return'].includes(documentForm.type)" type="button" class="btn-secondary-app small create-inline" :disabled="documentForm.type === 'purchase' && !documentForm.contact_id" @click="createRelatedProduct(index)"><Plus :size="16" /> New product</button></div></div><label class="field"><span>Quantity</span><input v-model="item.quantity" type="number" min="0.001" :max="documentForm.type === 'sale_return' ? returnableQuantity(item.product_id) : undefined" step="0.001" required><small v-if="documentForm.type === 'sale_return'">Up to {{ qty(returnableQuantity(item.product_id)) }} returnable</small></label><label class="field"><span>Unit price</span><input v-model="item.unit_price" type="number" min="0" step="0.01" required :readonly="documentForm.type === 'sale_return'"></label><div class="line-amount"><span>Amount</span><strong>{{ money(Number(item.quantity) * Number(item.unit_price)) }}</strong></div><button type="button" class="icon-button remove-line" title="Remove line" :disabled="documentForm.items.length === 1" @click="documentForm.items.splice(index, 1)"><Trash2 :size="17" /></button></div></div><section v-if="['sale', 'resale'].includes(documentForm.type)" class="payment-terms-card"><div><span class="eyebrow">PAYMENT TERMS</span><h3>How will the customer pay?</h3></div><div class="form-grid"><label class="field span-2"><span>Payment plan *</span><select v-model="documentForm.payment_type" @change="setDocumentPayment"><option value="full">Immediate / full payment</option><option value="installment">Down payment + installment</option><option value="due">Due sale</option></select></label><label v-if="documentForm.payment_type !== 'due'" class="field"><span>Payment method</span><select v-model="documentForm.payment_method"><option value="cash">Cash</option><option value="card">Card</option><option value="mobile_banking">Mobile banking</option><option value="bank_transfer">Bank transfer</option></select></label><div v-if="documentForm.payment_type === 'full'" class="field"><span>Collected today</span><strong class="payment-total">{{ money(docTotal) }}</strong></div><template v-if="documentForm.payment_type === 'installment'"><label class="field"><span>Down payment</span><input v-model="documentForm.down_payment" type="number" min="0" :max="docTotal" step="0.01"></label><label class="field"><span>Number of installments</span><input v-model="documentForm.installment_count" type="number" min="1" max="120" step="1"></label><label class="field"><span>Frequency</span><select v-model="documentForm.installment_frequency"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label><label class="field"><span>First installment date</span><input v-model="documentForm.first_installment_date" type="date"><small>{{ Number(documentForm.installment_count || 0) ? `${money(saleInstallmentAmount)} each before rounding.` : '' }}</small></label></template><p v-if="documentForm.payment_type === 'due'" class="payment-plan-note span-2">No payment is collected today. The full total is recorded as customer due.</p><p v-if="documentForm.payment_type === 'installment'" class="payment-plan-note span-2">{{ money(salePaymentInitial) }} collected today · {{ money(saleInstallmentBalance) }} scheduled for future payments.</p></div></section><div class="document-bottom"><label class="field notes-field"><span>Notes</span><textarea v-model="documentForm.notes" rows="3" placeholder="Optional transaction notes"></textarea></label><div class="totals-box"><div><span>Subtotal</span><strong>{{ money(docSubtotal) }}</strong></div><label><span>Discount</span><input v-model="documentForm.discount" type="number" min="0" step="0.01"></label><label><span>Tax</span><input v-model="documentForm.tax" type="number" min="0" step="0.01"></label><div class="grand-total"><span>Total</span><strong>{{ money(docTotal) }}</strong></div></div></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy || docTotal < 0 || !documentCanSave">{{ busy ? 'Saving...' : `Save ${label(documentForm.type).toLowerCase()}` }}</button></div></form>
     </div></div>
   </div>

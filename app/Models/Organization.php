@@ -14,7 +14,7 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'plan_name', 'subscription_status', 'subscription_ends_at', 'notes'];
+    protected $fillable = ['name', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'notes', 'system_settings'];
 
     protected $appends = ['subscription_active'];
 
@@ -23,6 +23,29 @@ class Organization extends Model
         return [
             'subscription_status' => SubscriptionStatus::class,
             'subscription_ends_at' => 'date',
+            'access_paused' => 'boolean',
+            'system_settings' => 'array',
+        ];
+    }
+
+    public function setup(): array
+    {
+        $saved = $this->system_settings ?? [];
+
+        return [
+            'sales' => array_replace([
+                'allow_due_sales' => true,
+                'allow_installment_sales' => true,
+                'allow_sales_returns' => true,
+                'allow_resales' => true,
+                'default_payment_method' => 'cash',
+            ], $saved['sales'] ?? []),
+            'purchases' => array_replace(['allow_purchase_returns' => true], $saved['purchases'] ?? []),
+            'store' => array_replace([
+                'allow_stock_adjustments' => true,
+                'allow_stock_transfers' => true,
+                'default_reorder_level' => 0,
+            ], $saved['store'] ?? []),
         ];
     }
 
@@ -82,5 +105,10 @@ class Organization extends Model
     public function getSubscriptionActiveAttribute(): bool
     {
         return $this->hasActiveSubscription();
+    }
+
+    public function canUseWorkspace(): bool
+    {
+        return ! $this->access_paused && $this->hasActiveSubscription();
     }
 }

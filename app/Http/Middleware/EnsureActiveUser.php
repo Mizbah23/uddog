@@ -15,10 +15,14 @@ class EnsureActiveUser
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->user()?->active) {
+        if (! $request->user()?->active || $request->user()?->access_paused) {
+            $pausedByPlatform = $request->user()?->access_paused === true;
             auth()->logout();
 
-            return response()->json(['message' => 'This user account is inactive.'], 403);
+            return response()->json([
+                'message' => $pausedByPlatform ? 'Your account has been paused by the platform superadmin.' : 'This user account is inactive.',
+                'code' => $pausedByPlatform ? 'user_access_paused' : 'user_inactive',
+            ], 403);
         }
 
         return $next($request);

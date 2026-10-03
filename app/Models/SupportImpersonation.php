@@ -54,6 +54,7 @@ class SupportImpersonation extends Model
 
         if (! $impersonation
             || ! $impersonation->impersonator?->active
+            || $impersonation->impersonatedUser?->access_paused
             || ! $impersonation->impersonator->isSuperadmin()) {
             $request->session()->forget(self::SESSION_KEY);
 

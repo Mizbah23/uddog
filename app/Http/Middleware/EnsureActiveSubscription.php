@@ -25,6 +25,13 @@ class EnsureActiveSubscription
             return $next($request);
         }
 
+        if ($user?->organization?->access_paused) {
+            return response()->json([
+                'message' => 'Your company access has been paused by the platform superadmin. Contact support to restore access.',
+                'code' => 'company_access_paused',
+            ], 403);
+        }
+
         if (! $user?->organization?->hasActiveSubscription()) {
             return response()->json([
                 'message' => 'Your client subscription is not active. Contact support to restore workspace access.',

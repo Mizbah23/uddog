@@ -1,6 +1,6 @@
 const bangla = {
   'Dashboard': 'ড্যাশবোর্ড', 'Products': 'পণ্য', 'Categories': 'ক্যাটাগরি', 'Branches': 'শাখাসমূহ',
-  'Customers': 'ক্রেতা', 'Suppliers': 'সরবরাহকারী', 'Purchases': 'ক্রয়', 'POS Sale': 'পিওএস বিক্রয়',
+  'Customers': 'ক্রেতা', 'Suppliers': 'সরবরাহকারী', 'Purchases': 'ক্রয়', 'POS Sale': 'পস মেশিন সেল',
   'Sales': 'বিক্রয়', 'Sales returns': 'বিক্রয় ফেরত', 'Resales': 'পুনঃবিক্রয়', 'Purchase returns': 'ক্রয় ফেরত',
   'Inventory': 'ইনভেন্টরি', 'Stock Check': 'স্টক পরীক্ষা', 'Stock Transfer': 'স্টক স্থানান্তর',
   'Warranty Search': 'ওয়ারেন্টি খোঁজ', 'Sales Targets': 'বিক্রয় লক্ষ্য', 'Users': 'ব্যবহারকারী',
@@ -46,65 +46,793 @@ const bangla = {
   'At least 8 characters': 'কমপক্ষে ৮ অক্ষর', 'Open profile menu': 'প্রোফাইল মেনু খুলুন',
 };
 
+Object.assign(bangla, {
+  'Access control': 'প্রবেশাধিকার নিয়ন্ত্রণ',
+  'SUPERADMIN · ACCESS': 'সুপার অ্যাডমিন · প্রবেশাধিকার',
+  'Pause or restore a company or one of its users without changing the subscription plan, expiry date, or saved data.': 'সাবস্ক্রিপশন পরিকল্পনা, মেয়াদ বা সংরক্ষিত তথ্য না বদলে কোম্পানি বা তার কোনো ব্যবহারকারীর প্রবেশাধিকার বন্ধ বা চালু করুন।',
+  'How access works': 'প্রবেশাধিকার যেভাবে কাজ করে',
+  'Pausing a company blocks its entire team. Pausing one user blocks only that account. Restoring a company does not extend an expired subscription, and individually paused users stay paused.': 'কোম্পানি বন্ধ করলে পুরো দলের প্রবেশ বন্ধ হয়। একজন ব্যবহারকারীকে বন্ধ করলে শুধু তাঁর অ্যাকাউন্ট বন্ধ হয়। কোম্পানি চালু করলে মেয়াদোত্তীর্ণ সাবস্ক্রিপশনের মেয়াদ বাড়ে না এবং আলাদাভাবে বন্ধ করা ব্যবহারকারীরা বন্ধই থাকেন।',
+  'Company access': 'কোম্পানির প্রবেশাধিকার',
+  'Individual user access': 'ব্যবহারকারীর প্রবেশাধিকার',
+  'PLAN & VALIDITY': 'পরিকল্পনা ও মেয়াদ', 'ACCESS': 'প্রবেশাধিকার', 'ACTION': 'কাজ',
+  'Paused by admin': 'অ্যাডমিন কর্তৃক স্থগিত', 'Subscription inactive': 'সাবস্ক্রিপশন নিষ্ক্রিয়',
+  'Restore access': 'প্রবেশাধিকার চালু করুন', 'Pause company': 'কোম্পানি বন্ধ করুন',
+  'User paused': 'ব্যবহারকারী স্থগিত', 'Company paused': 'কোম্পানি স্থগিত',
+  'Pause user': 'ব্যবহারকারী বন্ধ করুন', 'Restore user': 'ব্যবহারকারী চালু করুন',
+  'All companies': 'সব কোম্পানি', 'Search companies...': 'কোম্পানি খুঁজুন...', 'Search users...': 'ব্যবহারকারী খুঁজুন...',
+  'No companies found': 'কোনো কোম্পানি পাওয়া যায়নি', 'No users found': 'কোনো ব্যবহারকারী পাওয়া যায়নি',
+  'Try another company name.': 'অন্য কোম্পানির নাম দিয়ে খুঁজুন।', 'Change the company filter or search term.': 'কোম্পানির ফিল্টার বা খোঁজার শব্দ বদলান।',
+  'Company access paused': 'কোম্পানির প্রবেশাধিকার স্থগিত',
+  'has been paused by the platform superadmin.': 'প্ল্যাটফর্ম সুপার অ্যাডমিন কর্তৃক স্থগিত করা হয়েছে।',
+  'Your company workspace is unavailable until the platform superadmin restores access. Your saved data and subscription dates remain unchanged.': 'প্ল্যাটফর্ম সুপার অ্যাডমিন প্রবেশাধিকার চালু না করা পর্যন্ত কোম্পানির কর্মক্ষেত্র বন্ধ থাকবে। সংরক্ষিত তথ্য ও সাবস্ক্রিপশনের মেয়াদ অপরিবর্তিত আছে।',
+  'Your user account has been paused. Contact your company administrator or platform support.': 'আপনার অ্যাকাউন্ট স্থগিত করা হয়েছে। কোম্পানির অ্যাডমিন বা প্ল্যাটফর্ম সহায়তার সঙ্গে যোগাযোগ করুন।',
+  'Your account has been paused by the platform superadmin.': 'প্ল্যাটফর্ম সুপার অ্যাডমিন আপনার অ্যাকাউন্ট স্থগিত করেছেন।',
+  'Company access is paused by the platform superadmin. Your plan and validity date are unchanged.': 'প্ল্যাটফর্ম সুপার অ্যাডমিন কোম্পানির প্রবেশাধিকার স্থগিত করেছেন। পরিকল্পনা ও মেয়াদের তারিখ অপরিবর্তিত আছে।',
+});
+
+Object.assign(bangla, {
+  'Reports': 'রিপোর্ট', 'Report': 'প্রতিবেদন', 'Report types': 'প্রতিবেদনের ধরন',
+  'Profit & loss': 'লাভ-ক্ষতি', 'Employee-wise sales': 'কর্মীভিত্তিক বিক্রয়',
+  'Stock': 'স্টক', 'Stock adjustments': 'স্টক সমন্বয়',
+  'Barcode-wise products': 'বারকোডভিত্তিক পণ্য', 'Barcode-wise sales': 'বারকোডভিত্তিক বিক্রয়',
+  'Customer ledger': 'ক্রেতার খতিয়ান', 'Customer due': 'ক্রেতার বকেয়া',
+  'Category': 'ক্যাটাগরি', 'Contact': 'যোগাযোগ', 'Contacts': 'যোগাযোগসমূহ',
+  'Branch': 'শাখা', 'Company': 'কোম্পানি', 'User': 'ব্যবহারকারী',
+  'Status': 'অবস্থা', 'Type': 'ধরন', 'Name': 'নাম', 'Code': 'কোড',
+  'Description': 'বিবরণ', 'Address': 'ঠিকানা', 'Area': 'এলাকা',
+  'Balance': 'অবশিষ্ট', 'Paid': 'পরিশোধিত', 'Due': 'বকেয়া',
+  'Phone': 'ফোন', 'Email': 'ইমেইল', 'Password': 'পাসওয়ার্ড',
+  'Search': 'খুঁজুন', 'From': 'শুরু', 'To': 'শেষ', 'Price': 'মূল্য',
+  'Progress': 'অগ্রগতি', 'Current': 'বর্তমান', 'Default': 'ডিফল্ট',
+  'New': 'নতুন', 'Active': 'সক্রিয়', 'Inactive': 'নিষ্ক্রিয়',
+  'Completed': 'সম্পন্ন', 'Draft': 'খসড়া', 'Started': 'শুরু হয়েছে',
+  'Cancelled': 'বাতিল', 'Expired': 'মেয়াদোত্তীর্ণ', 'Suspended': 'স্থগিত',
+  'Trial': 'পরীক্ষামূলক', 'Past due': 'মেয়াদোত্তীর্ণ বকেয়া',
+  'Manager': 'ম্যানেজার', 'Staff': 'কর্মী', 'Superadmin': 'সুপার অ্যাডমিন',
+  'Owner admin': 'মালিক অ্যাডমিন', 'Owner administrator': 'মালিক প্রশাসক',
+  'Owner': 'মালিক', 'Not assigned': 'নির্ধারিত নয়',
+  'No': 'না', 'Yes': 'হ্যাঁ', 'Both customer and supplier': 'ক্রেতা ও সরবরাহকারী উভয়ই',
+  'Uncategorized': 'ক্যাটাগরিবিহীন', 'In stock': 'স্টকে আছে', 'Low stock': 'কম স্টক',
+  'Achieved': 'লক্ষ্য অর্জিত', 'On track': 'লক্ষ্যের পথে', 'Behind': 'পিছিয়ে',
+  'Upcoming': 'আসন্ন', 'Missed': 'লক্ষ্য পূরণ হয়নি', 'High': 'উচ্চ',
+  'Medium': 'মাঝারি', 'Low': 'নিম্ন',
+  'Sale': 'বিক্রয়', 'Resale': 'পুনঃবিক্রয়', 'Purchase': 'ক্রয়',
+  'Sale return': 'বিক্রয় ফেরত', 'Purchase return': 'ক্রয় ফেরত',
+  'Adjustment': 'সমন্বয়', 'Stock check': 'স্টক পরীক্ষা',
+  'Transfer out': 'স্টক পাঠানো', 'Transfer in': 'স্টক গ্রহণ',
+  'due': 'বকেয়া', 'partial': 'আংশিক', 'paid': 'পরিশোধিত',
+  'not_applicable': 'প্রযোজ্য নয়', 'sale': 'বিক্রয়', 'resale': 'পুনঃবিক্রয়',
+  'sale_return': 'বিক্রয় ফেরত', 'purchase': 'ক্রয়', 'purchase_return': 'ক্রয় ফেরত',
+  'stock_check': 'স্টক পরীক্ষা', 'adjustment': 'সমন্বয়',
+  'transfer_out': 'স্টক পাঠানো', 'transfer_in': 'স্টক গ্রহণ',
+  'Export CSV': 'সিএসভি রপ্তানি', 'Run report': 'প্রতিবেদন দেখুন',
+  'Loading report…': 'প্রতিবেদন লোড হচ্ছে…', 'Preparing…': 'প্রস্তুত হচ্ছে…',
+  'For the current report filters': 'বর্তমান প্রতিবেদনের ফিল্টার অনুযায়ী',
+  'Review sales, stock, customer balances and team activity for this branch.': 'এই শাখার বিক্রয়, স্টক, ক্রেতার বকেয়া ও কর্মীদের কার্যক্রম দেখুন।',
+  'Business insights': 'ব্যবসার তথ্য', 'Current branch stock, reorder levels and inventory values.': 'বর্তমান শাখার স্টক, পুনঃঅর্ডারের সীমা ও ইনভেন্টরির মূল্য।',
+  'Sales, returns, collections and customer balances.': 'বিক্রয়, ফেরত, আদায় ও ক্রেতার বকেয়া।',
+  'Purchases and supplier returns for the selected period.': 'নির্বাচিত সময়ের ক্রয় ও সরবরাহকারীকে ফেরত।',
+  'Net sales and gross profit from recorded sale line costs.': 'নথিভুক্ত বিক্রয়মূল্য ও খরচ থেকে নিট বিক্রয় ও মোট লাভ।',
+  'Sales totals and collections by the employee who created each sale.': 'বিক্রয়কারী কর্মী অনুযায়ী মোট বিক্রয় ও আদায়।',
+  'Manual adjustments and stock check variances.': 'ম্যানুয়াল স্টক সমন্বয় ও গণনার পার্থক্য।',
+  'Search products by barcode and review current quantity and price.': 'বারকোড দিয়ে পণ্য খুঁজে বর্তমান পরিমাণ ও মূল্য দেখুন।',
+  'Sold product lines matched by barcode or product name.': 'বারকোড বা পণ্যের নাম অনুযায়ী বিক্রীত পণ্য দেখুন।',
+  'Product counts, current stock and sales grouped by category.': 'ক্যাটাগরি অনুযায়ী পণ্যের সংখ্যা, বর্তমান স্টক ও বিক্রয়।',
+  'Customer sales, collections, balances and credit limits.': 'ক্রেতার বিক্রয়, আদায়, বকেয়া ও ঋণসীমা।',
+  'Customer transaction debit and credit history.': 'ক্রেতার লেনদেনের ডেবিট ও ক্রেডিট ইতিহাস।',
+  'Unpaid and partially paid customer invoices.': 'অপরিশোধিত ও আংশিক পরিশোধিত ক্রেতার চালান।',
+  'No report data': 'প্রতিবেদনে কোনো তথ্য নেই',
+  'Try changing the date range or search term.': 'তারিখের সীমা বা খোঁজার শব্দ পরিবর্তন করুন।',
+  'Enter a name or barcode': 'নাম বা বারকোড লিখুন',
+  'Product or barcode': 'পণ্য বা বারকোড',
+  'All customers': 'সব ক্রেতা',
+  'Month': 'মাস', 'Year': 'বছর', 'Records': 'রেকর্ড',
+  'Sale price': 'বিক্রয়মূল্য', 'Cost value': 'ক্রয়মূল্য', 'Sale value': 'বিক্রয়মূল্য',
+  'On hand': 'বর্তমান স্টক', 'Reorder at': 'পুনঃঅর্ডারের সীমা',
+  'Units sold': 'বিক্রীত একক', 'Units in stock': 'স্টকে থাকা একক',
+  'Sales count': 'বিক্রয়ের সংখ্যা', 'Net total': 'নিট মোট', 'Net sales': 'নিট বিক্রয়',
+  'Net purchases': 'নিট ক্রয়', 'Gross profit': 'মোট লাভ', 'Collected': 'আদায়কৃত',
+  'Sales total': 'মোট বিক্রয়', 'Open balance': 'অপরিশোধিত বকেয়া',
+  'Reference': 'রেফারেন্স', 'Debit': 'ডেবিট', 'Credit': 'ক্রেডিট',
+  'Line total': 'লাইনের মোট', 'Stock value': 'স্টকের মূল্য',
+  'Low stock': 'কম স্টক', 'Stock Value': 'স্টকের মূল্য',
+});
+
+Object.assign(bangla, {
+  'Access': 'প্রবেশাধিকার', 'Access control': 'প্রবেশাধিকার নিয়ন্ত্রণ',
+  'Activity': 'কার্যক্রম', 'Assigned to': 'দায়িত্বে', 'Available': 'উপলব্ধ',
+  'Average cost': 'গড় ক্রয়মূল্য', 'Avg. cost': 'গড় ক্রয়মূল্য',
+  'Barcode': 'বারকোড', 'Branch inventory': 'শাখার ইনভেন্টরি',
+  'Catalog': 'পণ্যতালিকা', 'Catalog setup': 'পণ্যতালিকার সেটআপ',
+  'Company setup': 'কোম্পানির সেটআপ', 'Contact directory': 'যোগাযোগের তালিকা',
+  'Counted': 'গণনাকৃত', 'Created by': 'তৈরি করেছেন', 'Credit limit': 'ঋণসীমা',
+  'Customer support': 'ক্রেতা সহায়তা', 'Default sale price': 'ডিফল্ট বিক্রয়মূল্য',
+  'Direction': 'দিক', 'Expected': 'প্রত্যাশিত', 'From branch': 'প্রেরক শাখা',
+  'Invoice': 'চালান', 'Mobile': 'মোবাইল', 'Name': 'নাম',
+  'Number': 'নম্বর', 'On hand': 'স্টকে আছে', 'Owner admin': 'মালিক অ্যাডমিন',
+  'Physical count': 'বাস্তব গণনা', 'Physical inventory': 'বাস্তব ইনভেন্টরি',
+  'Plan': 'পরিকল্পনা', 'Product roadmap': 'পণ্যের রোডম্যাপ',
+  'Qty': 'পরিমাণ', 'Remaining': 'অবশিষ্ট', 'Reorder at': 'পুনঃঅর্ডারের সীমা',
+  'Role': 'ভূমিকা', 'Route': 'রুট', 'Sale date': 'বিক্রয়ের তারিখ',
+  'Sales planning': 'বিক্রয় পরিকল্পনা', 'Stock control': 'স্টক নিয়ন্ত্রণ',
+  'Subscription': 'সাবস্ক্রিপশন', 'Support': 'সহায়তা',
+  'Target': 'লক্ষ্য', 'Transactions': 'লেনদেন', 'Transfer from': 'প্রেরক শাখা',
+  'Unit price': 'একক মূল্য', 'Valid until': 'মেয়াদ শেষ',
+  'Variance': 'পার্থক্য', 'Warranty until': 'ওয়ারেন্টির মেয়াদ',
+  'Active and inactive directory records': 'সক্রিয় ও নিষ্ক্রিয় তালিকাভুক্ত তথ্য',
+  'Active and trial companies': 'সক্রিয় ও পরীক্ষামূলক কোম্পানি',
+  'Active branch': 'সক্রিয় শাখা', 'Active branches': 'সক্রিয় শাখাসমূহ',
+  'Active categories': 'সক্রিয় ক্যাটাগরি', 'Active category': 'সক্রিয় ক্যাটাগরি',
+  'Active contact': 'সক্রিয় যোগাযোগ', 'Active coverage': 'সক্রিয় ওয়ারেন্টি',
+  'Active subscriptions': 'সক্রিয় সাবস্ক্রিপশন', 'Active user': 'সক্রিয় ব্যবহারকারী',
+  'Add branch': 'শাখা যোগ করুন', 'Add category': 'ক্যাটাগরি যোগ করুন',
+  'Add company': 'কোম্পানি যোগ করুন', 'Add user': 'ব্যবহারকারী যোগ করুন',
+  'Add products to start tracking stock.': 'স্টক অনুসরণ শুরু করতে পণ্য যোগ করুন।',
+  'Add a product or change your search.': 'পণ্য যোগ করুন বা খোঁজার শব্দ পরিবর্তন করুন।',
+  'Add a subscribed company or change your filters.': 'সাবস্ক্রিপশনযুক্ত কোম্পানি যোগ করুন বা ফিল্টার পরিবর্তন করুন।',
+  'All companies': 'সব কোম্পানি', 'All subscriptions': 'সব সাবস্ক্রিপশন',
+  'All warranty states': 'সব ওয়ারেন্টির অবস্থা', 'All customers': 'সব ক্রেতা',
+  'Available for transactions': 'লেনদেনের জন্য উপলব্ধ',
+  'Available product groups': 'উপলব্ধ পণ্যের গ্রুপ',
+  'Branch code': 'শাখার কোড', 'Branch contact number': 'শাখার যোগাযোগ নম্বর',
+  'Branch name': 'শাখার নাম', 'Branch street and area': 'শাখার রাস্তা ও এলাকা',
+  'Business name': 'ব্যবসার নাম', 'Business or company name': 'ব্যবসা বা কোম্পানির নাম',
+  'Calculated from purchases': 'ক্রয় থেকে হিসাব করা',
+  'Categorized products': 'ক্যাটাগরিভুক্ত পণ্য', 'Category list': 'ক্যাটাগরির তালিকা',
+  'Category name': 'ক্যাটাগরির নাম',
+  'Companies using your software': 'আপনার সফটওয়্যার ব্যবহারকারী কোম্পানি',
+  'Company branches': 'কোম্পানির শাখাসমূহ', 'Company locations': 'কোম্পানির অবস্থানসমূহ',
+  'Company name': 'কোম্পানির নাম', 'Company or person': 'কোম্পানি বা ব্যক্তি',
+  'Company subscriptions': 'কোম্পানির সাবস্ক্রিপশন',
+  'Contact name': 'যোগাযোগের নাম', 'Contact type': 'যোগাযোগের ধরন',
+  'Count date': 'গণনার তারিখ', 'Count notes': 'গণনার নোট',
+  'Count sessions for this branch': 'এই শাখার গণনার সেশন',
+  'Count waiting to be completed': 'সম্পন্ন হওয়ার অপেক্ষায় গণনা',
+  'Create a category to start organizing products.': 'পণ্য সাজাতে একটি ক্যাটাগরি তৈরি করুন।',
+  'Create a customer before checkout.': 'চেকআউটের আগে একজন ক্রেতা তৈরি করুন।',
+  'Create a record to see it here.': 'এখানে দেখতে একটি রেকর্ড তৈরি করুন।',
+  'Create new': 'নতুন তৈরি করুন',
+  'Credit limit': 'ঋণসীমা',
+  'Default branch': 'ডিফল্ট শাখা', 'Default sale price (optional)': 'ডিফল্ট বিক্রয়মূল্য (ঐচ্ছিক)',
+  'Delete empty branch': 'খালি শাখা মুছুন', 'Delete unused category': 'অব্যবহৃত ক্যাটাগরি মুছুন',
+  'Edit branch': 'শাখা সম্পাদনা', 'Edit category': 'ক্যাটাগরি সম্পাদনা',
+  'Edit contact': 'যোগাযোগ সম্পাদনা', 'Edit product': 'পণ্য সম্পাদনা',
+  'Opening/default cost (optional)': 'প্রারম্ভিক/ডিফল্ট ক্রয়মূল্য (ঐচ্ছিক)',
+  'Product catalog': 'পণ্যতালিকা', 'Product name': 'পণ্যের নাম',
+  'Products assigned to a category': 'ক্যাটাগরিতে থাকা পণ্য',
+  'Reorder level': 'পুনঃঅর্ডারের সীমা',
+  'Search products, category, SKU or barcode...': 'পণ্য, ক্যাটাগরি, এসকেইউ বা বারকোড খুঁজুন...',
+  'Search categories...': 'ক্যাটাগরি খুঁজুন...',
+  'Select the working branch from the top navigation.': 'ওপরের মেনু থেকে কাজের শাখা নির্বাচন করুন।',
+  'The average cost updates when purchases are recorded.': 'ক্রয় নথিভুক্ত হলে গড় ক্রয়মূল্য আপডেট হয়।',
+  'Total branch stock': 'শাখাগুলোর মোট স্টক', 'Total branches': 'মোট শাখা',
+  'Total categories': 'মোট ক্যাটাগরি',
+  'Units across all locations': 'সব অবস্থানের মোট একক',
+  'Visible when assigning products': 'পণ্য নির্ধারণের সময় দেখা যাবে',
+  'You can enter a different price on every sale.': 'প্রতিটি বিক্রয়ে আলাদা মূল্য দিতে পারবেন।',
+  'No categories found': 'কোনো ক্যাটাগরি পাওয়া যায়নি',
+  'No products found': 'কোনো পণ্য পাওয়া যায়নি',
+  'No products yet': 'এখনও কোনো পণ্য নেই',
+  'No stock movements': 'স্টকের কোনো পরিবর্তন নেই',
+  'No users assigned.': 'কোনো ব্যবহারকারী নির্ধারিত নেই।',
+  'Products and adjustments will appear here.': 'পণ্য ও সমন্বয় এখানে দেখা যাবে।',
+});
+
+Object.assign(bangla, {
+  '13-digit product barcode': '১৩ সংখ্যার পণ্যের বারকোড',
+  'Actuals include sales and resales, less sales returns.': 'বিক্রয় ও পুনঃবিক্রয় থেকে বিক্রয় ফেরত বাদ দিয়ে প্রকৃত হিসাব করা হয়।',
+  'Assigned employee': 'দায়িত্বপ্রাপ্ত কর্মী',
+  'Choose a product to begin the sale.': 'বিক্রয় শুরু করতে একটি পণ্য বেছে নিন।',
+  'Collected now': 'এখন আদায়কৃত',
+  'Combined progress toward monthly goals': 'মাসিক লক্ষ্যের সম্মিলিত অগ্রগতি',
+  'Count the products in the current branch and reconcile any variance.': 'বর্তমান শাখার পণ্য গণনা করুন এবং পার্থক্য সমন্বয় করুন।',
+  'Enter count': 'গণনার পরিমাণ লিখুন',
+  'Enter during each sale': 'প্রতিটি বিক্রয়ের সময় লিখুন',
+  'Explain why stock is being adjusted': 'স্টক সমন্বয়ের কারণ লিখুন',
+  'How will the customer pay?': 'ক্রেতা কীভাবে পরিশোধ করবেন?',
+  'Installments': 'কিস্তি',
+  'Keep this field focused and scan; the product is added when Enter is received.': 'এই ঘরটি সক্রিয় রেখে স্ক্যান করুন; এন্টার চাপলে পণ্যটি যোগ হবে।',
+  'Latest 200 entries': 'সর্বশেষ ২০০টি তথ্য',
+  'Leave empty to track the whole branch.': 'পুরো শাখা দেখতে ফাঁকা রাখুন।',
+  'Move available products from the current branch to another company branch.': 'বর্তমান শাখা থেকে উপলব্ধ পণ্য কোম্পানির অন্য শাখায় পাঠান।',
+  'Move stock between branches to see the transfer history here.': 'স্থানান্তরের ইতিহাস দেখতে শাখাগুলোর মধ্যে স্টক সরান।',
+  'Monthly goals': 'মাসিক লক্ষ্য', 'Monthly target': 'মাসিক লক্ষ্য',
+  'Net sales this year': 'এ বছরের নিট বিক্রয়', 'Needs attention': 'মনোযোগ প্রয়োজন',
+  'New product': 'নতুন পণ্য', 'New transfer': 'নতুন স্থানান্তর',
+  'No category sales yet': 'এখনও ক্যাটাগরিভিত্তিক বিক্রয় নেই',
+  'No sales targets for this month': 'এই মাসে বিক্রয় লক্ষ্য নেই',
+  'No stock checks yet': 'এখনও স্টক গণনা নেই',
+  'No stock transfers yet': 'এখনও স্টক স্থানান্তর নেই',
+  'No stocked products found': 'স্টকে কোনো পণ্য পাওয়া যায়নি',
+  'No warranty': 'ওয়ারেন্টি নেই',
+  'No warranty records found': 'ওয়ারেন্টির কোনো তথ্য পাওয়া যায়নি',
+  'Open reports': 'প্রতিবেদন খুলুন',
+  'Optional notes about products in this category': 'এই ক্যাটাগরির পণ্য সম্পর্কে ঐচ্ছিক নোট',
+  'Optional notes about this physical count': 'এই বাস্তব গণনা সম্পর্কে ঐচ্ছিক নোট',
+  'Optional sale notes': 'বিক্রয় সম্পর্কে ঐচ্ছিক নোট',
+  'Optional target context or campaign notes': 'লক্ষ্য বা প্রচারণা সম্পর্কে ঐচ্ছিক নোট',
+  'Optional transaction notes': 'লেনদেন সম্পর্কে ঐচ্ছিক নোট',
+  'Optional transfer notes': 'স্থানান্তর সম্পর্কে ঐচ্ছিক নোট',
+  'Original purchase': 'মূল ক্রয়', 'Original sale': 'মূল বিক্রয়',
+  'Outstanding balance': 'অপরিশোধিত বকেয়া',
+  'Positive adds stock; negative removes stock.': 'ধনাত্মক সংখ্যা স্টক বাড়ায়; ঋণাত্মক সংখ্যা স্টক কমায়।',
+  'Print barcode': 'বারকোড প্রিন্ট করুন',
+  'Processed by': 'প্রক্রিয়া করেছেন',
+  'Purchase or adjust stock before creating a POS sale.': 'পিওএস বিক্রয়ের আগে পণ্য ক্রয় করুন বা স্টক সমন্বয় করুন।',
+  'Purchases and adjustments will appear here.': 'ক্রয় ও সমন্বয় এখানে দেখা যাবে।',
+  'Quantities are taken from the currently selected source branch.': 'বর্তমানে নির্বাচিত উৎস শাখা থেকে পরিমাণ নেওয়া হবে।',
+  'Quantity change': 'পরিমাণের পরিবর্তন', 'Reason': 'কারণ',
+  'Recent movements': 'সাম্প্রতিক স্টক পরিবর্তন',
+  'Reconciled count sessions': 'সমন্বিত গণনার সেশন',
+  'Remove': 'সরান', 'Remove line': 'সারি সরান',
+  'Sales by category will appear here.': 'ক্যাটাগরিভিত্তিক বিক্রয় এখানে দেখা যাবে।',
+  'Sales minus returns for assigned targets': 'নির্ধারিত লক্ষ্যের জন্য ফেরত বাদে বিক্রয়',
+  'Sales target': 'বিক্রয় লক্ষ্য', 'Sales vs purchases': 'বিক্রয় বনাম ক্রয়',
+  'Scan EAN-13 or enter SKU': 'ইএএন-১৩ স্ক্যান করুন বা এসকেইউ লিখুন',
+  'Search by product, SKU, barcode or category...': 'পণ্য, এসকেইউ, বারকোড বা ক্যাটাগরি দিয়ে খুঁজুন...',
+  'See current balances and the history behind every change.': 'বর্তমান মজুত ও প্রতিটি পরিবর্তনের ইতিহাস দেখুন।',
+  'Select a customer': 'ক্রেতা নির্বাচন করুন',
+  'Select a product': 'পণ্য নির্বাচন করুন',
+  'Select a purchase': 'ক্রয় নির্বাচন করুন',
+  'Select a sale with returnable items': 'ফেরতযোগ্য পণ্যসহ বিক্রয় নির্বাচন করুন',
+  'Select branch': 'শাখা নির্বাচন করুন',
+  'Select destination': 'গন্তব্য নির্বাচন করুন',
+  'Select product': 'পণ্য নির্বাচন করুন',
+  'Select stocked product': 'স্টকে থাকা পণ্য নির্বাচন করুন',
+  'Select products, collect payment and issue an invoice from one screen.': 'একই পর্দায় পণ্য বাছুন, টাকা নিন ও চালান তৈরি করুন।',
+  'Set a branch or employee target to begin tracking progress.': 'অগ্রগতি অনুসরণ করতে শাখা বা কর্মীর লক্ষ্য নির্ধারণ করুন।',
+  'Set monthly goals for a branch or employee, then follow net sales progress.': 'শাখা বা কর্মীর মাসিক লক্ষ্য নির্ধারণ করে নিট বিক্রয়ের অগ্রগতি দেখুন।',
+  'Set target': 'লক্ষ্য নির্ধারণ করুন',
+  'Start a physical count for the selected branch.': 'নির্বাচিত শাখায় বাস্তব স্টক গণনা শুরু করুন।',
+  'Start stock check': 'স্টক পরীক্ষা শুরু করুন',
+  'Stock check history': 'স্টক পরীক্ষার ইতিহাস',
+  'Stock on hand': 'বর্তমান স্টক',
+  'Target month': 'লক্ষ্যের মাস',
+  'The current branch has no available stock to transfer.': 'বর্তমান শাখায় স্থানান্তরের জন্য কোনো স্টক নেই।',
+  'This term is captured on each sale.': 'প্রতিটি বিক্রয়ে এই শর্তটি সংরক্ষিত হয়।',
+  'Top categories': 'শীর্ষ ক্যাটাগরি',
+  'Total checks': 'মোট পরীক্ষা', 'Total variance': 'মোট পার্থক্য',
+  'Transfer date': 'স্থানান্তরের তারিখ',
+  'Transfer history': 'স্থানান্তরের ইতিহাস',
+  'Use + to add or − to remove': 'যোগ করতে + বা কমাতে − ব্যবহার করুন',
+  'Warranty period (months)': 'ওয়ারেন্টির মেয়াদ (মাস)',
+  'Warranty records': 'ওয়ারেন্টির তথ্য',
+  'Whole branch': 'পুরো শাখা',
+  'Your cart is empty': 'আপনার কার্ট খালি',
+  'available products': 'উপলব্ধ পণ্য',
+  'products available': 'পণ্য উপলব্ধ',
+  'in stock': 'স্টকে আছে',
+  'matching sold products': 'মিল পাওয়া বিক্রীত পণ্য',
+  'returnable': 'ফেরতযোগ্য',
+  'scheduled for future payments.': 'ভবিষ্যৎ পরিশোধের জন্য নির্ধারিত।',
+});
+
+Object.assign(bangla, {
+  'A simple workspace for buying, selling, returning, and tracking stock.': 'ক্রয়, বিক্রয়, ফেরত ও স্টক অনুসরণের সহজ কর্মক্ষেত্র।',
+  'Accounts currently assigned to this company.': 'এই কোম্পানিতে বর্তমানে নির্ধারিত অ্যাকাউন্টসমূহ।',
+  'Add a manager or staff account to begin delegating access.': 'দায়িত্ব ভাগ করতে একজন ম্যানেজার বা কর্মীর অ্যাকাউন্ট যোগ করুন।',
+  'Add company validity dates to monitor renewals here.': 'নবায়ন পর্যবেক্ষণ করতে কোম্পানির মেয়াদ যুক্ত করুন।',
+  'Company subscriptions': 'কোম্পানির সাবস্ক্রিপশন',
+  'Create or activate this company\'s owner administrator': 'এই কোম্পানির মালিক প্রশাসক তৈরি বা সক্রিয় করুন',
+  'Delete target': 'লক্ষ্য মুছুন',
+  'Edit company': 'কোম্পানি সম্পাদনা', 'Edit target': 'লক্ষ্য সম্পাদনা',
+  'Edit user': 'ব্যবহারকারী সম্পাদনা',
+  'Expired coverage': 'মেয়াদোত্তীর্ণ ওয়ারেন্টি',
+  'Expired subscriptions and upcoming renewals appear first.': 'মেয়াদোত্তীর্ণ সাবস্ক্রিপশন ও আসন্ন নবায়ন আগে দেখানো হয়।',
+  'Expired, overdue or suspended': 'মেয়াদোত্তীর্ণ, বকেয়া বা স্থগিত',
+  'Expiring in 30 days': '৩০ দিনের মধ্যে মেয়াদ শেষ হবে',
+  'Extend subscription': 'সাবস্ক্রিপশনের মেয়াদ বাড়ান',
+  'Filter companies by subscription': 'সাবস্ক্রিপশন অনুযায়ী কোম্পানি ফিল্টার করুন',
+  'Filter warranties by status': 'অবস্থা অনুযায়ী ওয়ারেন্টি ফিল্টার করুন',
+  'Find sales warranty coverage by invoice, barcode, SKU, product, customer or phone.': 'চালান, বারকোড, এসকেইউ, পণ্য, ক্রেতা বা ফোন দিয়ে বিক্রিত পণ্যের ওয়ারেন্টি খুঁজুন।',
+  'Full access': 'পূর্ণ প্রবেশাধিকার',
+  'Inventory management invoice': 'ইনভেন্টরি ব্যবস্থাপনার চালান',
+  'Invoice number': 'চালান নম্বর',
+  'Invoice, barcode, customer or phone...': 'চালান, বারকোড, ক্রেতা বা ফোন...',
+  'Language': 'ভাষা',
+  'Latest superadmin support sessions.': 'সুপার অ্যাডমিনের সাম্প্রতিক সহায়তা সেশন।',
+  'Loading your workspace...': 'আপনার কর্মক্ষেত্র লোড হচ্ছে...',
+  'Maintain every store or location and keep its stock and transactions separate.': 'প্রতিটি দোকান বা অবস্থান পরিচালনা করুন এবং স্টক ও লেনদেন আলাদা রাখুন।',
+  'Manage all companies': 'সব কোম্পানি পরিচালনা করুন',
+  'Manage products, categories, barcodes and reorder levels.': 'পণ্য, ক্যাটাগরি, বারকোড ও পুনঃঅর্ডারের সীমা পরিচালনা করুন।',
+  'Manage store owners, subscription validity and support access.': 'দোকানের মালিক, সাবস্ক্রিপশনের মেয়াদ ও সহায়তার প্রবেশাধিকার পরিচালনা করুন।',
+  'Monitor every company, subscription validity and owner account from one place.': 'এক জায়গা থেকে সব কোম্পানি, সাবস্ক্রিপশনের মেয়াদ ও মালিকের অ্যাকাউন্ট দেখুন।',
+  'Needs attention': 'মনোযোগ প্রয়োজন',
+  'No access assigned yet': 'এখনও কোনো প্রবেশাধিকার দেওয়া হয়নি',
+  'No companies found': 'কোনো কোম্পানি পাওয়া যায়নি',
+  'No renewals need attention': 'কোনো নবায়নে এখন মনোযোগ প্রয়োজন নেই',
+  'No staff found': 'কোনো কর্মী পাওয়া যায়নি',
+  'No support sessions recorded.': 'কোনো সহায়তা সেশন নথিভুক্ত নেই।',
+  'Open this company as its owner administrator': 'মালিক প্রশাসক হিসেবে এই কোম্পানি খুলুন',
+  'Operational expansion': 'কার্যক্রমের সম্প্রসারণ',
+  'Owner account active': 'মালিকের অ্যাকাউন্ট সক্রিয়',
+  'Owner and team': 'মালিক ও দল',
+  'Owner email': 'মালিকের ইমেইল', 'Owner name': 'মালিকের নাম',
+  'Owner not assigned': 'মালিক নির্ধারিত নয়',
+  'Renewal follow-up required': 'নবায়নের জন্য যোগাযোগ প্রয়োজন',
+  'Return to superadmin': 'সুপার অ্যাডমিনে ফিরুন',
+  'Search companies...': 'কোম্পানি খুঁজুন...',
+  'Search users...': 'ব্যবহারকারী খুঁজুন...',
+  'Select a company': 'কোম্পানি নির্বাচন করুন',
+  'Set up owner': 'মালিকের অ্যাকাউন্ট সেট করুন',
+  'Show details': 'বিস্তারিত দেখুন',
+  'Street, city': 'রাস্তা, শহর',
+  'Subscription access paused': 'সাবস্ক্রিপশনের প্রবেশাধিকার বন্ধ',
+  'Subscription or company support notes': 'সাবস্ক্রিপশন বা কোম্পানি সহায়তার নোট',
+  'Subscription plan': 'সাবস্ক্রিপশন পরিকল্পনা',
+  'Subscription status': 'সাবস্ক্রিপশনের অবস্থা',
+  'Support history': 'সহায়তার ইতিহাস',
+  'Support mode': 'সহায়তা মোড',
+  'Support notes': 'সহায়তার নোট',
+  'These modules move through planned, in progress, testing and completed stages.': 'এই মডিউলগুলো পরিকল্পনা, চলমান কাজ, পরীক্ষা ও সম্পন্ন পর্যায় অতিক্রম করে।',
+  'Total companies': 'মোট কোম্পানি',
+  'Track the operational modules planned for the inventory platform.': 'ইনভেন্টরি প্ল্যাটফর্মের পরিকল্পিত কার্যক্রম মডিউলগুলো দেখুন।',
+  'Trial': 'পরীক্ষামূলক',
+  'Try another search or record a sale for a product with a warranty period.': 'অন্যভাবে খুঁজুন বা ওয়ারেন্টিযুক্ত পণ্যের একটি বিক্রয় নথিভুক্ত করুন।',
+  'User accounts': 'ব্যবহারকারীর অ্যাকাউন্ট',
+  'User name': 'ব্যবহারকারীর নাম',
+  'Validity and support queue': 'মেয়াদ ও সহায়তার তালিকা',
+  'View as owner': 'মালিক হিসেবে দেখুন',
+  'View company details': 'কোম্পানির বিস্তারিত দেখুন',
+  'View invoice': 'চালান দেখুন',
+  'Workspace permissions': 'কর্মক্ষেত্রের অনুমতি',
+  'Your company owner has not assigned any workspace permissions to this account.': 'কোম্পানির মালিক এই অ্যাকাউন্টে কর্মক্ষেত্রের কোনো অনুমতি দেননি।',
+  'This user can view and operate only in the selected branches. Select every branch they should be able to use.': 'এই ব্যবহারকারী শুধু নির্বাচিত শাখায় দেখতে ও কাজ করতে পারবেন। প্রয়োজনীয় সব শাখা নির্বাচন করুন।',
+  'does not have an active subscription. Please contact the superadmin for support.': 'এর সক্রিয় সাবস্ক্রিপশন নেই। সহায়তার জন্য সুপার অ্যাডমিনের সঙ্গে যোগাযোগ করুন।',
+  'Account': 'অ্যাকাউন্ট', 'Owner account': 'মালিকের অ্যাকাউন্ট',
+  'Main Branch': 'প্রধান শাখা',
+});
+
+Object.assign(bangla, {
+  'Add a': 'একটি যোগ করুন', 'Added': 'যোগ হয়েছে',
+  'Adjust stock': 'স্টক সমন্বয় করুন',
+  'Allowed branches': 'অনুমোদিত শাখাসমূহ',
+  'Currently valid': 'বর্তমানে বৈধ',
+  'EAN-13 barcode (optional)': 'ইএএন-১৩ বারকোড (ঐচ্ছিক)',
+  'EAN-13 barcode labels can be printed and scanned from the POS Sale page.': 'ইএএন-১৩ বারকোডের লেবেল প্রিন্ট করে পিওএস বিক্রয়ের পেজ থেকে স্ক্যান করা যায়।',
+  'Generate': 'তৈরি করুন',
+  'INVENTORY MANAGEMENT, MADE CLEAR': 'সহজ ইনভেন্টরি ব্যবস্থাপনা',
+  'Keep every product': 'প্রতিটি পণ্য', 'and transaction': 'ও লেনদেন',
+  'in focus.': 'নজরে রাখুন।',
+  'Load': 'লোড করুন',
+  'Monthly totals for': 'মাসিক হিসাব:',
+  'Only': 'মাত্র',
+  'Organize products into reusable groups for faster searching and reporting.': 'দ্রুত খোঁজা ও প্রতিবেদনের জন্য পণ্য পুনর্ব্যবহারযোগ্য গ্রুপে সাজান।',
+  'Products to transfer': 'স্থানান্তরের পণ্য',
+  'SAAS OVERVIEW': 'সাস সারসংক্ষেপ',
+  'SKU': 'এসকেইউ', 'SL': 'ক্রমিক',
+  'Sale type': 'বিক্রয়ের ধরন',
+  'Select a': 'একটি নির্বাচন করুন',
+  'To branch': 'গন্তব্য শাখা',
+  'Total qty': 'মোট পরিমাণ',
+  'Thank you for your business.': 'আমাদের সঙ্গে ব্যবসা করার জন্য ধন্যবাদ।',
+  'Transaction value after returns': 'ফেরত বাদে লেনদেনের মূল্য',
+  'Unit': 'একক', 'Up to': 'সর্বোচ্চ',
+  'Use an existing EAN-13 code or generate a unique label for this product.': 'বিদ্যমান ইএএন-১৩ কোড ব্যবহার করুন অথবা এই পণ্যের জন্য একটি অনন্য লেবেল তৈরি করুন।',
+  'Your name': 'আপনার নাম',
+  'as': 'হিসেবে', 'available destination': 'উপলব্ধ গন্তব্য',
+  'available)': 'উপলব্ধ)', 'available.': 'উপলব্ধ।',
+  'cart': 'কার্ট', 'collected today ·': 'আজ আদায়কৃত ·',
+  'e.g. 01700000000': 'যেমন: ০১৭০০০০০০০০',
+  'e.g. Accessories': 'যেমন: আনুষঙ্গিক পণ্য',
+  'e.g. Retail, wholesale': 'যেমন: খুচরা, পাইকারি',
+  'e.g. Standard': 'যেমন: স্ট্যান্ডার্ড',
+  'e.g. UTTARA': 'যেমন: উত্তরা',
+  'e.g. Uttara': 'যেমন: উত্তরা',
+  'e.g. Uttara Store': 'যেমন: উত্তরা স্টোর',
+  'e.g. WM-001': 'যেমন: WM-001',
+  'e.g. Wireless Mouse': 'যেমন: ওয়্যারলেস মাউস',
+  'for this period': 'এই সময়ের জন্য',
+  'found': 'পাওয়া গেছে', 'goal': 'লক্ষ্য', 'history': 'ইতিহাস',
+  'of': 'এর মধ্যে', 'or change the search.': 'অথবা খোঁজার শব্দ পরিবর্তন করুন।',
+  'permissions': 'অনুমতিসমূহ', 'planned modules': 'পরিকল্পিত মডিউল',
+  'priority': 'অগ্রাধিকার', 'products ·': 'পণ্য ·',
+  'records': 'রেকর্ড', 'records in': 'রেকর্ড রয়েছে',
+  'records involving the current branch': 'বর্তমান শাখার সঙ্গে সম্পর্কিত রেকর্ড',
+  'records · financial totals are calculated from saved transactions.': 'রেকর্ড · সংরক্ষিত লেনদেন থেকে আর্থিক হিসাব করা হয়।',
+  'users ·': 'ব্যবহারকারী ·', 'yet': 'এখনও',
+  '· Discount': '· ছাড়', '· Inactive': '· নিষ্ক্রিয়',
+  '· Tax': '· কর', '· active session': '· সক্রিয় সেশন',
+  '· ended': '· শেষ হয়েছে', '· valid until': '· মেয়াদ শেষ',
+  '— viewing': '— দেখা হচ্ছে',
+  'Metric': 'হিসাব', 'Net sales after returns': 'ফেরত বাদে নিট বিক্রয়',
+  'Gross profit after returns': 'ফেরত বাদে মোট লাভ',
+  'Sales returns': 'বিক্রয় ফেরত',
+  'Employee': 'কর্মী', 'Transactions': 'লেনদেন',
+  'Change': 'পরিবর্তন', 'Movements': 'স্টক পরিবর্তন',
+  'Net change': 'নিট পরিবর্তন',
+  'not applicable': 'প্রযোজ্য নয়',
+});
+
+Object.assign(bangla, {
+  'ACCESS MANAGEMENT': 'প্রবেশাধিকার ব্যবস্থাপনা',
+  'COMPANY DETAILS': 'কোম্পানির বিস্তারিত', 'COMPANY LOCATION': 'কোম্পানির অবস্থান',
+  'GET STARTED': 'শুরু করুন', 'WELCOME BACK': 'আবার স্বাগতম',
+  'SAAS CONTROL': 'সাস নিয়ন্ত্রণ', 'POS SALE': 'পিওএস বিক্রয়',
+  'PRODUCT LABEL': 'পণ্যের লেবেল', 'NEW TRANSACTION': 'নতুন লেনদেন',
+  'Current branch': 'বর্তমান শাখা', 'current branch': 'বর্তমান শাখা',
+  'Customer accounts': 'ক্রেতার হিসাব', 'Supplier accounts': 'সরবরাহকারীর হিসাব',
+  'Amount customers still owe': 'ক্রেতাদের বকেয়া টাকা',
+  'Amount still payable to suppliers': 'সরবরাহকারীদের পাওনা টাকা',
+  'Choose quantities to refund. Prices come from the original sale.': 'ফেরতের পরিমাণ বেছে নিন। মূল বিক্রয়ের মূল্য ব্যবহার করা হবে।',
+  'Complete and reconcile': 'সম্পন্ন ও সমন্বয় করুন',
+  'Complete the current draft first': 'আগে বর্তমান খসড়া সম্পন্ন করুন',
+  'Complete transfer': 'স্থানান্তর সম্পন্ন করুন',
+  'Completing sale...': 'বিক্রয় সম্পন্ন হচ্ছে...',
+  'Completing will reconcile branch stock and create an audit movement for each variance.': 'সম্পন্ন করলে শাখার স্টক সমন্বয় হবে এবং প্রতিটি পার্থক্যের জন্য নিরীক্ষার রেকর্ড তৈরি হবে।',
+  'Completing...': 'সম্পন্ন হচ্ছে...',
+  'Continue count': 'গণনা চালিয়ে যান',
+  'Create another active branch before transferring stock': 'স্টক স্থানান্তরের আগে আরেকটি সক্রিয় শাখা তৈরি করুন',
+  'Create company and owner': 'কোম্পানি ও মালিক তৈরি করুন',
+  'Create manager and staff accounts and choose exactly what they can use.': 'ম্যানেজার ও কর্মীর অ্যাকাউন্ট তৈরি করে তাঁদের অনুমতি নির্ধারণ করুন।',
+  'Create workspace': 'কর্মক্ষেত্র তৈরি করুন',
+  'Create your workspace': 'আপনার কর্মক্ষেত্র তৈরি করুন',
+  'Deleted product': 'মুছে ফেলা পণ্য',
+  'Enter a physical quantity for every product.': 'প্রতিটি পণ্যের বাস্তব পরিমাণ লিখুন।',
+  'Enter your account details to continue.': 'চালিয়ে যেতে আপনার অ্যাকাউন্টের তথ্য লিখুন।',
+  'General': 'সাধারণ',
+  'Generate barcode': 'বারকোড তৈরি করুন',
+  'Inventory at a glance': 'এক নজরে ইনভেন্টরি',
+  'Manage companies, validity and owner support.': 'কোম্পানি, মেয়াদ ও মালিকের সহায়তা পরিচালনা করুন।',
+  'Manage owner admins and users across every company.': 'সব কোম্পানির মালিক অ্যাডমিন ও ব্যবহারকারী পরিচালনা করুন।',
+  'New owner password (optional)': 'মালিকের নতুন পাসওয়ার্ড (ঐচ্ছিক)',
+  'New password (optional)': 'নতুন পাসওয়ার্ড (ঐচ্ছিক)',
+  'New stock transfer': 'নতুন স্টক স্থানান্তর',
+  'Next, choose a product': 'এরপর একটি পণ্য বেছে নিন',
+  'No address': 'ঠিকানা নেই', 'No barcode or SKU': 'বারকোড বা এসকেইউ নেই',
+  'No branches assigned': 'কোনো শাখা নির্ধারিত নেই',
+  'No plan assigned': 'কোনো পরিকল্পনা নির্ধারিত নেই',
+  'Not generated': 'তৈরি হয়নি',
+  'Please wait...': 'অনুগ্রহ করে অপেক্ষা করুন...',
+  'Ready to complete': 'সম্পন্ন করার জন্য প্রস্তুত',
+  'Received': 'গৃহীত', 'Sent': 'পাঠানো হয়েছে',
+  'Refund sold items and restore them to inventory.': 'বিক্রীত পণ্যের মূল্য ফেরত দিয়ে ইনভেন্টরিতে ফিরিয়ে আনুন।',
+  'Return items to suppliers with a linked purchase.': 'সংশ্লিষ্ট ক্রয়ের ভিত্তিতে সরবরাহকারীকে পণ্য ফেরত দিন।',
+  'Save adjustment': 'সমন্বয় সংরক্ষণ করুন',
+  'Save and select category': 'ক্যাটাগরি সংরক্ষণ ও নির্বাচন করুন',
+  'Save branch': 'শাখা সংরক্ষণ করুন',
+  'Save category': 'ক্যাটাগরি সংরক্ষণ করুন',
+  'Save company and owner': 'কোম্পানি ও মালিক সংরক্ষণ করুন',
+  'Save customer': 'ক্রেতা সংরক্ষণ করুন',
+  'Save draft': 'খসড়া সংরক্ষণ করুন',
+  'Save supplier': 'সরবরাহকারী সংরক্ষণ করুন',
+  'Save target': 'লক্ষ্য সংরক্ষণ করুন',
+  'Save user and access': 'ব্যবহারকারী ও অনুমতি সংরক্ষণ করুন',
+  'Saving...': 'সংরক্ষণ হচ্ছে...',
+  'Select a product or create a new one. Your purchase draft will be kept.': 'পণ্য বেছে নিন বা নতুন পণ্য তৈরি করুন। আপনার ক্রয়ের খসড়া সংরক্ষিত থাকবে।',
+  'Select a supplier or create a new one to continue.': 'চালিয়ে যেতে সরবরাহকারী বেছে নিন বা নতুন একজন তৈরি করুন।',
+  'Set up the first administrator account.': 'প্রথম প্রশাসক অ্যাকাউন্ট তৈরি করুন।',
+  'Sign in': 'সাইন ইন করুন', 'Sign in to your workspace': 'আপনার কর্মক্ষেত্রে সাইন ইন করুন',
+  'Start a new physical count': 'নতুন বাস্তব গণনা শুরু করুন',
+  'Start with a supplier': 'সরবরাহকারী দিয়ে শুরু করুন',
+  'Subscription control': 'সাবস্ক্রিপশন নিয়ন্ত্রণ',
+  'System': 'সিস্টেম', 'Temporary password': 'অস্থায়ী পাসওয়ার্ড',
+  'Track customer profiles, sales, paid amounts and outstanding credit.': 'ক্রেতার তথ্য, বিক্রয়, পরিশোধিত অর্থ ও বকেয়া অনুসরণ করুন।',
+  'Track every movement from purchase to sale.': 'ক্রয় থেকে বিক্রয় পর্যন্ত প্রতিটি স্টক পরিবর্তন অনুসরণ করুন।',
+  'Track supplier profiles, purchases, payments and payable balances.': 'সরবরাহকারীর তথ্য, ক্রয়, পরিশোধ ও পাওনা অনুসরণ করুন।',
+  'Transfer stock to another branch': 'অন্য শাখায় স্টক স্থানান্তর করুন',
+  'Transferring...': 'স্থানান্তর হচ্ছে...',
+  'Uddog Inventory': 'উদ্যোগ ইনভেন্টরি',
+  'View': 'দেখুন', 'View and print barcode': 'বারকোড দেখুন ও প্রিন্ট করুন',
+  'Walk-in customer': 'দোকানে আসা ক্রেতা',
+  'Your client account': 'আপনার ক্লায়েন্ট অ্যাকাউন্ট',
+  'Your password': 'আপনার পাসওয়ার্ড',
+  'products still need a count': 'পণ্যের গণনা বাকি',
+  ' (inactive)': ' (নিষ্ক্রিয়)',
+  ' and its stock movement.': ' এবং এর স্টক পরিবর্তন।',
+  ' available': ' উপলব্ধ',
+  ' each before rounding.': ' করে, রাউন্ড করার আগে।',
+  ' month': ' মাস', ' months': ' মাস',
+  ' per installment before rounding.': ' প্রতি কিস্তিতে, রাউন্ড করার আগে।',
+  '(inactive)': '(নিষ্ক্রিয়)',
+  'and its stock movement.': 'এবং এর স্টক পরিবর্তন।',
+  'each before rounding.': 'করে, রাউন্ড করার আগে।',
+  'months': 'মাস', 'month': 'মাস',
+  'per installment before rounding.': 'প্রতি কিস্তিতে, রাউন্ড করার আগে।',
+  'Add contact': 'যোগাযোগ যোগ করুন',
+  'Complete sale ·': 'বিক্রয় সম্পন্ন করুন ·',
+  'Save': 'সংরক্ষণ করুন',
+  'Track every': 'প্রতিটি অনুসরণ করুন',
+  'Total (': 'মোট (',
+  'SKU (optional)': 'এসকেইউ (ঐচ্ছিক)',
+});
+
+Object.assign(bangla, {
+  'A barcode was generated. Save the product before printing it.': 'বারকোড তৈরি হয়েছে। প্রিন্ট করার আগে পণ্যটি সংরক্ষণ করুন।',
+  'Branch deleted.': 'শাখা মুছে ফেলা হয়েছে।',
+  'Branch saved successfully.': 'শাখা সংরক্ষিত হয়েছে।',
+  'Category created and selected.': 'ক্যাটাগরি তৈরি ও নির্বাচন করা হয়েছে।',
+  'Category deleted.': 'ক্যাটাগরি মুছে ফেলা হয়েছে।',
+  'Category saved successfully.': 'ক্যাটাগরি সংরক্ষিত হয়েছে।',
+  'Client subscription saved.': 'ক্লায়েন্টের সাবস্ক্রিপশন সংরক্ষিত হয়েছে।',
+  'Contact saved successfully.': 'যোগাযোগের তথ্য সংরক্ষিত হয়েছে।',
+  'Customer created and selected for checkout.': 'ক্রেতা তৈরি ও চেকআউটের জন্য নির্বাচিত হয়েছে।',
+  'Customers and suppliers': 'ক্রেতা ও সরবরাহকারী',
+  'Dashboard overview': 'ড্যাশবোর্ড সারসংক্ষেপ',
+  'Fast checkout screen with product search, cart controls, payment and receipt printing.': 'পণ্য খোঁজা, কার্ট, পেমেন্ট ও রসিদ প্রিন্টসহ দ্রুত চেকআউট পর্দা।',
+  'Find sold products and warranty eligibility using invoice, barcode, product, customer or phone.': 'চালান, বারকোড, পণ্য, ক্রেতা বা ফোন দিয়ে বিক্রীত পণ্য ও ওয়ারেন্টি খুঁজুন।',
+  'Inventory and stock history': 'ইনভেন্টরি ও স্টকের ইতিহাস',
+  'Manual stock adjustments': 'ম্যানুয়াল স্টক সমন্বয়',
+  'Move stock between branches or locations with a complete movement history.': 'সম্পূর্ণ ইতিহাসসহ শাখা বা অবস্থানের মধ্যে স্টক স্থানান্তর করুন।',
+  'Phase 1': 'পর্যায় ১', 'Phase 2': 'পর্যায় ২', 'Phase 3': 'পর্যায় ৩',
+  'Physical stock-count sessions with expected, counted and variance quantities.': 'প্রত্যাশিত, গণনাকৃত ও পার্থক্যের পরিমাণসহ বাস্তব স্টক গণনা।',
+  'Product categories': 'পণ্যের ক্যাটাগরি',
+  'Product created and added to this transaction.': 'পণ্য তৈরি করে এই লেনদেনে যোগ করা হয়েছে।',
+  'Product saved successfully.': 'পণ্য সংরক্ষিত হয়েছে।',
+  'Profile updated successfully.': 'প্রোফাইল আপডেট হয়েছে।',
+  'Return sold items, restore inventory and record refund values against the original sale.': 'বিক্রীত পণ্য ফেরত নিয়ে স্টক ফিরিয়ে দিন এবং মূল বিক্রয়ের সঙ্গে ফেরতের মূল্য নথিভুক্ত করুন।',
+  'Reusable product categories with centralized management and filtering.': 'এক জায়গা থেকে পরিচালনা ও ফিল্টার করার সুবিধাসহ পুনর্ব্যবহারযোগ্য পণ্য ক্যাটাগরি।',
+  'Sales target deleted.': 'বিক্রয় লক্ষ্য মুছে ফেলা হয়েছে।',
+  'Sales target saved successfully.': 'বিক্রয় লক্ষ্য সংরক্ষিত হয়েছে।',
+  'Set monthly branch or employee goals and compare actual net sales with targets.': 'শাখা বা কর্মীর মাসিক লক্ষ্য নির্ধারণ করে প্রকৃত নিট বিক্রয়ের সঙ্গে তুলনা করুন।',
+  'Something went wrong.': 'কিছু সমস্যা হয়েছে।',
+  'Stock adjustment saved.': 'স্টক সমন্বয় সংরক্ষিত হয়েছে।',
+  'Stock checks': 'স্টক পরীক্ষাসমূহ',
+  'Stock transfers': 'স্টক স্থানান্তরসমূহ',
+  'User account saved.': 'ব্যবহারকারীর অ্যাকাউন্ট সংরক্ষিত হয়েছে।',
+  'Boxes': 'বাক্স', 'Cartons': 'কার্টন', 'Grams (g)': 'গ্রাম (g)',
+  'Kilograms (kg)': 'কিলোগ্রাম (kg)', 'Liters (L)': 'লিটার (L)',
+  'Packs': 'প্যাকেট', 'Pieces (pc)': 'পিস (pc)', 'Sets': 'সেট',
+  'Items': 'পণ্য', 'Units': 'একক',
+  'No active product matches barcode': 'এই বারকোডের সঙ্গে কোনো সক্রিয় পণ্য মেলেনি',
+  'Delete the': 'মুছুন:', 'Sales target for': 'এর বিক্রয় লক্ষ্য',
+  'Jan': 'জানু', 'Feb': 'ফেব্রু', 'Mar': 'মার্চ', 'Apr': 'এপ্রিল',
+  'May': 'মে', 'Jun': 'জুন', 'Jul': 'জুলাই', 'Aug': 'আগস্ট',
+  'Sep': 'সেপ্টে', 'Oct': 'অক্টো', 'Nov': 'নভে', 'Dec': 'ডিসে',
+  'Products': 'পণ্য', 'Companies': 'কোম্পানি', 'Categories': 'ক্যাটাগরি',
+  'Users': 'ব্যবহারকারী', 'Reports': 'রিপোর্ট',
+});
+
+Object.assign(bangla, {
+  'Amount': 'টাকার পরিমাণ', 'Frequency': 'কিস্তির বিরতি',
+  'Invoices': 'চালান', 'records': 'রেকর্ড', 'record': 'রেকর্ড',
+  'Sales return': 'বিক্রয় ফেরত', 'DETAILS': 'বিস্তারিত',
+  'Walking Customer': 'সরাসরি ক্রেতা',
+  'You do not have access to the selected active branch.': 'নির্বাচিত সক্রিয় শাখায় আপনার প্রবেশাধিকার নেই।',
+  'This user account is inactive.': 'এই ব্যবহারকারীর অ্যাকাউন্ট নিষ্ক্রিয়।',
+  'Select a purchase for the same supplier.': 'একই সরবরাহকারীর ক্রয় নির্বাচন করুন।',
+  'Select a sale for the same customer.': 'একই ক্রেতার বিক্রয় নির্বাচন করুন।',
+  'Every product must be active.': 'প্রতিটি পণ্য সক্রিয় হতে হবে।',
+  'Discount cannot exceed the subtotal.': 'ছাড় উপমোটের বেশি হতে পারবে না।',
+  'Payments can only be recorded against an unpaid due or installment sale.': 'শুধু অপরিশোধিত বকেয়া বা কিস্তির বিক্রয়ের বিপরীতে পেমেন্ট নথিভুক্ত করা যাবে।',
+  'Payment amount cannot exceed the remaining sale balance.': 'পেমেন্টের পরিমাণ বিক্রয়ের অবশিষ্ট বকেয়ার বেশি হতে পারবে না।',
+  'Select the installment being paid.': 'যে কিস্তিটি পরিশোধ করা হচ্ছে তা নির্বাচন করুন।',
+  'Select an installment from this sale.': 'এই বিক্রয়ের একটি কিস্তি নির্বাচন করুন।',
+  'Payment amount cannot exceed the selected installment balance.': 'পেমেন্টের পরিমাণ নির্বাচিত কিস্তির বকেয়ার বেশি হতে পারবে না।',
+  'Adjustment must be nonzero and cannot make stock negative.': 'সমন্বয় শূন্য হতে পারবে না এবং স্টক ঋণাত্মক করা যাবে না।',
+  'Full payment must equal the sale total.': 'পূর্ণ পেমেন্ট বিক্রয়ের মোট টাকার সমান হতে হবে।',
+  'A due sale has no initial payment. Choose an installment plan to take a down payment.': 'বাকিতে বিক্রয়ে শুরুতে কোনো পেমেন্ট নেওয়া হয় না। ডাউন পেমেন্ট নিতে কিস্তির পরিকল্পনা বেছে নিন।',
+  'Choose the number and frequency of installments.': 'কিস্তির সংখ্যা ও বিরতি নির্বাচন করুন।',
+  'Down payment must be zero or more and less than the sale total.': 'ডাউন পেমেন্ট শূন্য বা তার বেশি এবং বিক্রয়ের মোট টাকার কম হতে হবে।',
+  'Amount paid must match the down payment.': 'পরিশোধিত টাকা ডাউন পেমেন্টের সমান হতে হবে।',
+  'Choose a different active destination branch.': 'অন্য একটি সক্রিয় গন্তব্য শাখা নির্বাচন করুন।',
+  'Every transferred product must be active and belong to this company.': 'স্থানান্তরিত প্রতিটি পণ্য সক্রিয় এবং এই কোম্পানির হতে হবে।',
+  'This stock check has already been completed.': 'এই স্টক পরীক্ষা ইতিমধ্যে সম্পন্ন হয়েছে।',
+  'Enter a counted quantity for every product before completing the stock check.': 'স্টক পরীক্ষা সম্পন্ন করার আগে প্রতিটি পণ্যের গণনাকৃত পরিমাণ লিখুন।',
+  'Your client subscription is not active. Contact support to restore workspace access.': 'আপনার ক্লায়েন্ট সাবস্ক্রিপশন সক্রিয় নয়। কর্মক্ষেত্রে প্রবেশাধিকার ফেরাতে সহায়তা বিভাগে যোগাযোগ করুন।',
+  'Setup has already been completed.': 'প্রাথমিক সেটআপ ইতিমধ্যে সম্পন্ন হয়েছে।',
+  'The email or password is incorrect.': 'ইমেইল বা পাসওয়ার্ড ভুল।',
+  'The barcode must contain a valid EAN-13 check digit.': 'বারকোডে বৈধ EAN-13 চেক ডিজিট থাকতে হবে।',
+  'Invalid document type.': 'নথির ধরন সঠিক নয়।',
+  'Your owner has not granted access to this transaction type.': 'মালিক আপনাকে এই ধরনের লেনদেনের অনুমতি দেননি।',
+  'POS checkout can only create a sale.': 'পিওএস চেকআউট থেকে শুধু বিক্রয় তৈরি করা যায়।',
+  'Open a company through View as owner before using its workspace.': 'কর্মক্ষেত্র ব্যবহারের আগে মালিক হিসেবে দেখুন দিয়ে একটি কোম্পানি খুলুন।',
+  'Select a client account before using the inventory workspace.': 'ইনভেন্টরি কর্মক্ষেত্র ব্যবহারের আগে একটি ক্লায়েন্ট অ্যাকাউন্ট নির্বাচন করুন।',
+  'Move or remove this category from its products before deleting it.': 'এই ক্যাটাগরি মুছতে আগে এর পণ্যগুলো অন্য ক্যাটাগরিতে সরান বা সরিয়ে দিন।',
+  'Owners can create manager and staff accounts only.': 'মালিক শুধু ম্যানেজার ও কর্মীর অ্যাকাউন্ট তৈরি করতে পারেন।',
+  'Select a client account for this user.': 'এই ব্যবহারকারীর জন্য একটি ক্লায়েন্ট অ্যাকাউন্ট নির্বাচন করুন।',
+  'Owners can assign manager and staff roles only.': 'মালিক শুধু ম্যানেজার ও কর্মীর ভূমিকা নির্ধারণ করতে পারেন।',
+  'You cannot deactivate your own account.': 'নিজের অ্যাকাউন্ট নিষ্ক্রিয় করতে পারবেন না।',
+  'At least one active superadmin is required.': 'কমপক্ষে একজন সক্রিয় সুপার অ্যাডমিন থাকতে হবে।',
+  'Select at least one branch for a manager or staff member.': 'ম্যানেজার বা কর্মীর জন্য কমপক্ষে একটি শাখা নির্বাচন করুন।',
+  'Every selected branch must be an active branch in this company.': 'নির্বাচিত প্রতিটি শাখা এই কোম্পানির সক্রিয় শাখা হতে হবে।',
+  'Complete the existing draft stock check for this branch first.': 'আগে এই শাখার বিদ্যমান খসড়া স্টক পরীক্ষা সম্পন্ন করুন।',
+  'Add at least one active product before starting a stock check.': 'স্টক পরীক্ষা শুরুর আগে কমপক্ষে একটি সক্রিয় পণ্য যোগ করুন।',
+  'Completed stock checks cannot be edited.': 'সম্পন্ন স্টক পরীক্ষা সম্পাদনা করা যায় না।',
+  'The stock check items do not match this count session.': 'স্টক পরীক্ষার পণ্যগুলো এই গণনা সেশনের সঙ্গে মেলে না।',
+  'The default branch must remain active.': 'ডিফল্ট শাখা সক্রিয় থাকতে হবে।',
+  'Assign another default branch before changing this one.': 'এটি পরিবর্তনের আগে অন্য একটি ডিফল্ট শাখা নির্ধারণ করুন।',
+  'Default branches and branches with transactions or stock cannot be deleted.': 'ডিফল্ট শাখা এবং লেনদেন বা স্টক থাকা শাখা মোছা যায় না।',
+  'This company does not have an active owner administrator to view.': 'এই কোম্পানিতে দেখার মতো কোনো সক্রিয় মালিক প্রশাসক নেই।',
+  'There is no active support session.': 'কোনো সক্রিয় সহায়তা সেশন নেই।',
+  'You have returned to the superadmin workspace.': 'আপনি সুপার অ্যাডমিন কর্মক্ষেত্রে ফিরে এসেছেন।',
+  'Select a client account before using reports.': 'প্রতিবেদন ব্যবহারের আগে একটি ক্লায়েন্ট অ্যাকাউন্ট নির্বাচন করুন।',
+  'Your owner has not granted access to this report.': 'মালিক আপনাকে এই প্রতিবেদন দেখার অনুমতি দেননি।',
+  'You do not have permission to perform this action.': 'এই কাজটি করার অনুমতি আপনার নেই।',
+  'Your owner has not granted access to this area.': 'মালিক আপনাকে এই অংশে প্রবেশের অনুমতি দেননি।',
+});
+
+Object.assign(bangla, {
+  'YOUR SUBSCRIPTION': 'আপনার সাবস্ক্রিপশন',
+  'Time remaining': 'অবশিষ্ট সময়',
+  'No expiry date': 'মেয়াদ শেষের তারিখ নেই',
+  'No fixed expiry': 'নির্দিষ্ট মেয়াদ নেই',
+  'days left': 'দিন বাকি',
+  'day left': 'দিন বাকি',
+  'day ago': 'দিন আগে',
+  'days ago': 'দিন আগে',
+  'Expires today': 'আজই মেয়াদ শেষ',
+  'Workspace access is paused. Contact the platform superadmin to renew or reactivate your company.': 'কর্মক্ষেত্রে প্রবেশ বন্ধ আছে। কোম্পানির মেয়াদ বাড়াতে বা পুনরায় চালু করতে প্ল্যাটফর্মের সুপার অ্যাডমিনের সঙ্গে যোগাযোগ করুন।',
+  'Your plan is valid through today. Contact the platform superadmin to renew it.': 'আপনার প্ল্যান আজ পর্যন্ত চালু আছে। মেয়াদ বাড়াতে প্ল্যাটফর্মের সুপার অ্যাডমিনের সঙ্গে যোগাযোগ করুন।',
+  'Your workspace remains available while the subscription is active.': 'সাবস্ক্রিপশন চালু থাকা পর্যন্ত কর্মক্ষেত্র ব্যবহার করা যাবে।',
+  'View profile': 'প্রোফাইল দেখুন',
+  'Back to subscription notice': 'সাবস্ক্রিপশন বিজ্ঞপ্তিতে ফিরুন',
+  'does not have an active subscription.': 'এর সক্রিয় সাবস্ক্রিপশন নেই।',
+  'Sales, purchases, inventory, reports and settings are unavailable until the platform superadmin renews or reactivates the company.': 'প্ল্যাটফর্মের সুপার অ্যাডমিন কোম্পানির মেয়াদ না বাড়ানো বা পুনরায় চালু না করা পর্যন্ত বিক্রয়, ক্রয়, ইনভেন্টরি, রিপোর্ট ও সেটিংস ব্যবহার করা যাবে না।',
+  'Settings / System Setup': 'সেটিংস / সিস্টেম সেটআপ',
+  'COMPANY PREFERENCES': 'কোম্পানির সেটিংস',
+  'Simple defaults for the way your company sells, buys and manages stock.': 'আপনার কোম্পানির বিক্রয়, ক্রয় ও স্টক পরিচালনার সহজ সেটিংস।',
+  'How your workspace works': 'আপনার কর্মক্ষেত্র যেভাবে কাজ করে',
+  'These preferences apply company-wide. Manage each team member’s access on the Users page.': 'এই সেটিংস পুরো কোম্পানির জন্য প্রযোজ্য। প্রতিটি কর্মীর অনুমতি ব্যবহারকারী পেজে নিয়ন্ত্রণ করুন।',
+  'Manage users': 'ব্যবহারকারী পরিচালনা',
+  'Payment choices and optional sale types': 'পেমেন্ট পদ্ধতি ও ঐচ্ছিক বিক্রয়ের ধরন',
+  'Due sales': 'বাকিতে বিক্রয়',
+  'Let customers pay the full amount later': 'ক্রেতাকে পুরো টাকা পরে পরিশোধ করতে দিন',
+  'Installments': 'কিস্তি',
+  'Accept a down payment and schedule the rest': 'ডাউন পেমেন্ট নিন এবং বাকি টাকা কিস্তিতে রাখুন',
+  'Allow refunds against earlier sales': 'আগের বিক্রয়ের বিপরীতে ফেরত দিন',
+  'Allow resale transactions': 'পুনঃবিক্রয়ের লেনদেন চালু রাখুন',
+  'Default payment method': 'ডিফল্ট পেমেন্ট পদ্ধতি',
+  'Preselected for new sales; staff can change it per transaction.': 'নতুন বিক্রয়ে এটি আগে থেকে নির্বাচিত থাকবে; কর্মীরা প্রয়োজনে বদলাতে পারবেন।',
+  'Supplier return preferences': 'সরবরাহকারীকে পণ্য ফেরতের সেটিংস',
+  'Return purchased items to suppliers': 'ক্রয়কৃত পণ্য সরবরাহকারীকে ফেরত দিন',
+  'Store & stock': 'স্টোর ও স্টক',
+  'Inventory movement controls': 'ইনভেন্টরি চলাচলের নিয়ন্ত্রণ',
+  'Stock adjustments': 'স্টক সমন্বয়',
+  'Correct quantities manually': 'ম্যানুয়ালি পরিমাণ সংশোধন করুন',
+  'Stock transfers': 'স্টক স্থানান্তর',
+  'Move items between branches': 'শাখাগুলোর মধ্যে পণ্য স্থানান্তর করুন',
+  'Default reorder level': 'ডিফল্ট পুনঃঅর্ডার সীমা',
+  'Suggested minimum stock for each new product.': 'প্রতিটি নতুন পণ্যের জন্য প্রস্তাবিত সর্বনিম্ন স্টক।',
+  'Changes take effect after you save.': 'সংরক্ষণের পর পরিবর্তন কার্যকর হবে।',
+  'Save settings': 'সেটিংস সংরক্ষণ করুন',
+  'Report access': 'রিপোর্ট দেখার অনুমতি',
+  'Choose which reports this user can open. First select a related workspace permission above.': 'এই ব্যবহারকারী কোন রিপোর্ট দেখতে পারবেন তা বেছে নিন। আগে উপরের সংশ্লিষ্ট কর্মক্ষেত্রের অনুমতি নির্বাচন করুন।',
+  'Select a related workspace permission above first.': 'আগে উপরের সংশ্লিষ্ট কর্মক্ষেত্রের অনুমতি নির্বাচন করুন।',
+  'Owner and superadmin roles can access every report.': 'মালিক ও সুপার অ্যাডমিন সব রিপোর্ট দেখতে পারেন।',
+  'No reports available with the current permissions.': 'বর্তমান অনুমতিতে কোনো রিপোর্ট দেখা যাবে না।',
+  'System setup saved successfully.': 'সিস্টেম সেটআপ সংরক্ষিত হয়েছে।',
+  'This workflow is disabled in System Setup.': 'এই কার্যক্রম সিস্টেম সেটআপে বন্ধ আছে।',
+  'This transaction type is disabled in System Setup.': 'এই লেনদেনের ধরন সিস্টেম সেটআপে বন্ধ আছে।',
+  'Due sales are disabled in System Setup.': 'বাকিতে বিক্রয় সিস্টেম সেটআপে বন্ধ আছে।',
+  'Installment sales are disabled in System Setup.': 'কিস্তিতে বিক্রয় সিস্টেম সেটআপে বন্ধ আছে।',
+  'Stock adjustments are disabled in System Setup.': 'স্টক সমন্বয় সিস্টেম সেটআপে বন্ধ আছে।',
+  'Stock transfers are disabled in System Setup.': 'স্টক স্থানান্তর সিস্টেম সেটআপে বন্ধ আছে।',
+});
+
+const normalizedBangla = new Map(Object.entries(bangla).map(([source, result]) => [source.toLocaleLowerCase('en'), result]));
+const banglaNumber = (number) => new Intl.NumberFormat('bn-BD', { useGrouping: false }).format(Number(number));
+
 function translated(source, language) {
-  if (language !== 'bn') return source;
+  if (language !== 'bn' || typeof source !== 'string') return source;
   const prefix = source.match(/^\s*/)?.[0] || '';
   const suffix = source.match(/\s*$/)?.[0] || '';
   const value = source.trim();
+  if (! value) return source;
+  const direct = bangla[value] || normalizedBangla.get(value.toLocaleLowerCase('en'));
+  if (direct) return `${prefix}${direct}${suffix}`;
 
-  return bangla[value] ? `${prefix}${bangla[value]}${suffix}` : source;
+  const punctuated = value.match(/^(.+?)(\s*[*:…])$/);
+  if (punctuated) {
+    const base = translated(punctuated[1], language);
+    if (base !== punctuated[1]) return `${prefix}${base}${punctuated[2]}${suffix}`;
+  }
+
+  const joined = value.split(' · ');
+  if (joined.length > 1) {
+    const parts = joined.map((part) => translated(part, language));
+    if (parts.some((part, index) => part !== joined[index])) return prefix + parts.join(' · ') + suffix;
+  }
+
+  const counted = value.match(/^(\d+)\s+(.+)$/);
+  if (counted) {
+    const label = translated(counted[2], language);
+    if (label !== counted[2]) return prefix + banglaNumber(counted[1]) + ' ' + label + suffix;
+  }
+
+  const patterns = [
+    [/^Expired (\d+) days? ago$/, (match) => banglaNumber(match[1]) + ' দিন আগে মেয়াদ শেষ হয়েছে'],
+    [/^Valid until (.+)$/, (match) => match[1] + ' পর্যন্ত বৈধ'],
+    [/^(\d+) of (\d+) available$/, (match) => banglaNumber(match[1]) + ' / ' + banglaNumber(match[2]) + ' উপলব্ধ'],
+    [/^(\d+) of (\d+) selected$/, (match) => banglaNumber(match[1]) + ' / ' + banglaNumber(match[2]) + ' নির্বাচিত'],
+    [/^New (.+)$/, (match) => 'নতুন ' + translated(match[1], language)],
+    [/^Save (.+)$/, (match) => translated(match[1], language) + ' সংরক্ষণ করুন'],
+    [/^Create new (.+)$/, (match) => 'নতুন ' + translated(match[1], language) + ' তৈরি করুন'],
+    [/^Select a (.+)$/, (match) => 'একজন ' + translated(match[1], language) + ' নির্বাচন করুন'],
+    [/^(\d+) products still need a count$/, (match) => banglaNumber(match[1]) + 'টি পণ্যের গণনা বাকি'],
+    [/^Up to (.+) returnable$/, (match) => 'সর্বোচ্চ ' + match[1] + ' ফেরত দেওয়া যাবে'],
+    [/^(.+) priority$/, (match) => translated(match[1], language) + ' অগ্রাধিকার'],
+    [/^(\d+) planned modules$/, (match) => banglaNumber(match[1]) + 'টি পরিকল্পিত মডিউল'],
+    [/^The (.+) field is required\.$/, (match) => translated(match[1], language) + ' আবশ্যক।'],
+    [/^The (.+) field must be a string\.$/, (match) => translated(match[1], language) + ' লিখিত তথ্য হতে হবে।'],
+    [/^The (.+) field must be a number\.$/, (match) => translated(match[1], language) + ' একটি সংখ্যা হতে হবে।'],
+    [/^The (.+) field must be an integer\.$/, (match) => translated(match[1], language) + ' একটি পূর্ণসংখ্যা হতে হবে।'],
+    [/^The (.+) field must be a valid email address\.$/, (match) => translated(match[1], language) + ' একটি বৈধ ইমেইল ঠিকানা হতে হবে।'],
+    [/^The selected (.+) is invalid\.$/, (match) => 'নির্বাচিত ' + translated(match[1], language) + ' সঠিক নয়।'],
+    [/^The (.+) field must be at least (.+)\.$/, (match) => translated(match[1], language) + ' কমপক্ষে ' + match[2] + ' হতে হবে।'],
+    [/^The (.+) field must not be greater than (.+)\.$/, (match) => translated(match[1], language) + ' ' + match[2] + '-এর বেশি হতে পারবে না।'],
+    [/^The (.+) field has already been taken\.$/, (match) => translated(match[1], language) + ' ইতিমধ্যে ব্যবহৃত হয়েছে।'],
+    [/^Return quantity exceeds the remaining purchased quantity for (.+)\.$/, (match) => match[1] + '-এর ফেরতের পরিমাণ অবশিষ্ট ক্রয়ের পরিমাণের বেশি।'],
+    [/^Return quantity exceeds the remaining sold quantity for (.+)\.$/, (match) => match[1] + '-এর ফেরতের পরিমাণ অবশিষ্ট বিক্রীত পরিমাণের বেশি।'],
+    [/^Insufficient stock for (.+) in (.+)\.$/, (match) => match[2] + ' শাখায় ' + match[1] + '-এর পর্যাপ্ত স্টক নেই।'],
+    [/^Insufficient stock for (.+)\.$/, (match) => match[1] + '-এর পর্যাপ্ত স্টক নেই।'],
+    [/^Select a (.+) contact\.$/, (match) => translated(match[1], language) + ' পরিচিতি নির্বাচন করুন।'],
+    [/^You are now viewing (.+) as (.+)\.$/, (match) => 'আপনি এখন ' + match[2] + ' হিসেবে ' + match[1] + ' দেখছেন।'],
+    [/^POS sale (.+) completed\.$/, (match) => 'পিওএস বিক্রয় ' + match[1] + ' সম্পন্ন হয়েছে।'],
+    [/^No active product matches barcode (.+)\.$/, (match) => 'বারকোড ' + match[1] + '-এর সঙ্গে কোনো সক্রিয় পণ্য মেলেনি।'],
+    [/^(.+) is out of stock\.$/, (match) => match[1] + ' স্টকে নেই।'],
+    [/^(.+) scanned into the cart\.$/, (match) => match[1] + ' কার্টে যোগ হয়েছে।'],
+    [/^(.+) created\. Continue by choosing a product\.$/, (match) => translated(match[1], language) + ' তৈরি হয়েছে। এখন একটি পণ্য বেছে নিন।'],
+    [/^(.+) completed and stock reconciled\.$/, (match) => match[1] + ' সম্পন্ন হয়েছে এবং স্টক সমন্বয় করা হয়েছে।'],
+    [/^(.+) completed successfully\.$/, (match) => match[1] + ' সফলভাবে সম্পন্ন হয়েছে।'],
+    [/^(.+) completed\.$/, (match) => match[1] + ' সম্পন্ন হয়েছে।'],
+    [/^(.+) draft saved\.$/, (match) => match[1] + '-এর খসড়া সংরক্ষিত হয়েছে।'],
+    [/^(.+) started\.$/, (match) => match[1] + ' শুরু হয়েছে।'],
+    [/^(.+) saved\.$/, (match) => match[1] + ' সংরক্ষিত হয়েছে।'],
+    [/^(.+) renewed for (\d+) months?\.$/, (match) => match[1] + '-এর মেয়াদ ' + banglaNumber(match[2]) + ' মাস বাড়ানো হয়েছে।'],
+    [/^Company: (.+)$/, (match) => 'কোম্পানি: ' + match[1]],
+  ];
+  for (const [pattern, render] of patterns) {
+    const match = value.match(pattern);
+    if (match) return prefix + render(match) + suffix;
+  }
+
+  return source;
+}
+
+function translateTextNode(node, language) {
+  if (! node.parentElement || ['SCRIPT', 'STYLE'].includes(node.parentElement.tagName)) return;
+  const observed = node.nodeValue || '';
+  if (node.__i18nSource === undefined || observed !== node.__i18nRendered) node.__i18nSource = observed;
+  const rendered = translated(node.__i18nSource, language);
+  node.__i18nRendered = rendered;
+  if (observed !== rendered) node.nodeValue = rendered;
 }
 
 function translateElement(element, language) {
+  const sources = element.__i18nAttributes || (element.__i18nAttributes = {});
   for (const attribute of ['placeholder', 'title', 'aria-label']) {
     if (! element.hasAttribute(attribute)) continue;
-    const sourceKey = `i18nSource${attribute.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())}`;
-    const source = element.dataset[sourceKey] ?? element.getAttribute(attribute);
-    element.dataset[sourceKey] = source;
-    const value = translated(source, language);
-    if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
+    const observed = element.getAttribute(attribute);
+    const state = sources[attribute];
+    if (! state || observed !== state.rendered) sources[attribute] = { source: observed, rendered: observed };
+    const rendered = translated(sources[attribute].source, language);
+    sources[attribute].rendered = rendered;
+    if (observed !== rendered) element.setAttribute(attribute, rendered);
   }
 }
 
 function translateTree(root, language) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach((node) => {
-    const parent = node.parentElement;
-    if (! parent || ['SCRIPT', 'STYLE'].includes(parent.tagName)) return;
-    const source = node.__i18nSource ?? node.nodeValue;
-    node.__i18nSource = source;
-    const value = translated(source, language);
-    if (node.nodeValue !== value) node.nodeValue = value;
-  });
-  root.querySelectorAll?.('*').forEach((element) => translateElement(element, language));
+  if (root.nodeType === Node.TEXT_NODE) {
+    translateTextNode(root, language);
+    return;
+  }
+  if (root.nodeType !== Node.ELEMENT_NODE) return;
+  translateElement(root, language);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    if (walker.currentNode.nodeType === Node.TEXT_NODE) translateTextNode(walker.currentNode, language);
+    else translateElement(walker.currentNode, language);
+  }
 }
 
 export function installLocalization(getLanguage) {
   const root = document.body;
-  const apply = () => translateTree(root, getLanguage());
+  const options = { childList: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'], subtree: true };
+  const apply = () => {
+    observer.disconnect();
+    translateTree(root, getLanguage());
+    observer.observe(root, options);
+  };
   const observer = new MutationObserver((changes) => {
-    changes.forEach((change) => {
-      if (change.type === 'characterData') {
-        const source = change.target.__i18nSource ?? change.target.nodeValue;
-        change.target.__i18nSource = source;
-        const value = translated(source, getLanguage());
-        if (change.target.nodeValue !== value) change.target.nodeValue = value;
-      }
-      change.addedNodes.forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const source = node.__i18nSource ?? node.nodeValue;
-        node.__i18nSource = source;
-        const value = translated(source, getLanguage());
-        if (node.nodeValue !== value) node.nodeValue = value;
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        translateTree(node, getLanguage());
-      }
-      });
-    });
+    observer.disconnect();
+    for (const change of changes) {
+      if (change.type === 'characterData') translateTextNode(change.target, getLanguage());
+      if (change.type === 'attributes') translateElement(change.target, getLanguage());
+      for (const node of change.addedNodes) translateTree(node, getLanguage());
+    }
+    observer.observe(root, options);
   });
-  observer.observe(root, { childList: true, characterData: true, subtree: true });
   apply();
 
   return { apply, stop: () => observer.disconnect() };

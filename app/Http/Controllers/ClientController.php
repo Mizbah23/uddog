@@ -10,6 +10,7 @@ use App\Models\User;
 use App\UserRole;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ClientController extends Controller
@@ -27,7 +28,7 @@ class ClientController extends Controller
     {
         $organization = $this->companyQuery()
             ->with([
-                'users:id,organization_id,name,email,role,active,created_at',
+                'users:id,organization_id,name,email,role,active,access_paused,created_at',
                 'supportImpersonations' => fn ($query) => $query
                     ->with('impersonator:id,name')
                     ->latest()
@@ -106,6 +107,17 @@ class ClientController extends Controller
             'subscription_status' => 'active',
             'subscription_ends_at' => $startsFrom->addMonthsNoOverflow($request->integer('months')),
         ]);
+
+        return response()->json($this->companyQuery()->findOrFail($organization->id));
+    }
+
+    public function updateAccess(Request $request, int $client): JsonResponse
+    {
+        $data = $request->validate(['paused' => ['required', 'boolean']]);
+        $organization = $this->companyQuery()
+            ->whereDoesntHave('users', fn (Builder $query) => $query->where('role', UserRole::Superadmin->value))
+            ->findOrFail($client);
+        $organization->update(['access_paused' => $data['paused']]);
 
         return response()->json($this->companyQuery()->findOrFail($organization->id));
     }

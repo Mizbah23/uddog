@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Organization;
 use App\Models\User;
+use App\SubscriptionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -56,5 +59,52 @@ class ProfileTest extends TestCase
             'current_password' => 'password',
             'password' => 'short',
         ])->assertUnprocessable()->assertJsonValidationErrors('password');
+    }
+
+    public function test_only_company_owner_receives_plan_and_remaining_days_in_session(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-03 12:00:00', 'UTC'));
+        $company = Organization::factory()->create([
+            'plan_name' => 'Growth',
+            'subscription_status' => SubscriptionStatus::Active,
+            'subscription_ends_at' => '2026-10-06',
+        ]);
+        $owner = User::factory()->admin()->for($company)->create();
+        $staff = User::factory()->staff()->for($company)->create();
+
+        $this->actingAs($owner)->getJson('/api/session')
+            ->assertOk()
+            ->assertJsonPath('subscription.plan_name', 'Growth')
+            ->assertJsonPath('subscription.status', 'active')
+            ->assertJsonPath('subscription.ends_on', '2026-10-06')
+            ->assertJsonPath('subscription.days_remaining', 3)
+            ->assertJsonPath('subscription.active', true);
+
+        $this->actingAs($staff)->getJson('/api/session')->assertJsonPath('subscription', null);
+    }
+
+    public function test_expiry_date_is_inclusive_then_workspace_pauses_while_profile_remains_available(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-03 12:00:00', 'UTC'));
+        $company = Organization::factory()->create([
+            'subscription_status' => SubscriptionStatus::Active,
+            'subscription_ends_at' => '2026-10-03',
+        ]);
+        $owner = User::factory()->admin()->for($company)->create();
+
+        $this->actingAs($owner)->getJson('/api/session')
+            ->assertJsonPath('subscription.days_remaining', 0)
+            ->assertJsonPath('subscription.active', true);
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-04 00:00:00', 'UTC'));
+
+        $this->getJson('/api/session')
+            ->assertJsonPath('subscription.days_remaining', -1)
+            ->assertJsonPath('subscription.active', false)
+            ->assertJsonPath('permissions.use_workspace', false);
+        $this->getJson('/api/overview')->assertForbidden()->assertJsonPath('code', 'subscription_inactive');
+        $this->getJson('/api/profile')->assertOk()->assertJsonPath('id', $owner->id);
+        $this->putJson('/api/profile', ['name' => 'Renewal Contact', 'mobile' => ''])
+            ->assertOk()->assertJsonPath('name', 'Renewal Contact');
     }
 }

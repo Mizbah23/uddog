@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\User;
 use App\UserRole;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class UserManagementController extends Controller
@@ -16,7 +17,7 @@ class UserManagementController extends Controller
     {
         $actor = request()->user();
         $users = User::query()
-            ->with('organization:id,name,subscription_status,subscription_ends_at', 'accessibleBranches:id,name,code')
+            ->with('organization:id,name,subscription_status,subscription_ends_at,access_paused', 'accessibleBranches:id,name,code')
             ->when(! $actor->isSuperadmin(), fn ($query) => $query
                 ->where('organization_id', $actor->organization_id)
                 ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value]))
@@ -46,6 +47,7 @@ class UserManagementController extends Controller
 
         if (in_array($data['role'], [UserRole::Superadmin->value, UserRole::Admin->value], true)) {
             $data['permissions'] = null;
+            $data['report_permissions'] = null;
             $branchIds = [];
         }
 
@@ -91,6 +93,7 @@ class UserManagementController extends Controller
         }
         if (in_array($data['role'], [UserRole::Superadmin->value, UserRole::Admin->value], true)) {
             $data['permissions'] = null;
+            $data['report_permissions'] = null;
             $branchIds = [];
         }
 
@@ -98,6 +101,18 @@ class UserManagementController extends Controller
 
         $user->update($data);
         $user->accessibleBranches()->sync($branchIds);
+
+        return response()->json($user->fresh()->load('organization:id,name', 'accessibleBranches:id,name,code'));
+    }
+
+    public function updateAccess(Request $request, int $managedUser): JsonResponse
+    {
+        $data = $request->validate(['paused' => ['required', 'boolean']]);
+        $user = User::query()
+            ->whereIn('role', [UserRole::Admin->value, UserRole::Manager->value, UserRole::Staff->value])
+            ->whereNotNull('organization_id')
+            ->findOrFail($managedUser);
+        $user->update(['access_paused' => $data['paused']]);
 
         return response()->json($user->fresh()->load('organization:id,name', 'accessibleBranches:id,name,code'));
     }

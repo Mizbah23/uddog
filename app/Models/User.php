@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Permission;
+use App\ReportType;
 use App\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['organization_id', 'name', 'email', 'mobile', 'password', 'role', 'active', 'permissions'])]
+#[Fillable(['organization_id', 'name', 'email', 'mobile', 'password', 'role', 'active', 'access_paused', 'permissions', 'report_permissions'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -33,7 +34,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'active' => 'boolean',
+            'access_paused' => 'boolean',
             'permissions' => 'array',
+            'report_permissions' => 'array',
         ];
     }
 
@@ -64,5 +67,14 @@ class User extends Authenticatable
         }
 
         return in_array($permission->value, $this->permissions ?? [], true);
+    }
+
+    public function hasReportAccess(ReportType $report): bool
+    {
+        if (! collect($report->workspacePermissions())->contains(fn (Permission $permission) => $this->hasPermission($permission))) {
+            return false;
+        }
+
+        return $this->report_permissions === null || in_array($report->value, $this->report_permissions, true);
     }
 }

@@ -10,6 +10,7 @@ use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\SupportImpersonationController;
+use App\Http\Controllers\SystemSetupController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WorkspaceController;
@@ -61,6 +62,11 @@ Route::prefix('api')->group(function () {
             Route::put('sales-targets/{salesTarget}', [SalesTargetController::class, 'update'])->middleware('permission:sales_targets');
             Route::delete('sales-targets/{salesTarget}', [SalesTargetController::class, 'destroy'])->middleware('permission:sales_targets');
 
+            Route::middleware('role:admin')->group(function () {
+                Route::get('system-setup', [SystemSetupController::class, 'show']);
+                Route::put('system-setup', [SystemSetupController::class, 'update']);
+            });
+
             Route::middleware('role:superadmin,admin')->group(function () {
                 Route::get('users', [UserManagementController::class, 'index']);
                 Route::post('users', [UserManagementController::class, 'store']);
@@ -74,6 +80,8 @@ Route::prefix('api')->group(function () {
             Route::post('clients', [ClientController::class, 'store']);
             Route::put('clients/{client}', [ClientController::class, 'update']);
             Route::post('clients/{client}/renew', [ClientController::class, 'renew']);
+            Route::put('clients/{client}/access', [ClientController::class, 'updateAccess']);
+            Route::put('users/{managedUser}/access', [UserManagementController::class, 'updateAccess']);
             Route::post('clients/{client}/impersonate', [SupportImpersonationController::class, 'store']);
         });
     });

@@ -11,6 +11,7 @@ use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
 use App\Models\User;
 use App\Permission;
+use App\ReportType;
 use App\Services\InventoryService;
 use App\SubscriptionStatus;
 use App\UserRole;
@@ -27,7 +28,18 @@ class WorkspaceController extends Controller
     public function session(): JsonResponse
     {
         $user = Auth::user()?->load('organization');
+        if ($user && (! $user->active || $user->access_paused)) {
+            Auth::logout();
+
+            return response()->json([
+                'user' => null,
+                'setup_required' => false,
+                'account_disabled' => true,
+            ]);
+        }
         $impersonation = $user ? SupportImpersonation::activeFor(request()) : null;
+        $organization = $user?->organization;
+        $expiryDate = $organization?->subscription_ends_at;
         $abilities = $user ? collect(Permission::cases())
             ->filter(fn (Permission $permission) => $user->hasPermission($permission))
             ->map(fn (Permission $permission) => $permission->value)
@@ -40,9 +52,12 @@ class WorkspaceController extends Controller
             'permissions' => $user ? [
                 'manage_clients' => $user->isSuperadmin(),
                 'manage_users' => $user->hasRole(UserRole::Superadmin, UserRole::Admin),
+                'manage_settings' => $user->hasRole(UserRole::Admin),
                 'use_workspace' => (bool) $impersonation
-                    || (! $user->isSuperadmin() && $user->organization?->hasActiveSubscription() === true),
+                    || (! $user->isSuperadmin() && $user->organization?->canUseWorkspace() === true),
                 'abilities' => $abilities,
+                'reports' => collect(ReportType::cases())->filter(fn (ReportType $report) => $user->hasReportAccess($report))
+                    ->map(fn (ReportType $report) => $report->value)->values()->all(),
             ] : null,
             'impersonation' => $impersonation ? [
                 'id' => $impersonation->id,
@@ -51,6 +66,15 @@ class WorkspaceController extends Controller
                 'organization' => $impersonation->organization->only(['id', 'name']),
                 'started_at' => $impersonation->created_at,
             ] : null,
+            'subscription' => $user?->hasRole(UserRole::Admin) ? [
+                'plan_name' => $organization?->plan_name,
+                'status' => $organization?->subscription_status?->value,
+                'ends_on' => $expiryDate?->toDateString(),
+                'days_remaining' => $expiryDate ? (int) today()->diffInDays($expiryDate, false) : null,
+                'active' => $organization?->canUseWorkspace() ?? false,
+                'access_paused' => $organization?->access_paused ?? false,
+            ] : null,
+            'operational_setup' => $user?->organization ? collect($user->organization->setup())->only(['sales', 'purchases', 'store'])->all() : null,
         ]);
     }
 
@@ -91,7 +115,7 @@ class WorkspaceController extends Controller
     {
         SupportImpersonation::endFor($request);
         $credentials = $request->validate(['email' => ['required', 'email'], 'password' => ['required', 'string']]);
-        if (! Auth::attempt([...$credentials, 'active' => true])) {
+        if (! Auth::attempt([...$credentials, 'active' => true, 'access_paused' => false])) {
             throw ValidationException::withMessages(['email' => 'The email or password is incorrect.']);
         }
         $request->session()->regenerate();
@@ -126,16 +150,18 @@ class WorkspaceController extends Controller
         $categoryTotals = [];
         foreach ($yearDocuments as $document) {
             $month = (int) $document->document_date->format('n');
+            $monthTotal = $monthlyTotals->get($month);
             if (in_array($document->type, ['sale', 'resale', 'sale_return'], true)) {
                 $sign = $document->type === 'sale_return' ? -1 : 1;
-                $monthlyTotals[$month]['sales'] += $sign * (float) $document->total;
+                $monthTotal['sales'] += $sign * (float) $document->total;
                 foreach ($document->items as $item) {
                     $category = $item->product?->category?->name ?? 'Uncategorized';
                     $categoryTotals[$category] = ($categoryTotals[$category] ?? 0) + ($sign * (float) $item->line_total);
                 }
             } elseif (in_array($document->type, ['purchase', 'purchase_return'], true)) {
-                $monthlyTotals[$month]['purchases'] += ($document->type === 'purchase_return' ? -1 : 1) * (float) $document->total;
+                $monthTotal['purchases'] += ($document->type === 'purchase_return' ? -1 : 1) * (float) $document->total;
             }
+            $monthlyTotals->put($month, $monthTotal);
         }
         $topCategories = collect($categoryTotals)->map(fn (float $total, string $name) => ['name' => $name, 'sales' => $total])->sortByDesc('sales')->take(5)->values();
 
@@ -164,6 +190,9 @@ class WorkspaceController extends Controller
     {
         $organizationId = $this->organizationId();
         $savedProduct = $product ? Product::query()->where('organization_id', $organizationId)->findOrFail($product) : null;
+        if (! $savedProduct && ! $request->exists('reorder_level')) {
+            $request->merge(['reorder_level' => Auth::user()->organization()->firstOrFail()->setup()['store']['default_reorder_level']]);
+        }
         if ($request->exists('sku')) {
             $sku = trim((string) $request->input('sku'));
             $request->merge(['sku' => $sku === '' ? null : $sku]);
@@ -289,6 +318,24 @@ class WorkspaceController extends Controller
             'items.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,3'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
         ]);
+        $setup = Auth::user()->organization()->firstOrFail()->setup();
+        $feature = match ($data['type']) {
+            'resale' => ['sales', 'allow_resales'],
+            'sale_return' => ['sales', 'allow_sales_returns'],
+            'purchase_return' => ['purchases', 'allow_purchase_returns'],
+            default => null,
+        };
+        if ($feature && ! $setup[$feature[0]][$feature[1]]) {
+            throw ValidationException::withMessages(['type' => 'This transaction type is disabled in System Setup.']);
+        }
+        if (in_array($data['type'], ['sale', 'resale'], true)) {
+            if (($data['payment_type'] ?? 'full') === 'due' && ! $setup['sales']['allow_due_sales']) {
+                throw ValidationException::withMessages(['payment_type' => 'Due sales are disabled in System Setup.']);
+            }
+            if (($data['payment_type'] ?? 'full') === 'installment' && ! $setup['sales']['allow_installment_sales']) {
+                throw ValidationException::withMessages(['payment_type' => 'Installment sales are disabled in System Setup.']);
+            }
+        }
         if (($data['sale_channel'] ?? 'standard') === 'pos' && $data['type'] !== 'sale') {
             throw ValidationException::withMessages(['sale_channel' => 'POS checkout can only create a sale.']);
         }
@@ -332,6 +379,9 @@ class WorkspaceController extends Controller
     public function adjust(Request $request, int $product, InventoryService $inventory): JsonResponse
     {
         $organizationId = $this->organizationId();
+        if (! Auth::user()->organization()->firstOrFail()->setup()['store']['allow_stock_adjustments']) {
+            throw ValidationException::withMessages(['quantity_change' => 'Stock adjustments are disabled in System Setup.']);
+        }
         $branchId = $this->branchId($request, $organizationId);
         $savedProduct = Product::query()->where('organization_id', $organizationId)->findOrFail($product);
         $data = $request->validate([

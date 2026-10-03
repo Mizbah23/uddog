@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\BranchAccess;
-use App\Models\Branch;
 use App\Models\StockTransfer;
 use App\Models\SupportImpersonation;
 use App\Services\StockTransferService;
@@ -29,6 +28,9 @@ class StockTransferController extends Controller
     public function store(Request $request, StockTransferService $service): JsonResponse
     {
         $organizationId = $this->organizationId();
+        if (! Auth::user()->organization()->firstOrFail()->setup()['store']['allow_stock_transfers']) {
+            throw ValidationException::withMessages(['from_branch_id' => 'Stock transfers are disabled in System Setup.']);
+        }
         $data = $request->validate([
             'from_branch_id' => ['required', 'integer'],
             'to_branch_id' => ['required', 'integer', 'different:from_branch_id'],
