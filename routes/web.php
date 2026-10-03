@@ -87,4 +87,4 @@ Route::prefix('api')->group(function () {
     });
 });
 
-Route::view('/{path?}', 'app')->where('path', '^(?!api).*$');
+Route::view('/', 'app')->name('app.home');
