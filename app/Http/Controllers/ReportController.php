@@ -6,6 +6,7 @@ use App\BranchAccess;
 use App\Models\Category;
 use App\Models\Contact;
 use App\Models\Document;
+use App\Models\Expense;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
@@ -67,7 +68,7 @@ class ReportController extends Controller
         $result = match ($report) {
             'sales' => $this->sales($documents),
             'purchases' => $this->purchases($documents),
-            'profit_loss' => $this->profitLoss($documents),
+            'profit_loss' => $this->profitLoss($documents, $organizationId, $branchId, $dateFrom, $dateTo),
             'employee_sales' => $this->employeeSales($documents),
             'stock' => $this->stock($organizationId, $branchId, $search),
             'adjustments' => $this->adjustments($organizationId, $branchId, $dateFrom, $dateTo),
@@ -108,7 +109,7 @@ class ReportController extends Controller
         return $this->table(['Date', 'Reference', 'Type', 'Supplier', 'Employee', 'Net total'], $rows, ['net_purchases' => $rows->sum('total')]);
     }
 
-    private function profitLoss(Builder $documents): array
+    private function profitLoss(Builder $documents, int $organizationId, int $branchId, ?string $dateFrom, ?string $dateTo): array
     {
         $sales = (clone $documents)->whereIn('type', ['sale', 'resale'])->with('items')->get();
         $returnDocuments = (clone $documents)->where('type', 'sale_return')->with('items')->get();
@@ -116,13 +117,21 @@ class ReportController extends Controller
         $returnProfit = $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => ((float) $item->unit_price - (float) $item->cost_price) * (float) $item->quantity));
         $grossProfit = $sales->sum(fn (Document $document) => (float) $document->total_profit);
         $netSales = $sales->sum(fn (Document $document) => (float) $document->total) - (float) $returns;
+        $expenses = Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))->get();
+        $expenseTotal = $expenses->sum(fn (Expense $expense) => (float) $expense->amount);
+        $grossProfitAfterReturns = $grossProfit - $returnProfit;
+        $netProfit = $grossProfitAfterReturns - $expenseTotal;
         $rows = collect([
             ['item' => 'Net sales after returns', 'amount' => $netSales],
-            ['item' => 'Gross profit after returns', 'amount' => $grossProfit - $returnProfit],
+            ['item' => 'Gross profit after returns', 'amount' => $grossProfitAfterReturns],
             ['item' => 'Sales returns', 'amount' => -(float) $returns],
+            ['item' => 'Operating expenses', 'amount' => -$expenseTotal],
+            ['item' => 'Net profit after operating expenses', 'amount' => $netProfit],
         ]);
 
-        return $this->table(['Metric', 'Amount'], $rows, ['net_sales' => $netSales, 'gross_profit' => $grossProfit - $returnProfit]);
+        return $this->table(['Metric', 'Amount'], $rows, ['net_sales' => $netSales, 'gross_profit' => $grossProfitAfterReturns, 'operating_expenses' => $expenseTotal, 'net_profit' => $netProfit]);
     }
 
     private function employeeSales(Builder $documents): array

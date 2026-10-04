@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Contact;
+use App\Models\Document;
 use App\Models\Product;
+use App\Models\PurchaseInstallment;
+use App\Models\PurchasePayment;
 use App\Models\SaleInstallment;
 use App\Models\SalePayment;
 use App\Models\User;
@@ -83,5 +86,62 @@ class SalesPaymentTermsTest extends TestCase
         ])->assertCreated()->assertJsonPath('payment_status', 'paid');
 
         $this->assertSame(1, SalePayment::query()->where('document_id', $full['id'])->count());
+    }
+
+    public function test_legacy_unpaid_sale_without_payment_type_can_still_receive_a_collection(): void
+    {
+        [$user, $customer, $product] = $this->setupSale();
+        $sale = $this->actingAs($user)->postJson('/api/documents', [
+            'type' => 'sale', 'contact_id' => $customer->id, 'document_date' => '2026-09-30',
+            'payment_type' => 'due',
+            'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 50]],
+        ])->assertCreated()->json();
+        Document::query()->findOrFail($sale['id'])->update(['payment_type' => null]);
+
+        $this->actingAs($user)->postJson('/api/documents/'.$sale['id'].'/payments', [
+            'amount' => 25,
+            'payment_method' => 'cash',
+        ])->assertCreated()
+            ->assertJsonPath('payment_type', 'due')
+            ->assertJsonPath('amount_paid', '25.00')
+            ->assertJsonPath('balance_due', '25.00');
+    }
+
+    public function test_purchase_payment_plans_create_supplier_payments_and_installment_schedule(): void
+    {
+        [$user, , $product] = $this->setupSale();
+        $supplier = Contact::query()->where('organization_id', $user->organization_id)->where('type', 'supplier')->firstOrFail();
+        $items = [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 100]];
+
+        $full = $this->actingAs($user)->postJson('/api/documents', [
+            'type' => 'purchase', 'contact_id' => $supplier->id, 'document_date' => '2026-09-30',
+            'payment_type' => 'full', 'payment_method' => 'bank_transfer', 'items' => $items,
+        ])->assertCreated()->assertJsonPath('payment_type', 'full')->assertJsonPath('amount_paid', '100.00')->assertJsonPath('balance_due', '0.00')->json();
+        $this->assertSame(1, PurchasePayment::query()->where('document_id', $full['id'])->count());
+
+        $installmentSale = $this->actingAs($user)->postJson('/api/documents', [
+            'type' => 'purchase', 'contact_id' => $supplier->id, 'document_date' => '2026-09-30',
+            'payment_type' => 'installment', 'payment_method' => 'cash', 'down_payment' => 20,
+            'installment_count' => 3, 'installment_frequency' => 'monthly', 'first_installment_date' => '2026-10-15',
+            'items' => $items,
+        ])->assertCreated()->assertJsonPath('payment_type', 'installment')->assertJsonPath('amount_paid', '20.00')->assertJsonPath('balance_due', '80.00')->assertJsonCount(3, 'purchase_installments')->json();
+
+        $this->assertSame(['26.66', '26.66', '26.68'], PurchaseInstallment::query()->where('document_id', $installmentSale['id'])->orderBy('sequence')->pluck('amount')->all());
+        $firstInstallment = PurchaseInstallment::query()->where('document_id', $installmentSale['id'])->orderBy('sequence')->firstOrFail();
+        $this->actingAs($user)->postJson('/api/purchases/'.$installmentSale['id'].'/payments', [
+            'purchase_installment_id' => $firstInstallment->id,
+            'amount' => 26.66,
+            'payment_method' => 'mobile_banking',
+            'payment_date' => '2026-10-15',
+        ])->assertCreated()->assertJsonPath('document.amount_paid', '46.66')->assertJsonPath('document.balance_due', '53.34');
+
+        $this->assertSame('26.66', $firstInstallment->fresh()->amount_paid);
+        $this->assertSame(2, PurchasePayment::query()->where('document_id', $installmentSale['id'])->count());
+
+        $due = $this->actingAs($user)->postJson('/api/documents', [
+            'type' => 'purchase', 'contact_id' => $supplier->id, 'document_date' => '2026-09-30',
+            'payment_type' => 'due', 'items' => $items,
+        ])->assertCreated()->assertJsonPath('payment_type', 'due')->assertJsonPath('payment_method', 'credit')->assertJsonPath('amount_paid', '0.00')->assertJsonPath('balance_due', '100.00')->json();
+        $this->assertSame(0, PurchasePayment::query()->where('document_id', $due['id'])->count());
     }
 }

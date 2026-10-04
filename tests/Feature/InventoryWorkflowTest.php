@@ -95,6 +95,60 @@ class InventoryWorkflowTest extends TestCase
             ->assertJsonPath('0.total_profit', '8.00');
     }
 
+    public function test_dashboard_customer_due_list_groups_customers_and_sorts_highest_balance_first(): void
+    {
+        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        $secondCustomer = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Second customer', 'type' => 'customer']);
+        $this->actingAs($user);
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $product, '20', '10.00'))->assertCreated();
+
+        $firstSale = $this->postJson('/api/documents', $this->payload('sale', $customer, $product, '3', '15.00'))->assertCreated()->json();
+        Document::query()->findOrFail($firstSale['id'])->update(['amount_paid' => 0]);
+        $secondSale = $this->postJson('/api/documents', $this->payload('resale', $customer, $product, '2', '15.00'))->assertCreated()->json();
+        Document::query()->findOrFail($secondSale['id'])->update(['amount_paid' => 0]);
+        $otherSale = $this->postJson('/api/documents', $this->payload('sale', $secondCustomer, $product, '1', '15.00'))->assertCreated()->json();
+        Document::query()->findOrFail($otherSale['id'])->update(['amount_paid' => 0]);
+
+        $this->getJson('/api/overview')
+            ->assertOk()
+            ->assertJsonPath('customer_due_list.0.customer', 'Retail customer')
+            ->assertJsonPath('customer_due_list.0.invoices_count', 2)
+            ->assertJsonPath('customer_due_list.0.amount_due', '75.00')
+            ->assertJsonPath('customer_due_list.1.customer', 'Second customer')
+            ->assertJsonPath('customer_due_list.1.amount_due', '15.00');
+    }
+
+    public function test_dashboard_chart_uses_calendar_months_and_nets_returns_in_their_document_month(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 31));
+        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        $this->actingAs($user);
+
+        $purchasePayload = $this->payload('purchase', $supplier, $product, '10', '10.00');
+        $purchasePayload['document_date'] = '2026-10-31';
+        $purchase = $this->postJson('/api/documents', $purchasePayload)->assertCreated()->json();
+        $purchaseReturn = $this->payload('purchase_return', $supplier, $product, '2', '10.00');
+        $purchaseReturn['purchase_id'] = $purchase['id'];
+        $purchaseReturn['document_date'] = '2026-10-31';
+        $this->postJson('/api/documents', $purchaseReturn)->assertCreated();
+
+        $salePayload = $this->payload('sale', $customer, $product, '2', '15.00');
+        $salePayload['document_date'] = '2026-10-31';
+        $sale = $this->postJson('/api/documents', $salePayload)->assertCreated()->json();
+        $saleReturn = $this->payload('sale_return', $customer, $product, '1', '15.00');
+        $saleReturn['sale_id'] = $sale['id'];
+        $saleReturn['document_date'] = '2026-10-31';
+        $this->postJson('/api/documents', $saleReturn)->assertCreated();
+
+        $this->getJson('/api/overview')
+            ->assertOk()
+            ->assertJsonPath('monthly_totals.0.month', 'Jan')
+            ->assertJsonPath('monthly_totals.1.month', 'Feb')
+            ->assertJsonPath('monthly_totals.9.month', 'Oct')
+            ->assertJsonPath('monthly_totals.9.sales', 15)
+            ->assertJsonPath('monthly_totals.9.purchases', 80);
+    }
+
     public function test_product_can_be_created_without_default_cost_or_sale_prices(): void
     {
         $user = User::factory()->create();

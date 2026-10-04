@@ -4,6 +4,8 @@ use App\Http\Controllers\BranchController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ContactDirectoryController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\PasswordRecoveryController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SalesTargetController;
@@ -20,6 +22,8 @@ Route::prefix('api')->group(function () {
     Route::get('session', [WorkspaceController::class, 'session']);
     Route::post('setup', [WorkspaceController::class, 'setup'])->middleware('throttle:3,1');
     Route::post('login', [WorkspaceController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('password/forgot', [PasswordRecoveryController::class, 'sendLink'])->middleware('throttle:3,1');
+    Route::post('password/reset', [PasswordRecoveryController::class, 'reset'])->middleware('throttle:5,1');
     Route::middleware(['auth', 'active'])->group(function () {
         Route::post('logout', [WorkspaceController::class, 'logout']);
         Route::get('profile', [ProfileController::class, 'show']);
@@ -32,6 +36,10 @@ Route::prefix('api')->group(function () {
             Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('permission:branches');
             Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->middleware('permission:branches');
             Route::get('overview', [WorkspaceController::class, 'overview'])->middleware('permission:dashboard');
+            Route::get('expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses');
+            Route::post('expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses');
+            Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->middleware('permission:expenses');
+            Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->middleware('permission:expenses');
             Route::get('reports', [ReportController::class, 'index']);
             Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,resales,purchase_returns,inventory,stock_adjustments,stock_transfers');
             Route::post('products', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products,purchases');
@@ -48,6 +56,7 @@ Route::prefix('api')->group(function () {
             Route::get('documents', [WorkspaceController::class, 'documents'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
             Route::post('documents', [WorkspaceController::class, 'saveDocument'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
             Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,resales');
+            Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');
             Route::get('stock-checks', [StockCheckController::class, 'index'])->middleware('permission:stock_checks');
@@ -87,4 +96,5 @@ Route::prefix('api')->group(function () {
     });
 });
 
+Route::view('/password/reset/{token}', 'app')->name('password.reset');
 Route::view('/', 'app')->name('app.home');

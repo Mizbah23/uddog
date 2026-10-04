@@ -36,14 +36,29 @@ class Document extends Model
         return $this->hasMany(SaleInstallment::class)->orderBy('sequence');
     }
 
+    public function purchaseInstallments(): HasMany
+    {
+        return $this->hasMany(PurchaseInstallment::class)->orderBy('sequence');
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(SalePayment::class)->latest('payment_date')->latest('id');
     }
 
+    public function purchasePayments(): HasMany
+    {
+        return $this->hasMany(PurchasePayment::class)->latest('payment_date')->latest('id');
+    }
+
     public function purchase()
     {
         return $this->belongsTo(self::class, 'purchase_id');
+    }
+
+    public function purchaseReturns(): HasMany
+    {
+        return $this->hasMany(self::class, 'purchase_id')->where('type', 'purchase_return');
     }
 
     public function sale()
@@ -79,7 +94,11 @@ class Document extends Model
 
     public function getBalanceDueAttribute(): string
     {
-        return number_format(max(0, (float) $this->total - (float) $this->amount_paid), 2, '.', '');
+        $purchaseReturns = $this->type === 'purchase'
+            ? ($this->relationLoaded('purchaseReturns') ? $this->purchaseReturns->sum('total') : $this->purchaseReturns()->sum('total'))
+            : 0;
+
+        return number_format(max(0, (float) $this->total - (float) $this->amount_paid - (float) $purchaseReturns), 2, '.', '');
     }
 
     public function getPaymentStatusAttribute(): string

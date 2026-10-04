@@ -23,7 +23,8 @@ enum ReportType: string
         return match ($this) {
             self::Sales => [Permission::Sales, Permission::Resales, Permission::SalesReturns],
             self::Purchases => [Permission::Purchases, Permission::PurchaseReturns],
-            self::ProfitLoss, self::EmployeeSales, self::BarcodeSales, self::CustomerDue => [Permission::Sales, Permission::Resales],
+            self::ProfitLoss => [Permission::Expenses],
+            self::EmployeeSales, self::BarcodeSales, self::CustomerDue => [Permission::Sales, Permission::Resales],
             self::Stock => [Permission::Inventory, Permission::Products],
             self::Adjustments => [Permission::StockAdjustments],
             self::BarcodeProducts => [Permission::Products],

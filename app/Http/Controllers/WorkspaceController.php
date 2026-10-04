@@ -7,6 +7,9 @@ use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Organization;
 use App\Models\Product;
+use App\Models\PurchaseInstallment;
+use App\Models\PurchasePayment;
+use App\Models\SaleInstallment;
 use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
 use App\Models\User;
@@ -146,7 +149,7 @@ class WorkspaceController extends Controller
         $visibleTypes = [...$visibleSaleTypes, ...$visiblePurchaseTypes];
         $documents = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId);
         $yearDocuments = (clone $documents)->whereIn('type', $visibleTypes)->whereYear('document_date', now()->year)->with(['items.product.category:id,name'])->get();
-        $monthlyTotals = collect(range(1, 12))->mapWithKeys(fn (int $month) => [$month => ['month' => now()->setMonth($month)->format('M'), 'sales' => 0, 'purchases' => 0]]);
+        $monthlyTotals = collect(range(1, 12))->mapWithKeys(fn (int $month) => [$month => ['month' => now()->setDate(now()->year, $month, 1)->format('M'), 'sales' => 0, 'purchases' => 0]]);
         $categoryTotals = [];
         foreach ($yearDocuments as $document) {
             $month = (int) $document->document_date->format('n');
@@ -164,6 +167,37 @@ class WorkspaceController extends Controller
             $monthlyTotals->put($month, $monthTotal);
         }
         $topCategories = collect($categoryTotals)->map(fn (float $total, string $name) => ['name' => $name, 'sales' => $total])->sortByDesc('sales')->take(5)->values();
+        $collectionAlerts = $canViewSales
+            ? SaleInstallment::query()
+                ->where('organization_id', $organizationId)
+                ->where('branch_id', $branchId)
+                ->whereHas('document', fn ($query) => $query->whereIn('type', array_values(array_filter([
+                    $user->hasPermission(Permission::Sales) ? 'sale' : null,
+                    $user->hasPermission(Permission::Resales) ? 'resale' : null,
+                ]))))
+                ->where('due_date', '<=', today()->addDays(7))
+                ->whereRaw('amount_paid < amount')
+                ->with('document.contact:id,name')
+                ->orderBy('due_date')
+                ->limit(100)
+                ->get()
+                ->map(function (SaleInstallment $installment) {
+                    $daysUntilDue = (int) today()->diffInDays($installment->due_date, false);
+
+                    return [
+                        'id' => $installment->id,
+                        'due_date' => $installment->due_date->toDateString(),
+                        'amount_due' => $installment->balance_due,
+                        'days_until_due' => $daysUntilDue,
+                        'document' => [
+                            'id' => $installment->document->id,
+                            'number' => $installment->document->number,
+                            'type' => $installment->document->type,
+                            'contact' => $installment->document->contact?->only(['name']),
+                        ],
+                    ];
+                })
+            : collect();
 
         return response()->json([
             'products' => $products->count(),
@@ -175,6 +209,31 @@ class WorkspaceController extends Controller
             'low_stock_products' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values(),
             'monthly_totals' => $monthlyTotals->values(),
             'top_categories' => $topCategories,
+            'collection_alerts' => $collectionAlerts,
+            'supplier_due_list' => $canViewPurchases ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('type', 'purchase')->whereRaw('amount_paid < total')->with('contact:id,name', 'purchaseReturns:id,purchase_id,total')->get()->map(fn (Document $purchase) => ['id' => $purchase->id, 'number' => $purchase->number, 'date' => $purchase->document_date, 'supplier' => $purchase->contact?->name, 'amount_due' => number_format(max(0, (float) $purchase->total - (float) $purchase->amount_paid - (float) $purchase->purchaseReturns->sum('total')), 2, '.', '')])->filter(fn (array $purchase) => (float) $purchase['amount_due'] > 0)->sortByDesc('amount_due')->take(8)->values() : collect(),
+            'customer_due_list' => $canViewSales ? Document::query()
+                ->where('organization_id', $organizationId)
+                ->where('branch_id', $branchId)
+                ->whereIn('type', array_values(array_filter([
+                    $user->hasPermission(Permission::Sales) ? 'sale' : null,
+                    $user->hasPermission(Permission::Resales) ? 'resale' : null,
+                ])))
+                ->whereRaw('total > amount_paid')
+                ->selectRaw('contact_id, COUNT(*) as invoices_count, SUM(total - amount_paid) as amount_due, MIN(document_date) as oldest_due_date')
+                ->with('contact:id,name,phone')
+                ->groupBy('contact_id')
+                ->orderByDesc('amount_due')
+                ->limit(8)
+                ->get()
+                ->map(fn (Document $due) => [
+                    'contact_id' => $due->contact_id,
+                    'customer' => $due->contact?->name ?? 'Walk-in customer',
+                    'phone' => $due->contact?->phone,
+                    'invoices_count' => (int) $due->invoices_count,
+                    'amount_due' => number_format((float) $due->amount_due, 2, '.', ''),
+                    'oldest_due_date' => $due->oldest_due_date,
+                ]) : collect(),
+            'overdue_customers' => $canViewSales ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->whereIn('type', array_values(array_filter([$user->hasPermission(Permission::Sales) ? 'sale' : null, $user->hasPermission(Permission::Resales) ? 'resale' : null])))->whereRaw('(total - amount_paid) > 0')->whereDate('document_date', '<=', today()->subDays(30))->with('contact:id,name,phone')->orderBy('document_date')->limit(8)->get()->map(fn (Document $sale) => ['id' => $sale->id, 'number' => $sale->number, 'date' => $sale->document_date, 'customer' => $sale->contact?->name, 'phone' => $sale->contact?->phone, 'amount_due' => $sale->balance_due, 'days_outstanding' => $sale->document_date->diffInDays(today())]) : collect(),
         ]);
     }
 
@@ -286,7 +345,7 @@ class WorkspaceController extends Controller
             ->where('organization_id', $this->organizationId())
             ->where('branch_id', $this->branchId($request, $this->organizationId()))
             ->whereIn('type', $readableTypes)
-            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'payments.receiver')
+            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total')
             ->when($type, fn ($q) => $q->where('type', $type))
             ->latest()
             ->get());
@@ -366,6 +425,58 @@ class WorkspaceController extends Controller
         ]);
 
         return response()->json($inventory->recordSalePayment($sale, $data, Auth::id(), $organizationId), 201);
+    }
+
+    public function recordPurchasePayment(Request $request, int $document): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
+            'payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
+            'payment_date' => ['required', 'date'],
+            'purchase_installment_id' => ['nullable', 'integer'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $payment = DB::transaction(function () use ($document, $organizationId, $data) {
+            $purchase = Document::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($document);
+            abort_unless($purchase->type === 'purchase', 404);
+            app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $purchase->branch_id);
+            $amountCents = (int) round((float) $data['amount'] * 100);
+            $returnsCents = (int) round((float) $purchase->purchaseReturns()->sum('total') * 100);
+            $balanceCents = max(0, (int) round((float) $purchase->total * 100) - (int) round((float) $purchase->amount_paid * 100) - $returnsCents);
+            if ($amountCents > $balanceCents) {
+                throw ValidationException::withMessages(['amount' => 'Payment cannot exceed the outstanding supplier balance.']);
+            }
+            $installment = null;
+            if ($purchase->payment_type === 'installment') {
+                $installment = PurchaseInstallment::query()->where('document_id', $purchase->id)->lockForUpdate()->find($data['purchase_installment_id'] ?? null);
+                if (! $installment) {
+                    throw ValidationException::withMessages(['purchase_installment_id' => 'Select an installment from this purchase.']);
+                }
+                $installmentBalance = (int) round(((float) $installment->amount - (float) $installment->amount_paid) * 100);
+                if ($amountCents > $installmentBalance) {
+                    throw ValidationException::withMessages(['amount' => 'Payment cannot exceed the selected installment balance.']);
+                }
+                $installment->update(['amount_paid' => number_format(((int) round((float) $installment->amount_paid * 100) + $amountCents) / 100, 2, '.', '')]);
+            }
+            $purchase->amount_paid = number_format(((int) round((float) $purchase->amount_paid * 100) + $amountCents) / 100, 2, '.', '');
+            $purchase->save();
+
+            return PurchasePayment::create([
+                'organization_id' => $organizationId,
+                'branch_id' => $purchase->branch_id,
+                'document_id' => $purchase->id,
+                'purchase_installment_id' => $installment?->id,
+                'amount' => number_format($amountCents / 100, 2, '.', ''),
+                'payment_method' => $data['payment_method'],
+                'payment_date' => $data['payment_date'],
+                'notes' => $data['notes'] ?? null,
+                'created_by' => Auth::id(),
+            ]);
+        });
+
+        return response()->json(['payment' => $payment->load('receiver:id,name', 'installment'), 'document' => Document::query()->where('organization_id', $organizationId)->with('purchasePayments.receiver:id,name', 'purchaseInstallments')->findOrFail($document)], 201);
     }
 
     public function movements(Request $request): JsonResponse

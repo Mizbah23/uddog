@@ -71,6 +71,10 @@ class User extends Authenticatable
 
     public function hasReportAccess(ReportType $report): bool
     {
+        if ($report === ReportType::ProfitLoss && ! ($this->hasPermission(Permission::Sales) || $this->hasPermission(Permission::Resales))) {
+            return false;
+        }
+
         if (! collect($report->workspacePermissions())->contains(fn (Permission $permission) => $this->hasPermission($permission))) {
             return false;
         }

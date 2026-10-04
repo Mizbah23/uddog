@@ -20,6 +20,7 @@ enum Permission: string
     case StockTransfers = 'stock_transfers';
     case WarrantySearch = 'warranty_search';
     case SalesTargets = 'sales_targets';
+    case Expenses = 'expenses';
 
     public function label(): string
     {
@@ -40,6 +41,7 @@ enum Permission: string
             self::StockTransfers => 'Stock transfers',
             self::WarrantySearch => 'Warranty search',
             self::SalesTargets => 'Sales targets',
+            self::Expenses => 'Expenses',
         };
     }
 }

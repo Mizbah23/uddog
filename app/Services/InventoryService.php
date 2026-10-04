@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Document;
 use App\Models\Product;
 use App\Models\ProductStock;
+use App\Models\PurchaseInstallment;
+use App\Models\PurchasePayment;
 use App\Models\SaleInstallment;
 use App\Models\StockMovement;
 use Illuminate\Support\Carbon;
@@ -92,18 +94,26 @@ class InventoryService
             $document->update(['number' => $prefix.'-'.str_pad((string) $document->id, 6, '0', STR_PAD_LEFT)]);
 
             if ($paymentTerms['initial_payment'] > 0) {
-                $document->payments()->create([
+                $initialPayment = [
                     'organization_id' => $organizationId,
                     'branch_id' => $branchId,
                     'amount' => self::money($paymentTerms['initial_payment']),
                     'payment_method' => $paymentTerms['payment_method'],
-                    'kind' => $paymentTerms['payment_type'] === 'installment' ? 'down_payment' : 'initial',
                     'payment_date' => $data['document_date'],
                     'created_by' => $userId,
-                ]);
+                ];
+                if ($type === 'purchase') {
+                    PurchasePayment::create([...$initialPayment, 'document_id' => $document->id]);
+                } else {
+                    $document->payments()->create([...$initialPayment, 'kind' => $paymentTerms['payment_type'] === 'installment' ? 'down_payment' : 'initial']);
+                }
             }
             if ($paymentTerms['payment_type'] === 'installment') {
-                $this->createInstallments($document, $organizationId, $branchId, $paymentTerms);
+                if ($type === 'purchase') {
+                    $this->createPurchaseInstallments($document, $organizationId, $branchId, $paymentTerms);
+                } else {
+                    $this->createInstallments($document, $organizationId, $branchId, $paymentTerms);
+                }
             }
 
             foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents]) {
@@ -181,7 +191,7 @@ class InventoryService
                 ]);
             }
 
-            return $document->load('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'payments.receiver');
+            return $document->load('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'payments.receiver', 'purchaseInstallments');
         });
     }
 
@@ -189,12 +199,12 @@ class InventoryService
     {
         return DB::transaction(function () use ($document, $data, $userId, $organizationId) {
             $sale = Document::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($document->id);
-            if (! in_array($sale->type, ['sale', 'resale'], true) || ! in_array($sale->payment_type, ['due', 'installment'], true)) {
+            $balanceCents = self::scaled($sale->total, 2) - self::scaled($sale->amount_paid, 2);
+            if (! in_array($sale->type, ['sale', 'resale'], true) || $balanceCents <= 0) {
                 throw ValidationException::withMessages(['payment' => 'Payments can only be recorded against an unpaid due or installment sale.']);
             }
 
             $amountCents = self::scaled($data['amount'], 2);
-            $balanceCents = self::scaled($sale->total, 2) - self::scaled($sale->amount_paid, 2);
             if ($amountCents <= 0 || $amountCents > $balanceCents) {
                 throw ValidationException::withMessages(['amount' => 'Payment amount cannot exceed the remaining sale balance.']);
             }
@@ -226,7 +236,10 @@ class InventoryService
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $userId,
             ]);
-            $sale->update(['amount_paid' => self::money(self::scaled($sale->amount_paid, 2) + $amountCents)]);
+            $sale->update([
+                'amount_paid' => self::money(self::scaled($sale->amount_paid, 2) + $amountCents),
+                'payment_type' => in_array($sale->payment_type, ['due', 'installment'], true) ? $sale->payment_type : 'due',
+            ]);
 
             return $sale->fresh()->load('branch', 'contact', 'items.product', 'creator:id,name', 'installments', 'payments.receiver');
         });
@@ -266,6 +279,48 @@ class InventoryService
 
     private function paymentTerms(array $data, string $type, string $saleChannel, int $totalCents): array
     {
+        if ($type === 'purchase') {
+            $paymentType = $data['payment_type'] ?? 'due';
+            $paymentMethod = $data['payment_method'] ?? 'cash';
+            if ($paymentType === 'full') {
+                $providedAmount = self::scaled($data['amount_paid'] ?? 0, 2);
+                if ($providedAmount > 0 && $providedAmount !== $totalCents) {
+                    throw ValidationException::withMessages(['amount_paid' => 'Full payment must equal the purchase total.']);
+                }
+
+                return [
+                    'payment_type' => 'full', 'payment_method' => $paymentMethod, 'initial_payment' => $totalCents,
+                    'down_payment' => $totalCents, 'installment_count' => null, 'installment_frequency' => null,
+                    'first_installment_date' => null, 'remaining' => 0,
+                ];
+            }
+
+            if ($paymentType === 'due') {
+                return [
+                    'payment_type' => 'due', 'payment_method' => 'credit', 'initial_payment' => 0,
+                    'down_payment' => 0, 'installment_count' => null, 'installment_frequency' => null,
+                    'first_installment_date' => null, 'remaining' => $totalCents,
+                ];
+            }
+
+            $downPayment = self::scaled($data['down_payment'] ?? 0, 2);
+            $count = (int) ($data['installment_count'] ?? 0);
+            $frequency = $data['installment_frequency'] ?? null;
+            if ($count < 1 || ! in_array($frequency, ['weekly', 'monthly'], true)) {
+                throw ValidationException::withMessages(['installment_count' => 'Choose the number and frequency of installments.']);
+            }
+            if ($downPayment < 0 || $downPayment >= $totalCents) {
+                throw ValidationException::withMessages(['down_payment' => 'Down payment must be zero or more and less than the purchase total.']);
+            }
+
+            return [
+                'payment_type' => 'installment', 'payment_method' => $downPayment > 0 ? $paymentMethod : null,
+                'initial_payment' => $downPayment, 'down_payment' => $downPayment, 'installment_count' => $count,
+                'installment_frequency' => $frequency, 'first_installment_date' => $data['first_installment_date'] ?? null,
+                'remaining' => $totalCents - $downPayment,
+            ];
+        }
+
         if (! in_array($type, ['sale', 'resale'], true)) {
             return [
                 'payment_type' => null, 'payment_method' => null, 'initial_payment' => 0, 'down_payment' => 0,
@@ -343,6 +398,31 @@ class InventoryService
                 'sequence' => $sequence,
                 'due_date' => $dueDate->toDateString(),
                 'amount' => self::money($amount),
+            ]);
+        }
+    }
+
+    private function createPurchaseInstallments(Document $document, int $organizationId, int $branchId, array $terms): void
+    {
+        $firstDate = $terms['first_installment_date']
+            ? Carbon::parse($terms['first_installment_date'])->startOfDay()
+            : Carbon::parse($document->document_date)->startOfDay()->add($terms['installment_frequency'] === 'weekly' ? '1 week' : '1 month');
+        $baseAmount = intdiv($terms['remaining'], $terms['installment_count']);
+        $remainder = $terms['remaining'] % $terms['installment_count'];
+
+        for ($sequence = 1; $sequence <= $terms['installment_count']; $sequence++) {
+            $dueDate = $terms['installment_frequency'] === 'weekly'
+                ? $firstDate->copy()->addWeeks($sequence - 1)
+                : $firstDate->copy()->addMonthsNoOverflow($sequence - 1);
+            $amount = $baseAmount + ($sequence === $terms['installment_count'] ? $remainder : 0);
+            PurchaseInstallment::create([
+                'organization_id' => $organizationId,
+                'branch_id' => $branchId,
+                'document_id' => $document->id,
+                'sequence' => $sequence,
+                'due_date' => $dueDate->toDateString(),
+                'amount' => self::money($amount),
+                'amount_paid' => '0.00',
             ]);
         }
     }
