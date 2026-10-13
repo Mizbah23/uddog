@@ -5,6 +5,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ContactDirectoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\GoldStoreController;
 use App\Http\Controllers\PasswordRecoveryController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
@@ -16,9 +17,10 @@ use App\Http\Controllers\SystemSetupController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Middleware\ResolveTenant;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('api')->group(function () {
+Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
     Route::get('session', [WorkspaceController::class, 'session']);
     Route::post('setup', [WorkspaceController::class, 'setup'])->middleware('throttle:3,1');
     Route::post('login', [WorkspaceController::class, 'login'])->middleware('throttle:5,1');
@@ -32,30 +34,38 @@ Route::prefix('api')->group(function () {
 
         Route::middleware('subscribed')->group(function () {
             Route::get('branches', [BranchController::class, 'index']);
-            Route::post('branches', [BranchController::class, 'store'])->middleware('permission:branches');
             Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('permission:branches');
-            Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->middleware('permission:branches');
             Route::get('overview', [WorkspaceController::class, 'overview'])->middleware('permission:dashboard');
             Route::get('expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses');
             Route::post('expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses');
             Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->middleware('permission:expenses');
             Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->middleware('permission:expenses');
             Route::get('reports', [ReportController::class, 'index']);
-            Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,resales,purchase_returns,inventory,stock_adjustments,stock_transfers');
+            Route::get('gold/rates', [GoldStoreController::class, 'rates'])->middleware('permission:products,purchases,sales,pos_sale');
+            Route::middleware('permission:products,purchases,sales')->group(function () {
+                Route::post('gold/rates', [GoldStoreController::class, 'saveRate'])->middleware('role:admin,manager');
+                Route::get('gold/summary', [GoldStoreController::class, 'summary']);
+            });
+            Route::middleware('permission:contacts,purchases,sales')->group(function () {
+                Route::get('gold/jobs', [GoldStoreController::class, 'jobs']);
+                Route::post('gold/jobs', [GoldStoreController::class, 'saveJob']);
+                Route::put('gold/jobs/{job}', [GoldStoreController::class, 'updateJob']);
+            });
+            Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,pos_sale,resales,purchase_returns,inventory,stock_adjustments,stock_transfers');
             Route::post('products', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products,purchases');
             Route::put('products/{product}', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products');
-            Route::get('categories', [CategoryController::class, 'index'])->middleware('permission:categories,products,purchases');
+            Route::get('categories', [CategoryController::class, 'index'])->middleware('permission:categories,products,purchases,pos_sale');
             Route::post('categories', [CategoryController::class, 'store'])->middleware('permission:categories');
             Route::put('categories/{category}', [CategoryController::class, 'update'])->middleware('permission:categories');
             Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->middleware('permission:categories');
-            Route::get('contacts', [WorkspaceController::class, 'contacts'])->middleware('permission:contacts,purchases,sales,resales,purchase_returns');
+            Route::get('contacts', [WorkspaceController::class, 'contacts'])->middleware('permission:contacts,purchases,sales,pos_sale,resales,purchase_returns');
             Route::get('customers', [ContactDirectoryController::class, 'customers'])->middleware('permission:contacts');
             Route::get('suppliers', [ContactDirectoryController::class, 'suppliers'])->middleware('permission:contacts');
-            Route::post('contacts', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts,purchases,sales,resales,purchase_returns');
+            Route::post('contacts', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts,purchases,sales,pos_sale,resales,purchase_returns');
             Route::put('contacts/{contact}', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts');
             Route::get('documents', [WorkspaceController::class, 'documents'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
-            Route::post('documents', [WorkspaceController::class, 'saveDocument'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
-            Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,resales');
+            Route::post('documents', [WorkspaceController::class, 'saveDocument'])->middleware('permission:purchases,sales,pos_sale,sales_returns,resales,purchase_returns');
+            Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,pos_sale,resales');
             Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');
@@ -86,6 +96,8 @@ Route::prefix('api')->group(function () {
         Route::middleware('role:superadmin')->group(function () {
             Route::get('clients', [ClientController::class, 'index']);
             Route::get('clients/{client}', [ClientController::class, 'show']);
+            Route::post('clients/{client}/branches', [BranchController::class, 'storeForClient']);
+            Route::delete('clients/{client}/branches/{branch}', [BranchController::class, 'destroyForClient']);
             Route::post('clients', [ClientController::class, 'store']);
             Route::put('clients/{client}', [ClientController::class, 'update']);
             Route::post('clients/{client}/renew', [ClientController::class, 'renew']);
@@ -96,5 +108,5 @@ Route::prefix('api')->group(function () {
     });
 });
 
-Route::view('/password/reset/{token}', 'app')->name('password.reset');
-Route::view('/', 'app')->name('app.home');
+Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
+Route::view('/', 'app')->middleware(ResolveTenant::class)->name('app.home');

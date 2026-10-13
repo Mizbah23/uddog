@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Contact;
+use App\Models\Document;
 use App\Models\User;
 use App\Permission;
 use App\UserRole;
@@ -11,6 +13,35 @@ use Tests\TestCase;
 class ReportPermissionTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_sales_report_exposes_the_recorded_time_separately_from_the_sale_date(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Example Customer', 'type' => 'customer']);
+        $sale = Document::create([
+            'organization_id' => $owner->organization_id,
+            'branch_id' => $branch->id,
+            'number' => 'SAL-REPORT-TIME',
+            'type' => 'sale',
+            'contact_id' => $customer->id,
+            'document_date' => '2026-10-07',
+            'subtotal' => 100,
+            'total' => 100,
+            'amount_paid' => 100,
+            'created_by' => $owner->id,
+        ]);
+        $sale->forceFill(['created_at' => '2026-10-08 10:15:00'])->save();
+
+        $response = $this->actingAs($owner)->getJson('/api/reports?report=sales&date_from=2026-10-07&date_to=2026-10-07')
+            ->assertOk()
+            ->assertJsonPath('columns.0', 'Date')
+            ->assertJsonPath('columns.1', 'Recorded time')
+            ->assertJsonPath('rows.0.number', 'SAL-REPORT-TIME');
+
+        $this->assertStringStartsWith('2026-10-07', $response->json('rows.0.date'));
+        $this->assertStringContainsString('10:15:00', $response->json('rows.0.recorded_at'));
+    }
 
     public function test_owner_can_select_individual_reports_and_unchecked_reports_are_forbidden(): void
     {
@@ -53,7 +84,7 @@ class ReportPermissionTest extends TestCase
     {
         $owner = User::factory()->admin()->create();
         $staff = User::factory()->staff()->for($owner->organization)->create([
-            'permissions' => [Permission::Sales->value],
+            'permissions' => [Permission::Sales->value, Permission::Expenses->value],
             'report_permissions' => null,
         ]);
 

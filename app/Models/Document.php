@@ -2,18 +2,17 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Document extends Model
+class Document extends TenantModel
 {
-    protected $fillable = ['organization_id', 'branch_id', 'number', 'type', 'sale_channel', 'contact_id', 'purchase_id', 'sale_id', 'document_date', 'subtotal', 'discount', 'tax', 'total', 'payment_method', 'payment_type', 'amount_paid', 'down_payment', 'installment_count', 'installment_frequency', 'first_installment_date', 'notes', 'created_by'];
+    protected $fillable = ['organization_id', 'branch_id', 'number', 'type', 'sale_channel', 'contact_id', 'purchase_id', 'sale_id', 'document_date', 'subtotal', 'discount', 'tax', 'interest_rate', 'interest_amount', 'gold_exchange_weight', 'gold_exchange_purity', 'gold_exchange_rate', 'gold_exchange_value', 'total', 'payment_method', 'payment_type', 'amount_paid', 'down_payment', 'installment_count', 'installment_frequency', 'installment_start_date', 'first_installment_date', 'notes', 'created_by'];
 
     protected $appends = ['stock_profit', 'total_profit', 'balance_due', 'payment_status'];
 
     protected function casts(): array
     {
-        return ['document_date' => 'date:Y-m-d', 'first_installment_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount' => 'decimal:2', 'tax' => 'decimal:2', 'total' => 'decimal:2', 'amount_paid' => 'decimal:2', 'down_payment' => 'decimal:2'];
+        return ['document_date' => 'date:Y-m-d', 'installment_start_date' => 'date:Y-m-d', 'first_installment_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount' => 'decimal:2', 'tax' => 'decimal:2', 'interest_rate' => 'decimal:2', 'interest_amount' => 'decimal:2', 'gold_exchange_weight' => 'decimal:3', 'gold_exchange_rate' => 'decimal:2', 'gold_exchange_value' => 'decimal:2', 'total' => 'decimal:2', 'amount_paid' => 'decimal:2', 'down_payment' => 'decimal:2'];
     }
 
     public function contact()
@@ -89,7 +88,7 @@ class Document extends Model
             return '0.00';
         }
 
-        return number_format((float) $this->stock_profit - (float) $this->discount, 2, '.', '');
+        return number_format((float) $this->stock_profit - (float) $this->discount + (float) $this->interest_amount, 2, '.', '');
     }
 
     public function getBalanceDueAttribute(): string

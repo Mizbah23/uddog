@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\SalesTarget;
 use App\Models\SupportImpersonation;
 use App\Models\User;
+use App\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -97,7 +98,7 @@ class SalesTargetController extends Controller
     private function validated(Request $request, int $organizationId): array
     {
         return $request->validate([
-            'branch_id' => ['required', Rule::exists('branches', 'id')->where('organization_id', $organizationId)->where('active', true)],
+            'branch_id' => ['required', Rule::exists(app(TenantContext::class)->validationTable('branches'), 'id')->where('organization_id', $organizationId)->where('active', true)],
             'user_id' => ['nullable', Rule::exists('users', 'id')->where('organization_id', $organizationId)->where('active', true)],
             'period' => ['required', 'date_format:Y-m'],
             'target_amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],

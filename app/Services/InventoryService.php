@@ -3,12 +3,15 @@
 namespace App\Services;
 
 use App\Models\Document;
+use App\Models\GoldRate;
+use App\Models\Organization;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\PurchaseInstallment;
 use App\Models\PurchasePayment;
 use App\Models\SaleInstallment;
 use App\Models\StockMovement;
+use App\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,7 +20,7 @@ class InventoryService
 {
     public function createDocument(array $data, int $userId, int $organizationId, int $branchId): Document
     {
-        return DB::transaction(function () use ($data, $userId, $organizationId, $branchId) {
+        return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($data, $userId, $organizationId, $branchId) {
             $type = $data['type'];
             $purchase = null;
             $sale = null;
@@ -36,6 +39,7 @@ class InventoryService
 
             $items = [];
             $subtotalCents = 0;
+            $organization = Organization::query()->findOrFail($organizationId);
             foreach ($data['items'] as $item) {
                 $product = Product::query()->where('organization_id', $organizationId)->lockForUpdate()->find($item['product_id']);
                 if (! $product || (! $product->active && ! in_array($type, ['purchase_return', 'sale_return'], true))) {
@@ -44,6 +48,7 @@ class InventoryService
                 $quantity = self::scaled($item['quantity'], 3);
                 $unitCents = self::scaled($item['unit_price'], 2);
                 $sourceCostCents = null;
+                $goldSnapshot = $this->goldSnapshot($product, $organization->gold_store && in_array($type, ['sale', 'resale'], true) ? $branchId : null, $data['document_date']);
                 if ($sale) {
                     $soldItem = $sale->items()->where('product_id', $product->id)->first();
                     if (! $soldItem) {
@@ -51,10 +56,16 @@ class InventoryService
                     }
                     $unitCents = self::scaled($soldItem->unit_price, 2);
                     $sourceCostCents = self::scaled($soldItem->cost_price, 2);
+                    $goldSnapshot = collect($soldItem->only(['gold_gross_weight', 'gold_net_weight', 'gold_purity', 'gold_rate', 'making_charge', 'wastage_weight', 'stone_value', 'tag_number', 'hallmark_code']))->all();
+                } elseif ($organization->gold_store && in_array($type, ['sale', 'resale'], true) && $product->is_gold_item) {
+                    if (! $goldSnapshot['gold_rate']) {
+                        throw ValidationException::withMessages(['items' => "No current {$product->gold_purity} rate is recorded for {$product->name}."]);
+                    }
+                    $unitCents = self::scaled($goldSnapshot['unit_price'], 2);
                 }
                 $lineCents = intdiv($quantity * $unitCents + 500, 1000);
                 $subtotalCents += $lineCents;
-                $items[] = [$product, $quantity, $unitCents, $lineCents, $sourceCostCents];
+                $items[] = [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot];
             }
 
             $discountCents = $type === 'sale_return' ? 0 : self::scaled($data['discount'] ?? 0, 2);
@@ -64,7 +75,12 @@ class InventoryService
             }
             $totalCents = $subtotalCents - $discountCents + $taxCents;
             $saleChannel = $data['sale_channel'] ?? 'standard';
-            $paymentTerms = $this->paymentTerms($data, $type, $saleChannel, $totalCents);
+            $exchange = $this->goldExchange($data, $type, $organization->gold_store, $organizationId, $branchId);
+            if ($exchange['value'] > $totalCents) {
+                throw ValidationException::withMessages(['gold_exchange_weight' => 'Old-gold exchange value cannot exceed the sale total.']);
+            }
+            $paymentTerms = $this->paymentTerms([...$data, 'gold_exchange_value' => self::money($exchange['value'])], $type, $saleChannel, $totalCents);
+            $totalCents += $paymentTerms['interest_amount'] ?? 0;
 
             $document = Document::create([
                 'organization_id' => $organizationId,
@@ -80,12 +96,19 @@ class InventoryService
                 'discount' => self::money($discountCents),
                 'tax' => self::money($taxCents),
                 'total' => self::money($totalCents),
+                'interest_rate' => $paymentTerms['interest_rate'] ?? 0,
+                'interest_amount' => self::money($paymentTerms['interest_amount'] ?? 0),
+                'gold_exchange_weight' => $exchange['weight'],
+                'gold_exchange_purity' => $exchange['purity'],
+                'gold_exchange_rate' => self::money($exchange['rate']),
+                'gold_exchange_value' => self::money($exchange['value']),
                 'payment_method' => $paymentTerms['payment_method'],
                 'payment_type' => $paymentTerms['payment_type'],
                 'amount_paid' => self::money($paymentTerms['initial_payment']),
                 'down_payment' => self::money($paymentTerms['down_payment']),
                 'installment_count' => $paymentTerms['installment_count'],
                 'installment_frequency' => $paymentTerms['installment_frequency'],
+                'installment_start_date' => $paymentTerms['installment_start_date'] ?? null,
                 'first_installment_date' => $paymentTerms['first_installment_date'],
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $userId,
@@ -93,11 +116,24 @@ class InventoryService
             $prefix = ['purchase' => 'PUR', 'sale' => 'SAL', 'resale' => 'RSL', 'purchase_return' => 'PRT', 'sale_return' => 'SRT'][$type];
             $document->update(['number' => $prefix.'-'.str_pad((string) $document->id, 6, '0', STR_PAD_LEFT)]);
 
-            if ($paymentTerms['initial_payment'] > 0) {
+            if (($paymentTerms['exchange_value'] ?? 0) > 0 && $type !== 'purchase') {
+                $document->payments()->create([
+                    'organization_id' => $organizationId,
+                    'branch_id' => $branchId,
+                    'amount' => self::money($paymentTerms['exchange_value']),
+                    'payment_method' => 'gold_exchange',
+                    'payment_date' => $data['document_date'],
+                    'kind' => 'gold_exchange',
+                    'notes' => 'Old gold exchange credit',
+                    'created_by' => $userId,
+                ]);
+            }
+            $cashInitialPayment = $paymentTerms['initial_payment'] - ($paymentTerms['exchange_value'] ?? 0);
+            if ($cashInitialPayment > 0) {
                 $initialPayment = [
                     'organization_id' => $organizationId,
                     'branch_id' => $branchId,
-                    'amount' => self::money($paymentTerms['initial_payment']),
+                    'amount' => self::money($cashInitialPayment),
                     'payment_method' => $paymentTerms['payment_method'],
                     'payment_date' => $data['document_date'],
                     'created_by' => $userId,
@@ -116,10 +152,10 @@ class InventoryService
                 }
             }
 
-            foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents]) {
+            foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot]) {
                 if ($purchase) {
                     $purchased = self::scaled($purchase->items()->where('product_id', $product->id)->sum('quantity'), 3);
-                    $returned = self::scaled(DB::table('document_items')
+                    $returned = self::scaled(DB::connection(app(TenantContext::class)->connectionName())->table('document_items')
                         ->join('documents', 'documents.id', '=', 'document_items.document_id')
                         ->where('documents.purchase_id', $purchase->id)
                         ->where('document_items.product_id', $product->id)
@@ -130,7 +166,7 @@ class InventoryService
                 }
                 if ($sale) {
                     $sold = self::scaled($sale->items()->where('product_id', $product->id)->sum('quantity'), 3);
-                    $returned = self::scaled(DB::table('document_items')
+                    $returned = self::scaled(DB::connection(app(TenantContext::class)->connectionName())->table('document_items')
                         ->join('documents', 'documents.id', '=', 'document_items.document_id')
                         ->where('documents.sale_id', $sale->id)
                         ->where('document_items.product_id', $product->id)
@@ -178,6 +214,15 @@ class InventoryService
                     'cost_price' => $capturedCost,
                     'warranty_months' => in_array($type, ['sale', 'resale'], true) ? $product->warranty_months : null,
                     'line_total' => self::money($lineCents),
+                    'gold_gross_weight' => $goldSnapshot['gold_gross_weight'],
+                    'gold_net_weight' => $goldSnapshot['gold_net_weight'],
+                    'gold_purity' => $goldSnapshot['gold_purity'],
+                    'gold_rate' => $goldSnapshot['gold_rate'],
+                    'making_charge' => $goldSnapshot['making_charge'],
+                    'wastage_weight' => $goldSnapshot['wastage_weight'],
+                    'stone_value' => $goldSnapshot['stone_value'],
+                    'tag_number' => $goldSnapshot['tag_number'],
+                    'hallmark_code' => $goldSnapshot['hallmark_code'],
                 ]);
                 StockMovement::create([
                     'organization_id' => $organizationId,
@@ -197,7 +242,7 @@ class InventoryService
 
     public function recordSalePayment(Document $document, array $data, int $userId, int $organizationId): Document
     {
-        return DB::transaction(function () use ($document, $data, $userId, $organizationId) {
+        return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($document, $data, $userId, $organizationId) {
             $sale = Document::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($document->id);
             $balanceCents = self::scaled($sale->total, 2) - self::scaled($sale->amount_paid, 2);
             if (! in_array($sale->type, ['sale', 'resale'], true) || $balanceCents <= 0) {
@@ -247,7 +292,7 @@ class InventoryService
 
     public function adjust(Product $product, string $change, ?string $notes, int $userId, int $organizationId, int $branchId): StockMovement
     {
-        return DB::transaction(function () use ($product, $change, $notes, $userId, $organizationId, $branchId) {
+        return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($product, $change, $notes, $userId, $organizationId, $branchId) {
             $locked = Product::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($product->id);
             ProductStock::query()->firstOrCreate([
                 'organization_id' => $organizationId,
@@ -330,18 +375,19 @@ class InventoryService
 
         $providedType = $data['payment_type'] ?? null;
         $providedAmount = self::scaled($data['amount_paid'] ?? 0, 2);
+        $exchangeCents = self::scaled($data['gold_exchange_value'] ?? 0, 2);
         $paymentType = $providedType ?: ($saleChannel === 'pos' && $providedAmount >= $totalCents && $totalCents > 0 ? 'full' : 'due');
         $paymentMethod = $data['payment_method'] ?? null;
 
         if ($paymentType === 'full') {
-            if ($providedAmount > 0 && $providedAmount !== $totalCents) {
+            if ($providedAmount > 0 && $providedAmount !== $totalCents - $exchangeCents) {
                 throw ValidationException::withMessages(['amount_paid' => 'Full payment must equal the sale total.']);
             }
 
             return [
                 'payment_type' => 'full', 'payment_method' => $paymentMethod ?: 'cash', 'initial_payment' => $totalCents,
                 'down_payment' => $totalCents, 'installment_count' => null, 'installment_frequency' => null,
-                'first_installment_date' => null, 'remaining' => 0,
+                'first_installment_date' => null, 'remaining' => 0, 'exchange_value' => $exchangeCents,
             ];
         }
 
@@ -350,47 +396,127 @@ class InventoryService
             if (! $legacyPartialPayment && ($providedAmount > 0 || self::scaled($data['down_payment'] ?? 0, 2) > 0)) {
                 throw ValidationException::withMessages(['down_payment' => 'A due sale has no initial payment. Choose an installment plan to take a down payment.']);
             }
+            $initialPayment = $exchangeCents + ($legacyPartialPayment ? $providedAmount : 0);
 
             return [
-                'payment_type' => 'due', 'payment_method' => $legacyPartialPayment ? ($paymentMethod ?: 'cash') : 'credit', 'initial_payment' => $legacyPartialPayment ? $providedAmount : 0,
+                'payment_type' => 'due', 'payment_method' => $legacyPartialPayment ? ($paymentMethod ?: 'cash') : 'credit', 'initial_payment' => $initialPayment,
                 'down_payment' => 0, 'installment_count' => null, 'installment_frequency' => null,
-                'first_installment_date' => null, 'remaining' => $totalCents - ($legacyPartialPayment ? $providedAmount : 0),
+                'first_installment_date' => null, 'remaining' => $totalCents - $initialPayment, 'exchange_value' => $exchangeCents,
             ];
         }
 
         $downPayment = self::scaled($data['down_payment'] ?? $data['amount_paid'] ?? 0, 2);
         $count = (int) ($data['installment_count'] ?? 0);
         $frequency = $data['installment_frequency'] ?? null;
-        if ($count < 1 || ! in_array($frequency, ['weekly', 'monthly'], true)) {
+        if ($count < 1 || ! in_array($frequency, ['weekly', 'half_monthly', 'monthly'], true)) {
             throw ValidationException::withMessages(['installment_count' => 'Choose the number and frequency of installments.']);
         }
-        if ($downPayment < 0 || $downPayment >= $totalCents) {
+        if ($exchangeCents >= $totalCents || $downPayment < 0 || $downPayment >= $totalCents - $exchangeCents) {
             throw ValidationException::withMessages(['down_payment' => 'Down payment must be zero or more and less than the sale total.']);
         }
         if ($providedAmount > 0 && $providedAmount !== $downPayment) {
             throw ValidationException::withMessages(['amount_paid' => 'Amount paid must match the down payment.']);
         }
 
+        $interestRate = (float) ($data['interest_rate'] ?? 0);
+        $interestRateScaled = self::scaled($interestRate, 2);
+        $principalCents = $totalCents - $exchangeCents - $downPayment;
+        $interestCents = intdiv(($principalCents * $interestRateScaled) + 5000, 10000);
+
+        $startDate = $saleChannel === 'pos'
+            ? Carbon::parse($data['installment_start_date'] ?? $data['document_date'])->startOfDay()
+            : null;
+
         return [
             'payment_type' => 'installment', 'payment_method' => $downPayment > 0 ? ($paymentMethod ?: 'cash') : null,
-            'initial_payment' => $downPayment, 'down_payment' => $downPayment, 'installment_count' => $count,
-            'installment_frequency' => $frequency, 'first_installment_date' => $data['first_installment_date'] ?? null,
-            'remaining' => $totalCents - $downPayment,
+            'initial_payment' => $exchangeCents + $downPayment, 'down_payment' => $downPayment, 'installment_count' => $count,
+            'installment_frequency' => $frequency, 'installment_start_date' => $startDate?->toDateString(),
+            'first_installment_date' => $startDate
+                ? $this->installmentDueDate($startDate, $frequency, 1)->toDateString()
+                : ($data['first_installment_date'] ?? null),
+            'remaining' => $principalCents + $interestCents,
+            'interest_rate' => number_format($interestRate, 2, '.', ''), 'interest_amount' => $interestCents, 'exchange_value' => $exchangeCents,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function goldSnapshot(Product $product, ?int $branchId, string $documentDate): array
+    {
+        $snapshot = [
+            'gold_gross_weight' => $product->is_gold_item ? $product->gold_gross_weight : null,
+            'gold_net_weight' => null,
+            'gold_purity' => $product->is_gold_item ? $product->gold_purity : null,
+            'gold_rate' => null,
+            'making_charge' => 0,
+            'wastage_weight' => 0,
+            'stone_value' => $product->is_gold_item ? $product->stone_value : 0,
+            'tag_number' => $product->is_gold_item ? $product->tag_number : null,
+            'hallmark_code' => $product->is_gold_item ? $product->hallmark_code : null,
+            'unit_price' => null,
+        ];
+        if (! $product->is_gold_item) {
+            return $snapshot;
+        }
+
+        $netWeight = max(0, (float) $product->gold_gross_weight - (float) $product->gold_stone_weight - (float) $product->gold_other_weight);
+        $snapshot['gold_net_weight'] = number_format($netWeight, 3, '.', '');
+        if (! $branchId) {
+            return $snapshot;
+        }
+        $rate = GoldRate::query()->where('organization_id', $product->organization_id)->where('branch_id', $branchId)
+            ->where('metal', 'gold')->whereRaw('UPPER(purity) = ?', [strtoupper((string) $product->gold_purity)])
+            ->whereDate('effective_on', '<=', $documentDate)->orderByDesc('effective_on')->first();
+        if (! $rate) {
+            return $snapshot;
+        }
+
+        $wastageWeight = $netWeight * (float) $product->wastage_percent / 100;
+        $metalValue = ($netWeight + $wastageWeight) * (float) $rate->rate_per_gram;
+        $makingCharge = match ($product->making_charge_mode) {
+            'percentage' => $metalValue * (float) $product->making_charge / 100,
+            'flat' => (float) $product->making_charge,
+            default => $netWeight * (float) $product->making_charge,
+        };
+        $snapshot['gold_rate'] = $rate->rate_per_gram;
+        $snapshot['making_charge'] = number_format($makingCharge, 2, '.', '');
+        $snapshot['wastage_weight'] = number_format($wastageWeight, 3, '.', '');
+        $snapshot['unit_price'] = number_format($metalValue + $makingCharge + (float) $product->stone_value, 2, '.', '');
+
+        return $snapshot;
+    }
+
+    /** @return array{weight: string, purity: ?string, rate: int, value: int} */
+    private function goldExchange(array $data, string $type, bool $goldStore, int $organizationId, int $branchId): array
+    {
+        $weight = self::scaled($data['gold_exchange_weight'] ?? 0, 3);
+        if (! $goldStore || ! in_array($type, ['sale', 'resale'], true) || $weight <= 0) {
+            return ['weight' => '0.000', 'purity' => null, 'rate' => 0, 'value' => 0];
+        }
+        $purity = strtoupper((string) ($data['gold_exchange_purity'] ?? ''));
+        $rate = GoldRate::query()->where('organization_id', $organizationId)
+            ->where('branch_id', $branchId)->where('metal', 'gold')->whereRaw('UPPER(purity) = ?', [$purity])
+            ->whereDate('effective_on', '<=', $data['document_date'])->orderByDesc('effective_on')->first();
+        if (! $rate) {
+            throw ValidationException::withMessages(['gold_exchange_purity' => 'No current rate is recorded for the old gold purity.']);
+        }
+        $value = intdiv(($weight * self::scaled($rate->rate_per_gram, 2)) + 500, 1000);
+
+        return ['weight' => self::quantity($weight), 'purity' => $purity, 'rate' => self::scaled($rate->rate_per_gram, 2), 'value' => $value];
     }
 
     private function createInstallments(Document $document, int $organizationId, int $branchId, array $terms): void
     {
+        $startDate = $terms['installment_start_date'] ?? null;
         $firstDate = $terms['first_installment_date']
             ? Carbon::parse($terms['first_installment_date'])->startOfDay()
-            : Carbon::parse($document->document_date)->startOfDay()->add($terms['installment_frequency'] === 'weekly' ? '1 week' : '1 month');
+            : $this->installmentDueDate(Carbon::parse($document->document_date)->startOfDay(), $terms['installment_frequency'], 1);
         $baseAmount = intdiv($terms['remaining'], $terms['installment_count']);
         $remainder = $terms['remaining'] % $terms['installment_count'];
 
         for ($sequence = 1; $sequence <= $terms['installment_count']; $sequence++) {
-            $dueDate = $terms['installment_frequency'] === 'weekly'
-                ? $firstDate->copy()->addWeeks($sequence - 1)
-                : $firstDate->copy()->addMonthsNoOverflow($sequence - 1);
+            $dueDate = $startDate
+                ? $this->installmentDueDate(Carbon::parse($startDate)->startOfDay(), $terms['installment_frequency'], $sequence)
+                : $this->installmentDueDate($firstDate, $terms['installment_frequency'], $sequence - 1);
             $amount = $baseAmount + ($sequence === $terms['installment_count'] ? $remainder : 0);
             $document->installments()->create([
                 'organization_id' => $organizationId,
@@ -400,6 +526,15 @@ class InventoryService
                 'amount' => self::money($amount),
             ]);
         }
+    }
+
+    private function installmentDueDate(Carbon $anchor, string $frequency, int $intervals): Carbon
+    {
+        return match ($frequency) {
+            'weekly' => $anchor->copy()->addWeeks($intervals),
+            'half_monthly' => $anchor->copy()->addDays(15 * $intervals),
+            'monthly' => $anchor->copy()->addMonthsNoOverflow($intervals),
+        };
     }
 
     private function createPurchaseInstallments(Document $document, int $organizationId, int $branchId, array $terms): void

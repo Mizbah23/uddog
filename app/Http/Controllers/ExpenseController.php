@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\BranchAccess;
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,11 +14,41 @@ class ExpenseController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'branch_id' => ['nullable', 'integer'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'payment_method' => ['nullable', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
+            'search' => ['nullable', 'string', 'max:255'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
         $organizationId = (int) Auth::user()->organization_id;
-        $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
+        $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, (int) ($filters['branch_id'] ?? 0) ?: null)->id;
+        $branchExpenses = Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId);
+        $query = (clone $branchExpenses)
+            ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereDate('expense_date', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereDate('expense_date', '<=', $date))
+            ->when($filters['category'] ?? null, fn ($query, $category) => $query->where('category', $category))
+            ->when($filters['payment_method'] ?? null, fn ($query, $method) => $query->where('payment_method', $method))
+            ->when($filters['search'] ?? null, function ($query, $search) {
+                $escaped = addcslashes($search, '%_\\');
+                $query->where(fn ($query) => $query->where('description', 'like', "%{$escaped}%")
+                    ->orWhere('notes', 'like', "%{$escaped}%"));
+            });
+        $summary = ['count' => (clone $query)->count(), 'total' => (clone $query)->sum('amount')];
+        $page = $query->with('creator:id,name')->orderByDesc('expense_date')->orderByDesc('id')->paginate(25);
 
-        return response()->json(Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
-            ->with('creator:id,name')->latest('expense_date')->latest('id')->limit(500)->get());
+        return response()->json([
+            'data' => $page->items(),
+            'summary' => $summary,
+            'categories' => collect(['Rent', 'Utilities', 'Payroll', 'Transport', 'Marketing', 'Maintenance', 'Other'])
+                ->merge(ExpenseCategory::query()->where('organization_id', $organizationId)->pluck('name'))
+                ->merge(Expense::query()->where('organization_id', $organizationId)->distinct()->pluck('category'))
+                ->unique(fn ($category) => mb_strtolower($category))
+                ->values(),
+            'pagination' => ['page' => $page->currentPage(), 'last_page' => $page->lastPage()],
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -27,7 +58,10 @@ class ExpenseController extends Controller
         $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, (int) $data['branch_id'])->id;
         unset($data['branch_id']);
 
-        return response()->json(Expense::create([...$data, 'organization_id' => $organizationId, 'branch_id' => $branchId, 'created_by' => Auth::id()])->load('creator:id,name'), 201);
+        $expense = Expense::create([...$data, 'organization_id' => $organizationId, 'branch_id' => $branchId, 'created_by' => Auth::id()]);
+        ExpenseCategory::query()->firstOrCreate(['organization_id' => $organizationId, 'name' => $data['category']]);
+
+        return response()->json($expense->load('creator:id,name'), 201);
     }
 
     public function update(Request $request, int $expense): JsonResponse
@@ -38,6 +72,7 @@ class ExpenseController extends Controller
         $data = $this->validated($request, false);
         unset($data['branch_id']);
         $record->update($data);
+        ExpenseCategory::query()->firstOrCreate(['organization_id' => $organizationId, 'name' => $data['category']]);
 
         return response()->json($record->fresh()->load('creator:id,name'));
     }

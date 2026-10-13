@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class StockCheck extends Model
+class StockCheck extends TenantModel
 {
     protected $fillable = ['organization_id', 'branch_id', 'number', 'check_date', 'status', 'notes', 'created_by', 'completed_by', 'completed_at'];
 

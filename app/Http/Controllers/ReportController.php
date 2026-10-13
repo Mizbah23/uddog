@@ -88,6 +88,7 @@ class ReportController extends Controller
         $rows = (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])->with(['contact:id,name', 'creator:id,name'])->orderByDesc('document_date')->get()
             ->map(fn (Document $document) => [
                 'date' => $document->document_date,
+                'recorded_at' => $document->created_at,
                 'number' => $document->number,
                 'kind' => $document->type,
                 'customer' => $document->contact?->name ?? '—',
@@ -98,7 +99,7 @@ class ReportController extends Controller
                 'payment_status' => $document->payment_status,
             ])->values();
 
-        return $this->table(['Date', 'Invoice', 'Type', 'Customer', 'Employee', 'Net total', 'Paid', 'Due', 'Payment'], $rows, ['net_sales' => $rows->sum('total'), 'paid' => $rows->sum('paid'), 'due' => $rows->sum('due')]);
+        return $this->table(['Date', 'Recorded time', 'Invoice', 'Type', 'Customer', 'Employee', 'Net total', 'Paid', 'Due', 'Payment'], $rows, ['net_sales' => $rows->sum('total'), 'paid' => $rows->sum('paid'), 'due' => $rows->sum('due')]);
     }
 
     private function purchases(Builder $documents): array
@@ -209,7 +210,7 @@ class ReportController extends Controller
             ->map(function (Contact $contact) use ($salesByContact) {
                 $sales = $salesByContact->get($contact->id, collect());
 
-                return ['customer' => $contact->name, 'phone' => $contact->phone ?? '—', 'sales_count' => $sales->count(), 'sales' => $sales->sum(fn ($document) => (float) $document->total), 'paid' => $sales->sum(fn ($document) => (float) $document->amount_paid), 'due' => $sales->sum(fn ($document) => (float) $document->balance_due), 'credit_limit' => (float) $contact->credit_limit];
+                return ['customer' => $contact->name, 'phone' => $contact->phone ?? '—', 'sales_count' => $sales->count(), 'sales' => $sales->sum(fn ($document) => (float) $document->total), 'paid' => $sales->sum(fn ($document) => (float) $document->amount_paid), 'due' => $sales->sum(fn ($document) => (float) $document->balance_due) + (float) $contact->opening_due, 'credit_limit' => (float) $contact->credit_limit];
             })->values();
 
         return $this->table(['Customer', 'Phone', 'Sales count', 'Sales', 'Paid', 'Due', 'Credit limit'], $rows, ['sales' => $rows->sum('sales'), 'paid' => $rows->sum('paid'), 'due' => $rows->sum('due')]);

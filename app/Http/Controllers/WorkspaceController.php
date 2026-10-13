@@ -17,6 +17,7 @@ use App\Permission;
 use App\ReportType;
 use App\Services\InventoryService;
 use App\SubscriptionStatus;
+use App\TenantContext;
 use App\UserRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,7 @@ class WorkspaceController extends Controller
 
         return response()->json([
             'user' => $user,
+            'gold_store' => (bool) ($organization?->gold_store ?? false),
             'setup_required' => ! User::query()->exists(),
             'permissions' => $user ? [
                 'manage_clients' => $user->isSuperadmin(),
@@ -117,9 +119,44 @@ class WorkspaceController extends Controller
     public function login(Request $request): JsonResponse
     {
         SupportImpersonation::endFor($request);
-        $credentials = $request->validate(['email' => ['required', 'email'], 'password' => ['required', 'string']]);
-        if (! Auth::attempt([...$credentials, 'active' => true, 'access_paused' => false])) {
-            throw ValidationException::withMessages(['email' => 'The email or password is incorrect.']);
+        $credentials = $request->validate(['email' => ['required', 'string', 'max:255'], 'password' => ['required', 'string']]);
+        $identifier = trim($credentials['email']);
+
+        if (str_contains($identifier, '@')) {
+            $request->validate(['email' => ['email']]);
+            $authenticated = Auth::attempt([
+                'email' => $identifier,
+                'password' => $credentials['password'],
+                'active' => true,
+                'access_paused' => false,
+            ]);
+        } else {
+            $matchingUsers = User::query()
+                ->where('mobile', $identifier)
+                ->where('role', '!=', UserRole::Superadmin->value)
+                ->limit(2)
+                ->get(['id', 'role']);
+            $phoneUser = $matchingUsers->count() === 1 ? $matchingUsers->first() : null;
+            $authenticated = $phoneUser && Auth::attempt([
+                'id' => $phoneUser->id,
+                'role' => $phoneUser->role->value,
+                'password' => $credentials['password'],
+                'active' => true,
+                'access_paused' => false,
+            ]);
+        }
+
+        if (! $authenticated) {
+            throw ValidationException::withMessages(['email' => 'The email or phone number or password is incorrect.']);
+        }
+        if (config('tenancy.enabled')) {
+            $tenant = app(TenantContext::class)->organization();
+            $user = Auth::user();
+            if (($tenant && ($user->isSuperadmin() || $user->organization_id !== $tenant->id))
+                || (! $tenant && ! $user->isSuperadmin())) {
+                Auth::logout();
+                throw ValidationException::withMessages(['email' => 'The email or phone number or password is incorrect.']);
+            }
         }
         $request->session()->regenerate();
 
@@ -261,8 +298,12 @@ class WorkspaceController extends Controller
             $request->merge(['barcode' => $barcode === '' ? null : $barcode]);
         }
 
+        $allowedUnits = Auth::user()->organization()->firstOrFail()->setup()['store']['units'];
+        if ($savedProduct) {
+            $allowedUnits[] = $savedProduct->unit;
+        }
         $data = $request->validate([
-            'sku' => ['sometimes', 'nullable', 'string', 'max:80', Rule::unique('products')->where('organization_id', $organizationId)->ignore($savedProduct?->id)],
+            'sku' => ['sometimes', 'nullable', 'string', 'max:80', Rule::unique(app(TenantContext::class)->validationTable('products'))->where('organization_id', $organizationId)->ignore($savedProduct?->id)],
             'barcode' => [
                 'bail',
                 'sometimes',
@@ -278,19 +319,36 @@ class WorkspaceController extends Controller
                         $fail('The barcode must contain a valid EAN-13 check digit.');
                     }
                 },
-                Rule::unique('products')->where('organization_id', $organizationId)->ignore($savedProduct?->id),
+                Rule::unique(app(TenantContext::class)->validationTable('products'))->where('organization_id', $organizationId)->ignore($savedProduct?->id),
             ],
             'name' => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $organizationId)],
-            'unit' => ['required', Rule::in(['pc', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L'])],
+            'category_id' => ['nullable', Rule::exists(app(TenantContext::class)->validationTable('categories'), 'id')->where('organization_id', $organizationId)],
+            'unit' => ['required', Rule::in(array_values(array_unique($allowedUnits)))],
             'cost_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'sale_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'reorder_level' => ['required', 'numeric', 'min:0', 'decimal:0,3'],
             'warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'is_gold_item' => ['sometimes', 'boolean'],
+            'gold_purity' => ['required_if:is_gold_item,1', 'nullable', 'string', 'max:20'],
+            'gold_gross_weight' => ['required_if:is_gold_item,1', 'nullable', 'numeric', 'gt:0', 'decimal:0,3'],
+            'gold_stone_weight' => ['nullable', 'numeric', 'min:0', 'decimal:0,3'],
+            'gold_other_weight' => ['nullable', 'numeric', 'min:0', 'decimal:0,3'],
+            'stone_value' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'making_charge_mode' => ['nullable', Rule::in(['per_gram', 'percentage', 'flat'])],
+            'making_charge' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'wastage_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'decimal:0,3'],
+            'tag_number' => ['nullable', 'string', 'max:80', Rule::unique(app(TenantContext::class)->validationTable('products'))->where('organization_id', $organizationId)->ignore($savedProduct?->id)],
+            'hallmark_code' => ['nullable', 'string', 'max:80'],
             'active' => ['boolean'],
         ]);
         $data['cost_price'] = $data['cost_price'] ?? $savedProduct?->cost_price ?? 0;
         $data['sale_price'] = $data['sale_price'] ?? $savedProduct?->sale_price ?? 0;
+        if (! Auth::user()->organization()->firstOrFail()->gold_store || ! ($data['is_gold_item'] ?? false)) {
+            $data['is_gold_item'] = false;
+            foreach (['gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code'] as $goldField) {
+                unset($data[$goldField]);
+            }
+        }
         $saved = $savedProduct ? tap($savedProduct)->update($data) : Product::create([...$data, 'organization_id' => $organizationId]);
 
         return response()->json($saved, $savedProduct ? 200 : 201);
@@ -315,9 +373,18 @@ class WorkspaceController extends Controller
             'area' => ['nullable', 'string', 'max:100'],
             'category' => ['nullable', 'string', 'max:100'],
             'credit_limit' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'opening_due' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'opening_payable' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'active' => ['boolean'],
         ]);
         $data['credit_limit'] = $data['credit_limit'] ?? $savedContact?->credit_limit ?? 0;
+        if ($savedContact) {
+            unset($data['opening_due']);
+            unset($data['opening_payable']);
+        } else {
+            $data['opening_due'] = in_array($data['type'], ['customer', 'both'], true) ? ($data['opening_due'] ?? 0) : 0;
+            $data['opening_payable'] = in_array($data['type'], ['supplier', 'both'], true) ? ($data['opening_payable'] ?? 0) : 0;
+        }
         $saved = $savedContact ? tap($savedContact)->update($data) : Contact::create([...$data, 'organization_id' => $organizationId]);
 
         return response()->json($saved, $savedContact ? 200 : 201);
@@ -358,9 +425,9 @@ class WorkspaceController extends Controller
         $data = $request->validate([
             'type' => ['required', Rule::in(['purchase', 'sale', 'resale', 'purchase_return', 'sale_return'])],
             'sale_channel' => ['sometimes', Rule::in(['standard', 'pos'])],
-            'contact_id' => ['required', Rule::exists('contacts', 'id')->where('organization_id', $organizationId)],
-            'purchase_id' => ['required_if:type,purchase_return', 'nullable', Rule::exists('documents', 'id')->where('organization_id', $organizationId)],
-            'sale_id' => ['required_if:type,sale_return', 'nullable', Rule::exists('documents', 'id')->where('organization_id', $organizationId)],
+            'contact_id' => ['required', Rule::exists(app(TenantContext::class)->validationTable('contacts'), 'id')->where('organization_id', $organizationId)],
+            'purchase_id' => ['required_if:type,purchase_return', 'nullable', Rule::exists(app(TenantContext::class)->validationTable('documents'), 'id')->where('organization_id', $organizationId)],
+            'sale_id' => ['required_if:type,sale_return', 'nullable', Rule::exists(app(TenantContext::class)->validationTable('documents'), 'id')->where('organization_id', $organizationId)],
             'document_date' => ['required', 'date'],
             'discount' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'tax' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
@@ -368,12 +435,16 @@ class WorkspaceController extends Controller
             'amount_paid' => ['required_if:sale_channel,pos', 'nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'payment_type' => ['nullable', Rule::in(['full', 'installment', 'due'])],
             'down_payment' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'interest_rate' => ['nullable', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
             'installment_count' => ['nullable', 'integer', 'min:1', 'max:120'],
-            'installment_frequency' => ['nullable', Rule::in(['weekly', 'monthly'])],
+            'installment_frequency' => ['nullable', Rule::in(['weekly', 'half_monthly', 'monthly'])],
+            'installment_start_date' => ['nullable', 'date', 'after_or_equal:document_date'],
             'first_installment_date' => ['nullable', 'date'],
+            'gold_exchange_weight' => ['nullable', 'numeric', 'min:0', 'decimal:0,3'],
+            'gold_exchange_purity' => ['nullable', 'string', 'max:20'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', Rule::exists('products', 'id')->where('organization_id', $organizationId), 'distinct'],
+            'items.*.product_id' => ['required', Rule::exists(app(TenantContext::class)->validationTable('products'), 'id')->where('organization_id', $organizationId), 'distinct'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,3'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
         ]);
@@ -398,7 +469,10 @@ class WorkspaceController extends Controller
         if (($data['sale_channel'] ?? 'standard') === 'pos' && $data['type'] !== 'sale') {
             throw ValidationException::withMessages(['sale_channel' => 'POS checkout can only create a sale.']);
         }
-        abort_unless(Auth::user()->hasPermission($this->permissionForDocumentType($data['type'])), 403, 'Your owner has not granted access to this transaction type.');
+        $requiredPermission = $data['type'] === 'sale' && ($data['sale_channel'] ?? 'standard') === 'pos'
+            ? Permission::PosSale
+            : $this->permissionForDocumentType($data['type']);
+        abort_unless(Auth::user()->hasPermission($requiredPermission), 403, 'Your owner has not granted access to this transaction type.');
         $contact = Contact::query()->where('organization_id', $organizationId)->findOrFail($data['contact_id']);
         $expected = in_array($data['type'], ['purchase', 'purchase_return'], true) ? 'supplier' : 'customer';
         if (! in_array($contact->type, [$expected, 'both'], true)) {
@@ -415,6 +489,12 @@ class WorkspaceController extends Controller
             ->where('organization_id', $organizationId)
             ->whereIn('type', ['sale', 'resale'])
             ->findOrFail($document);
+        abort_unless(
+            Auth::user()->hasPermission($this->permissionForDocumentType($sale->type))
+                || ($sale->type === 'sale' && $sale->sale_channel === 'pos' && Auth::user()->hasPermission(Permission::PosSale)),
+            403,
+            'Your owner has not granted access to collect payments for this sale.'
+        );
         app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $sale->branch_id);
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
@@ -438,7 +518,7 @@ class WorkspaceController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $payment = DB::transaction(function () use ($document, $organizationId, $data) {
+        $payment = DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($document, $organizationId, $data) {
             $purchase = Document::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($document);
             abort_unless($purchase->type === 'purchase', 404);
             app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $purchase->branch_id);

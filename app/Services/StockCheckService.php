@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\StockCheck;
 use App\Models\StockMovement;
+use App\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -13,7 +14,7 @@ class StockCheckService
 {
     public function complete(StockCheck $stockCheck, int $userId): StockCheck
     {
-        return DB::transaction(function () use ($stockCheck, $userId) {
+        return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($stockCheck, $userId) {
             $lockedCheck = StockCheck::query()->whereKey($stockCheck->id)->lockForUpdate()->firstOrFail();
             if ($lockedCheck->status !== 'draft') {
                 throw ValidationException::withMessages(['status' => 'This stock check has already been completed.']);

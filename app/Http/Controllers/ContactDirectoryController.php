@@ -42,7 +42,7 @@ class ContactDirectoryController extends Controller
                 ...$contact->toArray(),
                 $type === 'customer' ? 'sales_total' : 'purchases_total' => number_format($total, 2, '.', ''),
                 'paid_total' => number_format($paid, 2, '.', ''),
-                'balance_total' => number_format($total - $paid, 2, '.', ''),
+                'balance_total' => number_format($total - $paid + ($type === 'customer' ? (float) $contact->opening_due : (float) $contact->opening_payable), 2, '.', ''),
             ];
         })->values());
     }

@@ -61,6 +61,45 @@ class ProfileTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors('password');
     }
 
+    public function test_company_user_cannot_register_another_company_users_phone_number(): void
+    {
+        User::factory()->admin()->create(['mobile' => '01700000000']);
+        $user = User::factory()->staff()->create(['mobile' => '01800000000']);
+
+        $this->actingAs($user)->putJson('/api/profile', [
+            'name' => $user->name,
+            'mobile' => '01700000000',
+        ])->assertUnprocessable()->assertJsonValidationErrors('mobile');
+
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'mobile' => '01800000000']);
+    }
+
+    public function test_superadmin_cannot_register_a_company_users_phone_number(): void
+    {
+        User::factory()->admin()->create(['mobile' => '01700000000']);
+        $superadmin = User::factory()->superadmin()->create(['mobile' => '01800000000']);
+
+        $this->actingAs($superadmin)->putJson('/api/profile', [
+            'name' => $superadmin->name,
+            'mobile' => '01700000000',
+        ])->assertUnprocessable()->assertJsonValidationErrors('mobile');
+
+        $this->assertDatabaseHas('users', ['id' => $superadmin->id, 'mobile' => '01800000000']);
+    }
+
+    public function test_company_user_cannot_register_a_superadmin_phone_number(): void
+    {
+        User::factory()->superadmin()->create(['mobile' => '01700000000']);
+        $user = User::factory()->staff()->create(['mobile' => '01800000000']);
+
+        $this->actingAs($user)->putJson('/api/profile', [
+            'name' => $user->name,
+            'mobile' => '01700000000',
+        ])->assertUnprocessable()->assertJsonValidationErrors('mobile');
+
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'mobile' => '01800000000']);
+    }
+
     public function test_only_company_owner_receives_plan_and_remaining_days_in_session(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-10-03 12:00:00', 'UTC'));

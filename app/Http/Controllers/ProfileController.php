@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
@@ -17,7 +18,10 @@ class ProfileController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'mobile' => ['nullable', 'string', 'max:30'],
+            'mobile' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('users', 'mobile')->ignore($request->user()->id),
+            ],
             'current_password' => ['nullable', 'required_with:password', 'current_password'],
             'password' => ['nullable', 'string', Password::min(8)],
         ]);

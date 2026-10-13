@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\SupportImpersonation;
+use App\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -52,7 +53,7 @@ class CategoryController extends Controller
     private function validated(Request $request, int $organizationId, ?int $categoryId = null): array
     {
         return $request->validate([
-            'name' => ['required', 'string', 'max:100', Rule::unique('categories')->where('organization_id', $organizationId)->ignore($categoryId)],
+            'name' => ['required', 'string', 'max:100', Rule::unique(app(TenantContext::class)->validationTable('categories'))->where('organization_id', $organizationId)->ignore($categoryId)],
             'description' => ['nullable', 'string', 'max:1000'],
             'active' => ['required', 'boolean'],
         ]);

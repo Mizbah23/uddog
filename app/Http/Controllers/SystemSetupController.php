@@ -26,11 +26,14 @@ class SystemSetupController extends Controller
             'sales.default_payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
             'purchases' => ['required', 'array:allow_purchase_returns'],
             'purchases.allow_purchase_returns' => ['required', 'boolean'],
-            'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,default_reorder_level'],
+            'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,default_reorder_level,units'],
             'store.allow_stock_adjustments' => ['required', 'boolean'],
             'store.allow_stock_transfers' => ['required', 'boolean'],
             'store.default_reorder_level' => ['required', 'numeric', 'min:0', 'max:999999', 'decimal:0,3'],
+            'store.units' => ['sometimes', 'array', 'min:1', 'max:50'],
+            'store.units.*' => ['required', 'string', 'max:30', 'distinct:strict'],
         ]);
+        $data['store']['units'] = array_values(array_unique($data['store']['units'] ?? $organization->setup()['store']['units']));
         $organization->update(['system_settings' => $data]);
 
         return response()->json($organization->fresh()->setup());

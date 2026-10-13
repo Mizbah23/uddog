@@ -77,4 +77,49 @@ class StaffPermissionTest extends TestCase
             'permissions' => [],
         ])->assertUnprocessable()->assertJsonValidationErrors('role');
     }
+
+    public function test_pos_permission_is_independent_from_regular_sales_permission(): void
+    {
+        $staff = User::factory()->staff()->create(['permissions' => [Permission::PosSale->value]]);
+        $customer = Contact::create(['organization_id' => $staff->organization_id, 'name' => 'Customer', 'type' => 'customer']);
+        $product = Product::create([
+            'organization_id' => $staff->organization_id,
+            'name' => 'Stocked product',
+            'unit' => 'pc',
+            'cost_price' => 5,
+            'sale_price' => 10,
+            'quantity_on_hand' => 5,
+            'reorder_level' => 1,
+        ]);
+        $sale = [
+            'type' => 'sale',
+            'contact_id' => $customer->id,
+            'document_date' => now()->toDateString(),
+            'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 10]],
+        ];
+
+        $this->actingAs($staff)->getJson('/api/session')
+            ->assertOk()
+            ->assertJsonPath('permissions.abilities.0', Permission::PosSale->value);
+        $this->actingAs($staff)->getJson('/api/products')->assertOk();
+        $this->actingAs($staff)->getJson('/api/categories')->assertOk();
+        $this->actingAs($staff)->getJson('/api/contacts')->assertOk();
+        $this->actingAs($staff)->postJson('/api/documents', [
+            ...$sale,
+            'sale_channel' => 'pos',
+            'payment_method' => 'cash',
+            'amount_paid' => '10.00',
+        ])->assertCreated()->assertJsonPath('sale_channel', 'pos');
+        $this->actingAs($staff)->postJson('/api/documents', $sale)->assertForbidden();
+        $this->actingAs($staff)->getJson('/api/documents')->assertForbidden();
+
+        $staff->update(['permissions' => [Permission::Sales->value]]);
+        $this->actingAs($staff->fresh())->postJson('/api/documents', [
+            ...$sale,
+            'sale_channel' => 'pos',
+            'payment_method' => 'cash',
+            'amount_paid' => '10.00',
+        ])->assertForbidden();
+        $this->actingAs($staff->fresh())->postJson('/api/documents', $sale)->assertCreated();
+    }
 }

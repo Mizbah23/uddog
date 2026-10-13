@@ -37,6 +37,21 @@ class SystemSetupTest extends TestCase
         $this->assertFalse($owner->organization->fresh()->setup()['sales']['allow_due_sales']);
     }
 
+    public function test_owner_can_configure_product_units_and_create_products_with_them(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $store = [...$this->settings()['store'], 'units' => ['pc', 'g', 'oz', 'ভরি']];
+
+        $this->actingAs($owner)->putJson('/api/system-setup', [...$this->settings(), 'store' => $store])
+            ->assertOk()
+            ->assertJsonPath('store.units.2', 'oz');
+
+        $this->postJson('/api/products', [
+            'name' => 'Gold ring', 'unit' => 'ভরি', 'cost_price' => 0, 'sale_price' => 0,
+            'reorder_level' => 0, 'active' => true,
+        ])->assertCreated()->assertJsonPath('unit', 'ভরি');
+    }
+
     public function test_operational_settings_do_not_assign_staff_permissions(): void
     {
         $owner = User::factory()->admin()->create();

@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class StockTransferItem extends Model
+class StockTransferItem extends TenantModel
 {
     protected $fillable = ['product_id', 'quantity'];
 

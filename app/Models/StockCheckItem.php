@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class StockCheckItem extends Model
+class StockCheckItem extends TenantModel
 {
     protected $fillable = ['product_id', 'expected_quantity', 'counted_quantity'];
 

@@ -2,13 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Product extends Model
+class Product extends TenantModel
 {
-    protected $fillable = ['organization_id', 'sku', 'barcode', 'category_id', 'name', 'unit', 'cost_price', 'sale_price', 'quantity_on_hand', 'reorder_level', 'warranty_months', 'active'];
+    protected $fillable = ['organization_id', 'sku', 'barcode', 'category_id', 'name', 'unit', 'cost_price', 'sale_price', 'quantity_on_hand', 'reorder_level', 'warranty_months', 'active', 'is_gold_item', 'gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code'];
 
     protected function casts(): array
     {
@@ -19,6 +18,13 @@ class Product extends Model
             'quantity_on_hand' => 'decimal:3',
             'reorder_level' => 'decimal:3',
             'warranty_months' => 'integer',
+            'is_gold_item' => 'boolean',
+            'gold_gross_weight' => 'decimal:3',
+            'gold_stone_weight' => 'decimal:3',
+            'gold_other_weight' => 'decimal:3',
+            'stone_value' => 'decimal:2',
+            'making_charge' => 'decimal:2',
+            'wastage_percent' => 'decimal:3',
         ];
     }
 

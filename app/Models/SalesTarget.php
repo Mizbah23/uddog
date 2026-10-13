@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class SalesTarget extends Model
+class SalesTarget extends TenantModel
 {
     protected $fillable = ['organization_id', 'branch_id', 'user_id', 'period', 'target_amount', 'notes', 'created_by'];
 

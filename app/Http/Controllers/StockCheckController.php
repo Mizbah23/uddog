@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\BranchAccess;
-use App\Models\Branch;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\StockCheck;
 use App\Models\SupportImpersonation;
 use App\Services\StockCheckService;
+use App\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -47,7 +47,7 @@ class StockCheckController extends Controller
         }
         $stocks = ProductStock::query()->where('branch_id', $branchId)->whereIn('product_id', $products->pluck('id'))->pluck('quantity_on_hand', 'product_id');
 
-        $stockCheck = DB::transaction(function () use ($data, $organizationId, $branchId, $products, $stocks) {
+        $stockCheck = DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($data, $organizationId, $branchId, $products, $stocks) {
             $stockCheck = StockCheck::create([
                 'organization_id' => $organizationId,
                 'branch_id' => $branchId,
@@ -89,7 +89,7 @@ class StockCheckController extends Controller
         if (count($data['items']) !== $existingItems->count() || collect($data['items'])->contains(fn ($item) => ! $existingItems->has($item['id']))) {
             throw ValidationException::withMessages(['items' => 'The stock check items do not match this count session.']);
         }
-        DB::transaction(function () use ($saved, $data, $existingItems) {
+        DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($saved, $data, $existingItems) {
             $saved->update(['check_date' => $data['check_date'], 'notes' => $data['notes'] ?? null]);
             foreach ($data['items'] as $item) {
                 $existingItems[$item['id']]->update(['counted_quantity' => $item['counted_quantity']]);

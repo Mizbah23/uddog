@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\TenantContext;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class PasswordRecoveryController extends Controller
         $request->validate(['email' => ['required', 'email', 'max:255']]);
 
         // Always return the same response to avoid exposing which addresses have accounts.
-        Password::sendResetLink($request->only('email'));
+        Password::sendResetLink($this->scopedCredentials($request, $request->only('email')));
 
         return response()->json(['message' => 'If an account exists for that email, a password reset link has been sent.']);
     }
@@ -29,7 +30,7 @@ class PasswordRecoveryController extends Controller
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
         ]);
 
-        $status = Password::reset($data, function ($user, string $password) {
+        $status = Password::reset($this->scopedCredentials($request, $data), function ($user, string $password) {
             $user->forceFill([
                 'password' => $password,
                 'remember_token' => Str::random(60),
@@ -42,5 +43,26 @@ class PasswordRecoveryController extends Controller
         }
 
         return response()->json(['message' => 'Your password has been reset. You can now sign in.']);
+    }
+
+    /** @param array<string, mixed> $credentials
+     * @return array<string, mixed>
+     */
+    private function scopedCredentials(Request $request, array $credentials): array
+    {
+        if (! config('tenancy.enabled')) {
+            return $credentials;
+        }
+
+        $organization = app(TenantContext::class)->organization();
+
+        if ($organization) {
+            $credentials['organization_id'] = $organization->id;
+            $credentials['role'] = ['admin', 'manager', 'staff'];
+        } else {
+            $credentials['role'] = 'superadmin';
+        }
+
+        return $credentials;
     }
 }

@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class PurchaseInstallment extends Model
+class PurchaseInstallment extends TenantModel
 {
     protected $fillable = ['organization_id', 'branch_id', 'document_id', 'sequence', 'due_date', 'amount', 'amount_paid'];
 

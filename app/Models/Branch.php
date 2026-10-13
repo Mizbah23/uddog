@@ -2,12 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Branch extends Model
+class Branch extends TenantModel
 {
     protected $fillable = ['organization_id', 'name', 'code', 'phone', 'address', 'is_default', 'active'];
 

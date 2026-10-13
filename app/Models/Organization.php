@@ -14,7 +14,7 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'notes', 'system_settings'];
+    protected $fillable = ['name', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'notes', 'system_settings', 'tenant_database'];
 
     protected $appends = ['subscription_active'];
 
@@ -24,6 +24,7 @@ class Organization extends Model
             'subscription_status' => SubscriptionStatus::class,
             'subscription_ends_at' => 'date',
             'access_paused' => 'boolean',
+            'gold_store' => 'boolean',
             'system_settings' => 'array',
         ];
     }
@@ -45,6 +46,7 @@ class Organization extends Model
                 'allow_stock_adjustments' => true,
                 'allow_stock_transfers' => true,
                 'default_reorder_level' => 0,
+                'units' => ['pc', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'],
             ], $saved['store'] ?? []),
         ];
     }
@@ -52,6 +54,10 @@ class Organization extends Model
     protected static function booted(): void
     {
         static::created(function (Organization $organization) {
+            if (config('tenancy.enabled')) {
+                return;
+            }
+
             $organization->branches()->create([
                 'name' => 'Main Branch',
                 'code' => 'MAIN',

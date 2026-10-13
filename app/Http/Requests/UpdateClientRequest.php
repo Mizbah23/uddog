@@ -35,6 +35,7 @@ class UpdateClientRequest extends FormRequest
             'plan_name' => ['nullable', 'string', 'max:100'],
             'subscription_status' => ['required', Rule::enum(SubscriptionStatus::class)],
             'subscription_ends_at' => ['nullable', 'date'],
+            'gold_store' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'owner_name' => ['required', 'string', 'max:100'],
             'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($ownerId)],

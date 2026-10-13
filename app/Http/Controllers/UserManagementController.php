@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\Branch;
+use App\Models\Organization;
 use App\Models\User;
+use App\Services\TenantProvisioner;
+use App\TenantContext;
 use App\UserRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,13 +19,29 @@ class UserManagementController extends Controller
     public function index(): JsonResponse
     {
         $actor = request()->user();
-        $users = User::query()
-            ->with('organization:id,name,subscription_status,subscription_ends_at,access_paused', 'accessibleBranches:id,name,code')
+        $query = User::query()
+            ->with('organization:id,name,subscription_status,subscription_ends_at,access_paused,tenant_database')
             ->when(! $actor->isSuperadmin(), fn ($query) => $query
                 ->where('organization_id', $actor->organization_id)
                 ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value]))
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        if (! config('tenancy.enabled') || ! $actor->isSuperadmin()) {
+            $query->with('accessibleBranches:id,name,code');
+        }
+        $users = $query->get();
+        if (config('tenancy.enabled') && $actor->isSuperadmin()) {
+            $users->each(function (User $user): void {
+                if ($user->organization?->tenant_database && in_array($user->role, [UserRole::Manager, UserRole::Staff], true)) {
+                    app(TenantContext::class)->run($user->organization, function () use ($user): void {
+                        $user->load('accessibleBranches:id,name,code');
+                        $user->setRelation('accessibleBranches', $user->accessibleBranches->map(fn ($branch) => $branch->toArray()));
+                    });
+                } else {
+                    $user->setRelation('accessibleBranches', collect());
+                }
+            });
+        }
 
         return response()->json($users);
     }
@@ -51,12 +70,23 @@ class UserManagementController extends Controller
             $branchIds = [];
         }
 
-        $this->validateBranchAccess($branchIds, $data['role'], (int) $data['organization_id']);
+        $company = $data['role'] !== UserRole::Superadmin->value && ! empty($data['organization_id'])
+            ? Organization::query()->findOrFail($data['organization_id']) : null;
+        $save = function () use ($branchIds, $data): JsonResponse {
+            $this->validateBranchAccess($branchIds, $data['role'], (int) ($data['organization_id'] ?? 0));
+            $user = User::create($data);
+            app(TenantProvisioner::class)->syncUserShadow($user);
+            if (! config('tenancy.enabled') || $data['role'] !== UserRole::Superadmin->value) {
+                $user->accessibleBranches()->sync($branchIds);
+                $user->load('accessibleBranches:id,name,code');
+            } else {
+                $user->setRelation('accessibleBranches', collect());
+            }
 
-        $user = User::create($data);
-        $user->accessibleBranches()->sync($branchIds);
+            return response()->json($user->load('organization:id,name'), 201);
+        };
 
-        return response()->json($user->load('organization:id,name', 'accessibleBranches:id,name,code'), 201);
+        return $company ? app(TenantContext::class)->run($company, $save) : $save();
     }
 
     public function update(UpdateUserRequest $request, int $managedUser): JsonResponse
@@ -68,8 +98,6 @@ class UserManagementController extends Controller
                 ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value]))
             ->findOrFail($managedUser);
         $data = $request->validated();
-        $branchIds = $data['branch_ids'] ?? $user->accessibleBranches()->pluck('branches.id')->all();
-        unset($data['branch_ids']);
 
         if (! $actor->isSuperadmin()) {
             if (! in_array($data['role'], [UserRole::Manager->value, UserRole::Staff->value], true)) {
@@ -77,6 +105,21 @@ class UserManagementController extends Controller
             }
             $data['organization_id'] = $actor->organization_id;
         }
+
+        if (config('tenancy.enabled') && (int) ($data['organization_id'] ?? 0) !== (int) ($user->organization_id ?? 0)) {
+            throw ValidationException::withMessages(['organization_id' => 'Moving an existing account between company databases is not supported. Create an account in the destination company instead.']);
+        }
+
+        if (config('tenancy.enabled') && $user->isSuperadmin() !== ($data['role'] === UserRole::Superadmin->value)) {
+            throw ValidationException::withMessages(['role' => 'Platform superadmin accounts cannot be converted to or from company accounts.']);
+        }
+
+        $company = $data['role'] !== UserRole::Superadmin->value && ! empty($data['organization_id'])
+            ? Organization::query()->findOrFail($data['organization_id']) : null;
+        $branchIds = $data['branch_ids'] ?? ($company
+            ? app(TenantContext::class)->run($company, fn () => $user->accessibleBranches()->pluck('branches.id')->all())
+            : []);
+        unset($data['branch_ids']);
 
         if ($data['role'] !== UserRole::Superadmin->value && empty($data['organization_id'])) {
             throw ValidationException::withMessages(['organization_id' => 'Select a client account for this user.']);
@@ -97,12 +140,23 @@ class UserManagementController extends Controller
             $branchIds = [];
         }
 
-        $this->validateBranchAccess($branchIds, $data['role'], (int) $data['organization_id']);
+        $save = function () use ($branchIds, $data, $user): JsonResponse {
+            $this->validateBranchAccess($branchIds, $data['role'], (int) ($data['organization_id'] ?? 0));
+            $user->update($data);
+            app(TenantProvisioner::class)->syncUserShadow($user);
+            if (! config('tenancy.enabled') || $data['role'] !== UserRole::Superadmin->value) {
+                $user->accessibleBranches()->sync($branchIds);
+                $user->load('accessibleBranches:id,name,code');
+            } else {
+                $user->setRelation('accessibleBranches', collect());
+            }
 
-        $user->update($data);
-        $user->accessibleBranches()->sync($branchIds);
+            $user->load('organization:id,name');
 
-        return response()->json($user->fresh()->load('organization:id,name', 'accessibleBranches:id,name,code'));
+            return response()->json($user);
+        };
+
+        return $company ? app(TenantContext::class)->run($company, $save) : $save();
     }
 
     public function updateAccess(Request $request, int $managedUser): JsonResponse
@@ -113,8 +167,15 @@ class UserManagementController extends Controller
             ->whereNotNull('organization_id')
             ->findOrFail($managedUser);
         $user->update(['access_paused' => $data['paused']]);
+        $user->refresh()->load('organization:id,name');
+        app(TenantContext::class)->run($user->organization, function () use ($user): void {
+            $user->load('accessibleBranches:id,name,code');
+            if (config('tenancy.enabled')) {
+                $user->setRelation('accessibleBranches', $user->accessibleBranches->map(fn ($branch) => $branch->toArray()));
+            }
+        });
 
-        return response()->json($user->fresh()->load('organization:id,name', 'accessibleBranches:id,name,code'));
+        return response()->json($user);
     }
 
     private function validateBranchAccess(array $branchIds, string $role, int $organizationId): void

@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\StockMovement;
 use App\Models\StockTransfer;
+use App\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -14,7 +15,7 @@ class StockTransferService
 {
     public function create(array $data, int $organizationId, int $userId): StockTransfer
     {
-        return DB::transaction(function () use ($data, $organizationId, $userId) {
+        return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($data, $organizationId, $userId) {
             $branches = Branch::query()->where('organization_id', $organizationId)
                 ->whereIn('id', [$data['from_branch_id'], $data['to_branch_id']])
                 ->where('active', true)->lockForUpdate()->get()->keyBy('id');

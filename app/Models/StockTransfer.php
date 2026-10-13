@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class StockTransfer extends Model
+class StockTransfer extends TenantModel
 {
     protected $fillable = ['organization_id', 'from_branch_id', 'to_branch_id', 'number', 'transfer_date', 'status', 'notes', 'created_by'];
 

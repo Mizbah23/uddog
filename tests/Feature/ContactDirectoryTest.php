@@ -18,12 +18,12 @@ class ContactDirectoryTest extends TestCase
         $user = User::factory()->admin()->create();
         $supplier = Contact::create([
             'organization_id' => $user->organization_id, 'name' => 'North Supplier', 'company' => 'North Trading',
-            'type' => 'supplier', 'phone' => '01710000000', 'address' => 'Uttara, Dhaka', 'active' => true,
+            'type' => 'supplier', 'phone' => '01710000000', 'address' => 'Uttara, Dhaka', 'opening_payable' => 40, 'active' => true,
         ]);
         $customer = Contact::create([
             'organization_id' => $user->organization_id, 'name' => 'Retail Customer', 'company' => 'Retail Co.',
             'type' => 'customer', 'phone' => '01720000000', 'address' => 'Dhanmondi, Dhaka', 'area' => 'Dhanmondi',
-            'category' => 'Retail', 'credit_limit' => 5000, 'active' => true,
+            'category' => 'Retail', 'credit_limit' => 5000, 'opening_due' => 250, 'active' => true,
         ]);
         $product = Product::create([
             'organization_id' => $user->organization_id, 'name' => 'Directory item', 'unit' => 'pc',
@@ -49,7 +49,7 @@ class ContactDirectoryTest extends TestCase
             ->assertJsonPath('0.credit_limit', '5000.00')
             ->assertJsonPath('0.sales_total', '100.00')
             ->assertJsonPath('0.paid_total', '60.00')
-            ->assertJsonPath('0.balance_total', '40.00');
+            ->assertJsonPath('0.balance_total', '290.00');
 
         $this->actingAs($user)->getJson('/api/suppliers')
             ->assertOk()
@@ -57,7 +57,7 @@ class ContactDirectoryTest extends TestCase
             ->assertJsonPath('0.company', 'North Trading')
             ->assertJsonPath('0.purchases_total', '100.00')
             ->assertJsonPath('0.paid_total', '0.00')
-            ->assertJsonPath('0.balance_total', '100.00');
+            ->assertJsonPath('0.balance_total', '140.00');
     }
 
     public function test_contact_directory_is_scoped_to_the_company_and_requires_contacts_permission(): void
@@ -82,10 +82,20 @@ class ContactDirectoryTest extends TestCase
 
         $this->actingAs($user)->postJson('/api/contacts', [
             'name' => 'New customer', 'type' => 'customer', 'company' => 'Customer Company', 'phone' => '01900000000',
-            'area' => 'Mirpur', 'category' => 'Wholesale', 'credit_limit' => 12000, 'active' => false,
+            'area' => 'Mirpur', 'category' => 'Wholesale', 'credit_limit' => 12000, 'opening_due' => 750.50, 'active' => false,
         ])->assertCreated()
             ->assertJsonPath('company', 'Customer Company')
             ->assertJsonPath('credit_limit', '12000.00')
+            ->assertJsonPath('opening_due', '750.50')
             ->assertJsonPath('active', false);
+
+        $this->actingAs($user)->postJson('/api/contacts', [
+            'name' => 'New supplier', 'type' => 'supplier', 'opening_payable' => 175.25,
+        ])->assertCreated()
+            ->assertJsonPath('opening_payable', '175.25');
+
+        $this->actingAs($user)->getJson('/api/suppliers')
+            ->assertOk()
+            ->assertJsonPath('0.balance_total', '175.25');
     }
 }

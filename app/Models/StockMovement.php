@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class StockMovement extends Model
+class StockMovement extends TenantModel
 {
     protected $fillable = ['organization_id', 'branch_id', 'product_id', 'document_id', 'stock_check_id', 'stock_transfer_id', 'type', 'quantity_change', 'balance_after', 'notes', 'created_by'];
 
