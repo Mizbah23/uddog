@@ -7,9 +7,11 @@ use App\Http\Controllers\ContactDirectoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GoldStoreController;
 use App\Http\Controllers\PasswordRecoveryController;
+use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SalesTargetController;
+use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\SupportImpersonationController;
@@ -82,6 +84,12 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::delete('sales-targets/{salesTarget}', [SalesTargetController::class, 'destroy'])->middleware('permission:sales_targets');
 
             Route::middleware('role:admin')->group(function () {
+                Route::get('staff', [StaffController::class, 'index']);
+                Route::post('staff', [StaffController::class, 'store']);
+                Route::put('staff/{staffMember}', [StaffController::class, 'update']);
+                Route::delete('staff/{staffMember}', [StaffController::class, 'destroy']);
+                Route::get('payroll', [PayrollController::class, 'index']);
+                Route::post('payroll', [PayrollController::class, 'store']);
                 Route::get('system-setup', [SystemSetupController::class, 'show']);
                 Route::put('system-setup', [SystemSetupController::class, 'update']);
             });

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\BranchAccess;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
+use App\Models\PayrollItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +38,7 @@ class ExpenseController extends Controller
                     ->orWhere('notes', 'like', "%{$escaped}%"));
             });
         $summary = ['count' => (clone $query)->count(), 'total' => (clone $query)->sum('amount')];
-        $page = $query->with('creator:id,name')->orderByDesc('expense_date')->orderByDesc('id')->paginate(25);
+        $page = $query->with('creator:id,name')->withExists('payrollItem')->orderByDesc('expense_date')->orderByDesc('id')->paginate(25);
 
         return response()->json([
             'data' => $page->items(),
@@ -69,6 +70,7 @@ class ExpenseController extends Controller
         $organizationId = (int) Auth::user()->organization_id;
         $record = Expense::query()->where('organization_id', $organizationId)->findOrFail($expense);
         app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $record->branch_id);
+        abort_if(PayrollItem::query()->where('expense_id', $record->id)->exists(), 422, 'Payroll expenses must be managed from the staff module.');
         $data = $this->validated($request, false);
         unset($data['branch_id']);
         $record->update($data);
@@ -82,6 +84,7 @@ class ExpenseController extends Controller
         $organizationId = (int) Auth::user()->organization_id;
         $record = Expense::query()->where('organization_id', $organizationId)->findOrFail($expense);
         app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $record->branch_id);
+        abort_if(PayrollItem::query()->where('expense_id', $record->id)->exists(), 422, 'Payroll expenses must be managed from the staff module.');
         $record->delete();
 
         return response()->json(['ok' => true]);

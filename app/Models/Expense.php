@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Expense extends TenantModel
 {
@@ -21,5 +22,10 @@ class Expense extends TenantModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function payrollItem(): HasOne
+    {
+        return $this->hasOne(PayrollItem::class);
     }
 }

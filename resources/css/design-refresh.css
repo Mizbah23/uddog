@@ -301,24 +301,33 @@ body {
 .analytics-panel { min-height: 300px; padding: 21px; }
 .analytics-panel .panel-heading { margin-bottom: 19px; }
 .analytics-heading-icon { color: #7464d9; }
-.monthly-chart { display: grid; grid-template-columns: repeat(12, minmax(18px, 1fr)); gap: 7px; height: 175px; padding: 8px 2px 0; border-bottom: 1px solid #e9e8f0; align-items: stretch; }
-.month-chart-column { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-width: 0; }
-.month-chart-bars { position: relative; display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; height: calc(100% - 20px); }
-.month-chart-bars::after { position: absolute; top: 50%; right: 0; left: 0; height: 1px; background: #e9e8f0; content: ''; }
-.month-bar { position: absolute; display: block; width: min(11px, 35%); min-height: 0; border-radius: 5px 5px 1px 1px; transition: height .2s ease; }
+.chart-summary { display: flex; flex-wrap: wrap; gap: 10px; margin: -3px 0 15px; }
+.chart-summary span { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #efedf5; border-radius: 7px; background: #faf9fd; color: #77768b; font-size: 11px; }
+.chart-summary strong { margin-left: 3px; color: #343749; font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-summary i { width: 8px; height: 8px; border-radius: 50%; }
+.monthly-chart { min-width: 0; }
+.monthly-chart-plot { position: relative; display: grid; grid-template-columns: repeat(12, minmax(18px, 1fr)); gap: 7px; height: 170px; }
+.monthly-chart-plot::after { position: absolute; right: 0; bottom: var(--zero-bottom, 0%); left: 0; z-index: 1; height: 1px; background: #c8c5d5; content: ''; }
+.chart-guide { position: absolute; right: 0; left: 0; border-top: 1px dashed #efedf5; }
+.guide-quarter { top: 25%; }
+.guide-half { top: 50%; }
+.guide-three-quarter { top: 75%; }
+.month-chart-column, .month-chart-bars { position: relative; width: 100%; height: 100%; min-width: 0; }
+.month-bar { position: absolute; z-index: 2; display: block; width: min(19px, 35%); border-radius: 5px 5px 1px 1px; transition: height .2s ease, filter .2s ease; }
 .month-bar.negative { border-radius: 1px 1px 5px 5px; }
 .month-bar::after { position: absolute; z-index: 5; left: 50%; padding: 6px 9px; border-radius: 6px; background: #303446; color: #fff; content: attr(data-tooltip); font-size: 10px; font-weight: 600; line-height: 1.2; opacity: 0; pointer-events: none; white-space: nowrap; transform: translateX(-50%); transition: opacity .12s ease; }
 .month-bar:not(.negative)::after { bottom: calc(100% + 8px); }
 .month-bar.negative::after { top: calc(100% + 8px); }
+.month-bar:hover, .month-bar:focus-visible { filter: brightness(1.06); outline: 2px solid transparent; }
 .month-bar:hover::after, .month-bar:focus-visible::after { opacity: 1; }
-.sales-bar { left: calc(50% - 13px); }
+.sales-bar { right: calc(50% + 2px); }
 .purchase-bar { left: calc(50% + 2px); }
 .sales-bar { background: linear-gradient(180deg, #9a7af0, #7356d8); }
 .purchase-bar { background: linear-gradient(180deg, #72d7ae, #32af83); }
-.month-chart-column small { margin-top: 7px; color: #858397; font-size: 10px; }
-.chart-legend { display: flex; gap: 16px; margin-top: 14px; color: #6e6c82; font-size: 11px; }
-.chart-legend span { display: inline-flex; gap: 7px; align-items: center; }
-.chart-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.month-chart-labels { display: grid; grid-template-columns: repeat(12, minmax(18px, 1fr)); gap: 7px; margin-top: 8px; }
+.month-chart-labels small { min-width: 0; color: #9896a7; font-size: 10px; text-align: center; }
+.month-chart-labels small.active { color: #454359; font-weight: 750; }
+.chart-empty-note { margin: -90px 0 65px; color: #9a98a8; font-size: 11px; text-align: center; }
 .sales-dot { background: #8062df; }
 .purchase-dot { background: #42bd8e; }
 .category-chart-list { display: flex; flex-direction: column; gap: 17px; }
@@ -334,9 +343,9 @@ body {
 }
 @media (max-width: 580px) {
   .report-filter-grid { grid-template-columns: 1fr; }
-  .monthly-chart { gap: 3px; }
-  .month-chart-column small { font-size: 9px; }
-  .month-bar { width: 7px; }
+  .monthly-chart-plot, .month-chart-labels { gap: 3px; }
+  .month-chart-labels small { font-size: 9px; }
+  .month-bar { width: min(10px, 37%); }
 }
 
 .profile-menu button:hover { color: #6758ed; background: #f4f2ff; }

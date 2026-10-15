@@ -1,0 +1,18 @@
+.staff-module { display: grid; gap: 22px; }
+.staff-module .page-heading { margin-bottom: 0; }
+.staff-stats { margin-bottom: 0; }
+.staff-payroll-panel { padding: 26px; }
+.staff-section-heading, .staff-payroll-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.staff-section-heading h2 { margin: 6px 0; font-size: 21px; }
+.staff-section-heading p, .staff-payroll-action > span { color: #8b8ea2; font-size: 14px; }
+.staff-total-badge { color: #695cef; background: #f0edff; padding: 10px 14px; border-radius: 12px; font-weight: 800; white-space: nowrap; }
+.staff-payroll-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.staff-payroll-preview { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 15px 18px; border: 1px solid #e6e4f4; border-radius: 12px; background: #faf9ff; color: #777b91; font-size: 14px; }
+.staff-payroll-preview strong { color: #35374b; }
+.staff-payroll-action { margin-top: 20px; }
+.staff-payroll-action .staff-paid-note { color: #23885c; display: inline-flex; align-items: center; gap: 6px; }
+.staff-run-details { display: grid; gap: 9px; padding: 10px 14px; background: #f8f8fc; border-radius: 10px; }
+.staff-run-details > div { display: flex; justify-content: space-between; gap: 16px; }
+.staff-active-field { display: flex; align-items: center; gap: 10px; }
+.staff-active-field input { width: 18px; height: 18px; }
+@media (max-width: 850px) { .staff-payroll-controls { grid-template-columns: 1fr; } .staff-section-heading, .staff-payroll-action { align-items: flex-start; flex-direction: column; } }
