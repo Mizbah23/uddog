@@ -32,6 +32,7 @@ class UpdateClientRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($this->route('client'))],
+            'subdomain' => ['nullable', 'string', 'max:63', 'regex:/\A[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\z/D', Rule::notIn(['admin', 'www', 'mail', 'ftp', 'cpanel', 'webmail', 'autodiscover', 'autoconfig']), Rule::unique('organizations', 'subdomain')->ignore($this->route('client'))],
             'plan_name' => ['nullable', 'string', 'max:100'],
             'subscription_status' => ['required', Rule::enum(SubscriptionStatus::class)],
             'subscription_ends_at' => ['nullable', 'date'],
@@ -42,5 +43,12 @@ class UpdateClientRequest extends FormRequest
             'owner_password' => [Rule::requiredIf(! $ownerId), 'nullable', 'string', Password::min(8)],
             'owner_active' => ['required', 'boolean'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('subdomain'))) {
+            $this->merge(['subdomain' => strtolower(trim($this->input('subdomain'))) ?: null]);
+        }
     }
 }

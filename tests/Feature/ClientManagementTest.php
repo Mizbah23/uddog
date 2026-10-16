@@ -90,6 +90,34 @@ class ClientManagementTest extends TestCase
         $this->assertTrue(Hash::check('NewPass123', $owner->password));
     }
 
+    public function test_company_subdomains_are_normalized_unique_and_optional(): void
+    {
+        $company = Organization::factory()->create();
+        $anotherCompany = Organization::factory()->create(['subdomain' => 'taken']);
+        $owner = User::factory()->admin()->for($company)->create();
+        $superadmin = User::factory()->superadmin()->create();
+        $payload = [
+            'name' => $company->name,
+            'subscription_status' => SubscriptionStatus::Active->value,
+            'owner_name' => $owner->name,
+            'owner_email' => $owner->email,
+            'owner_active' => true,
+        ];
+
+        $this->actingAs($superadmin)->putJson("/api/clients/{$company->id}", [...$payload, 'subdomain' => ' Demo '])
+            ->assertOk()->assertJsonPath('subdomain', 'demo');
+        $this->putJson("/api/clients/{$company->id}", [...$payload, 'subdomain' => 'taken'])
+            ->assertUnprocessable()->assertJsonValidationErrors('subdomain');
+        $this->putJson("/api/clients/{$company->id}", [...$payload, 'subdomain' => '2'])
+            ->assertUnprocessable()->assertJsonValidationErrors('subdomain');
+        $this->putJson("/api/clients/{$company->id}", [...$payload, 'subdomain' => 'www'])
+            ->assertUnprocessable()->assertJsonValidationErrors('subdomain');
+        $this->putJson("/api/clients/{$company->id}", [...$payload, 'subdomain' => ''])
+            ->assertOk()->assertJsonPath('subdomain', null);
+
+        $this->assertSame('taken', $anotherCompany->fresh()->subdomain);
+    }
+
     public function test_superadmin_can_create_a_missing_owner_while_editing_company(): void
     {
         $company = Organization::factory()->create();

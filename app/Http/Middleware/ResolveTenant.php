@@ -38,9 +38,15 @@ class ResolveTenant
             $suffix = '.'.$baseDomain;
             abort_unless(str_ends_with($host, $suffix), 404);
             $label = substr($host, 0, -strlen($suffix));
-            abort_unless(ctype_digit($label) && $label !== '', 404);
+            abort_if($label === '' || str_contains($label, '.'), 404);
 
-            $organization = Organization::query()->whereKey((int) $label)->whereNotNull('tenant_database')->firstOrFail();
+            $organization = Organization::query()
+                ->whereNotNull('tenant_database')
+                ->when(
+                    ctype_digit($label),
+                    fn ($query) => $query->whereKey((int) $label),
+                    fn ($query) => $query->where('subdomain', $label),
+                )->firstOrFail();
             abort_if($request->user() && ($request->user()->isSuperadmin() || $request->user()->organization_id !== $organization->id), 403);
             $context->activate($organization);
         }

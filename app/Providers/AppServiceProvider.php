@@ -34,7 +34,7 @@ class AppServiceProvider extends ServiceProvider
             $port = isset($appUrl['port']) ? ':'.$appUrl['port'] : '';
             $host = $user->isSuperadmin()
                 ? config('tenancy.central_host')
-                : $user->organization_id.'.'.config('tenancy.base_domain');
+                : ($user->organization?->subdomain ?: $user->organization_id).'.'.config('tenancy.base_domain');
             $query = http_build_query(['email' => $user->getEmailForPasswordReset()], '', '&', PHP_QUERY_RFC3986);
 
             return $scheme.'://'.$host.$port.'/password/reset/'.rawurlencode($token).'?'.$query;

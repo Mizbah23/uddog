@@ -51,7 +51,7 @@ class TenantDatabaseTest extends TestCase
         $this->actingAs($userA)->getJson('http://'.$companyA->id.'.test/api/session')
             ->assertOk()->assertJsonPath('user.id', $userA->id);
         $this->getJson('http://'.$companyB->id.'.test/api/session')->assertForbidden();
-        $this->getJson('http://admin.test/api/session')->assertForbidden();
+        $this->getJson('http://test/api/session')->assertForbidden();
         $this->assertNotSame($userA->id, $userB->id);
     }
 
@@ -60,10 +60,46 @@ class TenantDatabaseTest extends TestCase
         $this->configureTenancy();
 
         $this->getJson('http://999.test/api/session')->assertNotFound();
+        $this->getJson('http://admin.test/api/session')->assertNotFound();
         $this->getJson('http://evil.example/api/session')->assertNotFound();
 
         $this->expectException(LogicException::class);
         Product::query()->count();
+    }
+
+    public function test_named_and_numeric_hosts_can_reach_the_same_company(): void
+    {
+        $company = Organization::factory()->create(['subdomain' => 'demo']);
+        $otherCompany = Organization::factory()->create(['subdomain' => 'other']);
+        $owner = User::factory()->admin()->for($company)->create();
+        $this->configureTenancy();
+        $this->prepareDatabase($company, 'Demo product');
+        $this->prepareDatabase($otherCompany, 'Other product');
+
+        $this->get('http://demo.test/')->assertOk();
+        $this->actingAs($owner)->getJson('http://demo.test/api/session')
+            ->assertOk()->assertJsonPath('user.id', $owner->id);
+        $this->getJson('http://'.$company->id.'.test/api/session')
+            ->assertOk()->assertJsonPath('user.id', $owner->id);
+        $this->getJson('http://other.test/api/session')->assertForbidden();
+        $this->getJson('http://unknown.test/api/session')->assertNotFound();
+        $this->getJson('http://nested.demo.test/api/session')->assertNotFound();
+    }
+
+    public function test_named_company_password_recovery_uses_its_named_host(): void
+    {
+        $company = Organization::factory()->create(['subdomain' => 'demo']);
+        $owner = User::factory()->admin()->for($company)->create();
+        $this->configureTenancy();
+        $this->prepareDatabase($company, 'Demo product');
+        $this->withoutMiddleware(ThrottleRequests::class);
+        Notification::fake();
+
+        $this->postJson('http://demo.test/api/password/forgot', ['email' => $owner->email])->assertOk();
+        Notification::assertSentTo($owner, ResetPassword::class);
+        $notification = Notification::sent($owner, ResetPassword::class)->first();
+        $url = (ResetPassword::$createUrlCallback)($owner, $notification->token);
+        $this->assertSame('demo.test', parse_url($url, PHP_URL_HOST));
     }
 
     public function test_company_login_is_rejected_on_another_company_host(): void
@@ -96,7 +132,7 @@ class TenantDatabaseTest extends TestCase
         Notification::fake();
 
         $this->postJson('http://'.$companyB->id.'.test/api/password/forgot', ['email' => $userA->email])->assertOk();
-        $this->postJson('http://admin.test/api/password/forgot', ['email' => $userA->email])->assertOk();
+        $this->postJson('http://test/api/password/forgot', ['email' => $userA->email])->assertOk();
         Notification::assertNothingSent();
 
         $this->postJson('http://'.$companyA->id.'.test/api/password/forgot', ['email' => $userA->email])->assertOk();
@@ -119,11 +155,11 @@ class TenantDatabaseTest extends TestCase
             'password_confirmation' => 'new-password',
         ])->assertOk();
 
-        $this->postJson('http://admin.test/api/password/forgot', ['email' => $superadmin->email])->assertOk();
+        $this->postJson('http://test/api/password/forgot', ['email' => $superadmin->email])->assertOk();
         Notification::assertSentTo($superadmin, ResetPassword::class);
         $adminNotification = Notification::sent($superadmin, ResetPassword::class)->first();
         $adminUrl = (ResetPassword::$createUrlCallback)($superadmin, $adminNotification->token);
-        $this->assertSame('admin.test', parse_url($adminUrl, PHP_URL_HOST));
+        $this->assertSame('test', parse_url($adminUrl, PHP_URL_HOST));
     }
 
     public function test_superadmin_can_read_company_branches_after_switching_database_context(): void
@@ -141,11 +177,11 @@ class TenantDatabaseTest extends TestCase
             'updated_at' => now(),
         ]));
 
-        $this->actingAs($superadmin)->getJson('http://admin.test/api/clients/'.$company->id)
+        $this->actingAs($superadmin)->getJson('http://test/api/clients/'.$company->id)
             ->assertOk()
             ->assertJsonPath('branches.0.name', 'Main Branch')
             ->assertJsonPath('products_count', 1);
-        $users = $this->getJson('http://admin.test/api/users')->assertOk()->json();
+        $users = $this->getJson('http://test/api/users')->assertOk()->json();
         $managedUser = collect($users)->firstWhere('id', $manager->id);
         $this->assertSame('Main Branch', $managedUser['accessible_branches'][0]['name']);
     }
@@ -156,7 +192,7 @@ class TenantDatabaseTest extends TestCase
         $superadmin = User::factory()->superadmin()->for($platform)->create();
         $this->configureTenancy();
 
-        $this->actingAs($superadmin)->putJson('http://admin.test/api/users/'.$superadmin->id, [
+        $this->actingAs($superadmin)->putJson('http://test/api/users/'.$superadmin->id, [
             'name' => 'Platform Owner',
             'email' => $superadmin->email,
             'role' => 'superadmin',
@@ -171,7 +207,7 @@ class TenantDatabaseTest extends TestCase
             'tenancy.enabled' => true,
             'tenancy.central_connection' => 'sqlite',
             'tenancy.base_domain' => 'test',
-            'tenancy.central_host' => 'admin.test',
+            'tenancy.central_host' => 'test',
             'tenancy.sqlite_directory' => sys_get_temp_dir(),
         ]);
     }
