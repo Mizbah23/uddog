@@ -16,6 +16,7 @@ use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\SupportImpersonationController;
 use App\Http\Controllers\SystemSetupController;
+use App\Http\Controllers\SystemUpdateController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WorkspaceController;
@@ -102,6 +103,8 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
         });
 
         Route::middleware('role:superadmin')->group(function () {
+            Route::get('system-updates', [SystemUpdateController::class, 'show']);
+            Route::post('system-updates', [SystemUpdateController::class, 'store'])->middleware('throttle:2,1');
             Route::get('clients', [ClientController::class, 'index']);
             Route::get('clients/{client}', [ClientController::class, 'show']);
             Route::post('clients/{client}/branches', [BranchController::class, 'storeForClient']);
