@@ -17,6 +17,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class ClientController extends Controller
 {
@@ -31,6 +33,8 @@ class ClientController extends Controller
         if (config('tenancy.enabled')) {
             $companies->each(fn (Organization $company) => $this->loadTenantCounts($company));
         }
+
+        $companies->each(fn (Organization $company) => $this->addProvisioningDetails($company));
 
         return response()->json($companies);
     }
@@ -47,6 +51,8 @@ class ClientController extends Controller
         if (config('tenancy.enabled')) {
             $this->loadTenantCounts($organization);
         }
+
+        $this->addProvisioningDetails($organization);
 
         if ($organization->tenant_database || ! config('tenancy.enabled')) {
             app(TenantContext::class)->run($organization, function () use ($organization): void {
@@ -82,11 +88,36 @@ class ClientController extends Controller
             return $organization;
         });
 
-        if (config('tenancy.enabled')) {
+        if (config('tenancy.enabled') && config('tenancy.provisioning_mode') !== 'cpanel') {
             app(TenantProvisioner::class)->provision($organization);
         }
 
-        return response()->json($this->companyQuery()->findOrFail($organization->id), 201);
+        $created = $this->companyQuery()->findOrFail($organization->id);
+        $this->addProvisioningDetails($created);
+
+        return response()->json($created, 201);
+    }
+
+    public function provision(Request $request, int $client, TenantProvisioner $provisioner): JsonResponse
+    {
+        abort_unless(config('tenancy.enabled') && config('tenancy.provisioning_mode') === 'cpanel', 404);
+
+        $organization = Organization::query()->findOrFail($client);
+        abort_if($organization->users()->where('role', UserRole::Superadmin->value)->exists(), 403);
+        $request->validate([
+            'database' => ['required', 'string', 'in:'.config('tenancy.database_prefix').$organization->id],
+        ]);
+        try {
+            $provisioner->provisionExisting($organization);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages(['database' => $exception->getMessage()]);
+        }
+
+        $provisioned = $this->companyQuery()->findOrFail($client);
+        $this->loadTenantCounts($provisioned);
+        $this->addProvisioningDetails($provisioned);
+
+        return response()->json($provisioned);
     }
 
     public function update(UpdateClientRequest $request, int $client): JsonResponse
@@ -185,5 +216,12 @@ class ClientController extends Controller
             $organization->setAttribute('contacts_count', Contact::query()->where('organization_id', $organization->id)->count());
             $organization->setAttribute('documents_count', Document::query()->where('organization_id', $organization->id)->count());
         });
+    }
+
+    private function addProvisioningDetails(Organization $organization): void
+    {
+        if (config('tenancy.enabled') && config('tenancy.provisioning_mode') === 'cpanel') {
+            $organization->setAttribute('expected_tenant_database', config('tenancy.database_prefix').$organization->id);
+        }
     }
 }

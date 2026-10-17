@@ -110,6 +110,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::post('clients/{client}/branches', [BranchController::class, 'storeForClient']);
             Route::delete('clients/{client}/branches/{branch}', [BranchController::class, 'destroyForClient']);
             Route::post('clients', [ClientController::class, 'store']);
+            Route::post('clients/{client}/provision', [ClientController::class, 'provision'])->middleware('throttle:2,1');
             Route::put('clients/{client}', [ClientController::class, 'update']);
             Route::post('clients/{client}/renew', [ClientController::class, 'renew']);
             Route::put('clients/{client}/access', [ClientController::class, 'updateAccess']);

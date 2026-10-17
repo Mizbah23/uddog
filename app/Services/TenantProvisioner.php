@@ -6,10 +6,12 @@ use App\Models\Branch;
 use App\Models\Organization;
 use App\Models\User;
 use App\TenantContext;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -34,17 +36,7 @@ class TenantProvisioner
 
     public function provision(Organization $organization): void
     {
-        if (! config('tenancy.enabled')) {
-            throw new RuntimeException('Enable database tenancy before provisioning companies.');
-        }
-        if ($organization->tenant_database) {
-            throw new RuntimeException('This company already has a database.');
-        }
-
-        $database = config('tenancy.database_prefix').$organization->id;
-        if (! preg_match('/\A[a-zA-Z0-9_]+\z/D', $database)) {
-            throw new RuntimeException('The configured company database prefix is invalid.');
-        }
+        $database = $this->expectedDatabase($organization);
 
         $central = DB::connection(config('tenancy.central_connection'));
         if (! in_array($central->getDriverName(), ['mysql', 'mariadb'], true)) {
@@ -55,12 +47,72 @@ class TenantProvisioner
         }
 
         $central->statement("CREATE DATABASE `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        $this->initializeDatabase($organization, $database, $central);
+    }
+
+    public function provisionExisting(Organization $organization): void
+    {
+        abort_unless(config('tenancy.provisioning_mode') === 'cpanel', 404);
+
+        $lock = @fopen(storage_path('framework/cache/company-provision-'.$organization->id.'.lock'), 'c');
+        if ($lock === false) {
+            throw new RuntimeException('The company setup lock file is not writable.');
+        }
+
+        try {
+            if (! flock($lock, LOCK_EX | LOCK_NB)) {
+                throw new RuntimeException('Company setup is already running.');
+            }
+
+            $organization->refresh();
+            $database = $this->expectedDatabase($organization);
+            $central = DB::connection(config('tenancy.central_connection'));
+            if (! in_array($central->getDriverName(), ['mysql', 'mariadb'], true)) {
+                throw new RuntimeException('cPanel company provisioning requires MySQL or MariaDB.');
+            }
+            if (! $central->table('information_schema.SCHEMATA')->where('SCHEMA_NAME', $database)->exists()) {
+                throw new RuntimeException("Create {$database} in cPanel and grant the application database user access before initializing this company.");
+            }
+            if ($central->table('information_schema.TABLES')->where('TABLE_SCHEMA', $database)->exists()) {
+                throw new RuntimeException('The company database is not empty. No tables were changed; inspect it before retrying.');
+            }
+
+            $this->initializeDatabase($organization, $database, $central);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    private function expectedDatabase(Organization $organization): string
+    {
+        if (! config('tenancy.enabled')) {
+            throw new RuntimeException('Enable database tenancy before provisioning companies.');
+        }
+        if ($organization->tenant_database) {
+            throw new RuntimeException('This company already has a database.');
+        }
+
+        $database = (string) config('tenancy.database_prefix').$organization->id;
+        if (! preg_match('/\A[a-zA-Z0-9_]+\z/D', $database)) {
+            throw new RuntimeException('The configured company database prefix is invalid.');
+        }
+        if ($database === config('database.connections.'.config('tenancy.central_connection').'.database')) {
+            throw new RuntimeException('The company database must not be the central database.');
+        }
+
+        return $database;
+    }
+
+    private function initializeDatabase(Organization $organization, string $database, Connection $central): void
+    {
         $organization->tenant_database = $database;
 
         app(TenantContext::class)->run($organization, function () use ($organization, $database, $central): void {
             $exitCode = Artisan::call('migrate', ['--database' => 'tenant', '--force' => true, '--no-interaction' => true]);
             if ($exitCode !== 0) {
-                throw new RuntimeException('Company database migrations failed: '.Artisan::output());
+                Log::error('Company database migrations failed', ['organization_id' => $organization->id, 'output' => Artisan::output()]);
+                throw new RuntimeException('Company database migrations failed. Review the Laravel log before retrying.');
             }
 
             $tenant = DB::connection('tenant');
