@@ -9,6 +9,7 @@ import '../css/design-refresh.css';
 import '../css/contact-directory.css';
 import '../css/branch-access.css';
 import '../css/staff-module.css';
+import '../css/responsive.css';
 import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
 
 const workspaceNav = [
