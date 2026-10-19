@@ -1,0 +1,205 @@
+/* Keep layout containers shrinkable so wide content scrolls inside its panel. */
+.main-wrap,
+.content,
+.panel,
+.dashboard-grid > *,
+.dashboard-analytics-grid > *,
+.table-toolbar > *,
+.page-heading > *,
+.form-grid > *,
+.document-bottom > *,
+.pos-layout > * {
+  min-width: 0;
+}
+
+.table-scroll,
+.stock-check-table-wrap {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.field input:not([type='checkbox']),
+.field select,
+.field textarea,
+.search-box,
+.filter-select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The sidebar still occupies the screen at tablet widths, so let the
+   workspace controls use a second line before they collide with the title. */
+@media (max-width: 1100px) {
+  .topbar {
+    height: auto;
+    min-height: 64px;
+    flex-wrap: wrap;
+    gap: 0 12px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .topbar-left {
+    min-width: 0;
+    min-height: 38px;
+  }
+
+  .topbar-left strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-right {
+    min-width: 0;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .topbar-right .btn-secondary-app,
+  .topbar-right .btn-primary-app {
+    white-space: nowrap;
+  }
+
+  .topbar .company-chip {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 850px) {
+  .topbar-right {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    padding-top: 7px;
+  }
+
+  .topbar-date {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .topbar {
+    padding: 9px 14px;
+  }
+
+  .topbar-left {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .topbar-left .breadcrumb-home,
+  .topbar-left .breadcrumb-slash {
+    display: none;
+  }
+
+  .topbar-right {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .topbar-right .profile-menu-wrap {
+    margin-left: auto;
+  }
+
+  .topbar-right .branch-switcher {
+    min-width: 0;
+    max-width: calc(100% - 48px);
+  }
+
+  .topbar-right .branch-switcher select {
+    min-width: 0;
+    max-width: min(40vw, 170px);
+  }
+
+  .content {
+    padding: 18px 14px 36px;
+  }
+
+  .page-heading,
+  .compact-page-heading .page-heading {
+    align-items: stretch;
+  }
+
+  .page-heading > button,
+  .page-heading > .company-toolbar-actions {
+    width: 100%;
+  }
+
+  .panel-heading,
+  .table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .panel-heading > .search-box,
+  .table-toolbar > .search-box,
+  .table-toolbar > .filter-select {
+    width: 100%;
+  }
+
+  .modal-card,
+  .modal-card.wide {
+    box-sizing: border-box;
+    max-height: 100dvh;
+    height: 100dvh;
+    padding: 18px 16px 0;
+  }
+
+  .modal-actions {
+    flex-wrap: wrap;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .modal-actions > button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .report-view-shell .content {
+    padding: 18px 14px 36px;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar .language-switcher {
+    padding: 0 6px;
+  }
+
+  .topbar .language-switcher select {
+    max-width: 78px;
+  }
+
+  .stats-grid,
+  .stock-check-meta,
+  .item-row,
+  .transfer-item-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .item-row .field:first-child,
+  .transfer-item-row .field:first-child {
+    grid-column: auto;
+  }
+
+  .pos-product-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .setup-section-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .roadmap-meta,
+  .staff-run-details > div {
+    flex-wrap: wrap;
+  }
+}
