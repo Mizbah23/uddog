@@ -1290,6 +1290,21 @@ Object.assign(bangla, {
     'No branches found.': 'কোনো শাখা পাওয়া যায়নি।',
     'Branch added successfully.': 'শাখা সফলভাবে যোগ করা হয়েছে।',
     'Only the superadmin can add a branch from company management.': 'শুধু সুপার অ্যাডমিন কোম্পানি ব্যবস্থাপনা থেকে শাখা যোগ করতে পারবেন।',
+    'YOUR WORKSPACE': 'আপনার কর্মক্ষেত্র',
+    'Hello,': 'হ্যালো,',
+    'Your business': 'আপনার ব্যবসা',
+    'Business summary': 'ব্যবসার সারসংক্ষেপ',
+    'Business overview': 'ব্যবসার সারসংক্ষেপ',
+    'All time': 'সর্বমোট',
+    'BUSINESS SNAPSHOT': 'ব্যবসার এক নজর',
+    'Quick actions': 'দ্রুত কাজ',
+    'Get things done': 'কাজ শুরু করুন',
+    'Manage your store': 'দোকান পরিচালনা',
+    'Home': 'হোম',
+    'More': 'আরও',
+    'More sections': 'আরও বিভাগ',
+    'items': 'টি পণ্য',
+    'Create your first sale or purchase to see activity here.': 'এখানে কার্যক্রম দেখতে প্রথম বিক্রয় বা ক্রয় তৈরি করুন।',
 });
 
 const normalizedBangla = new Map(Object.entries(bangla).map(([source, result]) => [source.toLocaleLowerCase('en'), result]));
