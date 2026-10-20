@@ -11,7 +11,7 @@ import '../css/branch-access.css';
 import '../css/staff-module.css';
 import '../css/responsive.css';
 import '../css/client-mobile-dashboard.css';
-import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
+import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowLeft, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
 
 const workspaceNav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, abilities: ['dashboard'] },
@@ -66,6 +66,7 @@ const documentLineToFill = ref(0);
 const editingId = ref(null);
 const detailId = ref(null);
 const search = ref('');
+const directoryDueOnly = ref(false);
 const overview = ref({ products: 0, stock_value: 0, low_stock: 0, sales_total: 0, purchase_total: 0, recent_documents: [], low_stock_products: [] });
 const products = ref([]);
 const categories = ref([]);
@@ -108,7 +109,22 @@ const reportKinds = [
   { id: 'customer_ledger', label: 'Customer ledger', abilities: ['contacts'], description: 'Customer transaction debit and credit history.' },
   { id: 'customer_due', label: 'Customer due', abilities: ['sales', 'resales'], description: 'Unpaid and partially paid customer invoices.' },
 ];
+const reportVisuals = {
+  sales: { icon: ReceiptText, tone: 'violet' },
+  purchases: { icon: ShoppingBag, tone: 'orange' },
+  profit_loss: { icon: ChartNoAxesCombined, tone: 'green' },
+  employee_sales: { icon: Users, tone: 'blue' },
+  stock: { icon: Boxes, tone: 'green' },
+  adjustments: { icon: ClipboardCheck, tone: 'slate' },
+  barcode_products: { icon: Barcode, tone: 'blue' },
+  barcode_sales: { icon: Barcode, tone: 'violet' },
+  categories: { icon: Tags, tone: 'orange' },
+  customers: { icon: Users, tone: 'blue' },
+  customer_ledger: { icon: ClipboardList, tone: 'slate' },
+  customer_due: { icon: Banknote, tone: 'orange' },
+};
 const reportKind = ref(isReportView && reportKinds.some(report => report.id === reportViewParams.get('report')) ? reportViewParams.get('report') : 'sales');
+const reportDetailOpen = ref(false);
 const reportToday = new Date().toLocaleDateString('en-CA');
 const reportFilters = ref({
   date_from: isReportView ? reportViewParams.get('date_from') || '' : `${reportToday.slice(0, 7)}-01`,
@@ -412,7 +428,7 @@ async function initialize() {
       await checkSystemUpdates();
       if (systemUpdateStatus.value?.total) return;
       await refresh();
-      if (page.value === 'reports') await loadReport();
+      if (page.value === 'reports' && isReportView) await loadReport();
       if (page.value === 'profile') {
         const profile = await api('profile');
         profileForm.value = { name: profile.name, mobile: profile.mobile || '', current_password: '', password: '' };
@@ -435,10 +451,11 @@ onMounted(async () => {
   await applyLanguage();
 });
 watch(language, applyLanguage);
-window.addEventListener('hashchange', () => { const requested = location.hash.replace('#', '') || 'dashboard'; page.value = requested === 'profile' || nav.value.some(item => item.id === requested) ? requested : nav.value[0]?.id || 'dashboard'; reportsExpanded.value = page.value === 'reports'; mobileOpen.value = false; });
-function navigate(id) { page.value = id; location.hash = id; mobileOpen.value = false; profileMenuOpen.value = false; search.value = ''; if (id !== 'reports') reportsExpanded.value = false; if (id === 'reports') loadReport(); }
+window.addEventListener('hashchange', () => { const requested = location.hash.replace('#', '') || 'dashboard'; page.value = requested === 'profile' || nav.value.some(item => item.id === requested) ? requested : nav.value[0]?.id || 'dashboard'; reportsExpanded.value = page.value === 'reports'; if (page.value !== 'reports') reportDetailOpen.value = false; mobileOpen.value = false; });
+function navigate(id) { page.value = id; location.hash = id; mobileOpen.value = false; profileMenuOpen.value = false; search.value = ''; directoryDueOnly.value = false; reportDetailOpen.value = false; if (id !== 'reports') reportsExpanded.value = false; if (id === 'reports' && isReportView) loadReport(); }
+function openDueDirectory(id) { navigate(id); directoryDueOnly.value = true; }
 function toggleReportsMenu() {
-  if (page.value !== 'reports') {
+  if (page.value !== 'reports' || reportDetailOpen.value) {
     reportsExpanded.value = true;
     navigate('reports');
   } else {
@@ -450,6 +467,9 @@ function selectReport(id) {
   reportKind.value = id;
   reportsExpanded.value = true;
   navigate('reports');
+  reportDetailOpen.value = true;
+  loadReport();
+  nextTick(() => window.scrollTo(0, 0));
 }
 function canOpenReport(report) {
   return session.value?.permissions?.reports?.includes(report.id);
@@ -490,6 +510,7 @@ async function loadReport() {
     reportKind.value = availableReportKinds.value[0]?.id || 'sales';
   }
   reportLoading.value = true;
+  reportResult.value = { columns: [], rows: [], summary: {} };
   error.value = '';
   try {
     const exportContext = { kind: reportKind.value, branchId: activeBranchId.value, filters: { ...reportFilters.value } };
@@ -550,7 +571,7 @@ async function switchBranch() {
   localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(activeBranchId.value));
   expensePage.value = 1;
   error.value = ''; busy.value = true;
-  try { await refresh(); if (page.value === 'reports') await loadReport(); } catch (e) { error.value = e.message; } finally { busy.value = false; }
+  try { await refresh(); if (page.value === 'reports' && (reportDetailOpen.value || isReportView)) await loadReport(); } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 
 async function authenticate() {
@@ -627,7 +648,9 @@ async function loadExpenses() {
 async function applyExpenseFilters() { expensePage.value = 1; try { await loadExpenses(); } catch (e) { error.value = e.message; } }
 async function changeExpensePage(nextPage) { expensePage.value = nextPage; try { await loadExpenses(); } catch (e) { error.value = e.message; } }
 const filteredContacts = computed(() => contacts.value.filter(c => `${c.name} ${c.phone || ''} ${c.email || ''}`.toLowerCase().includes(search.value.toLowerCase())));
-const directoryContacts = computed(() => (page.value === 'customers' ? customers.value : suppliers.value).filter(contact => `${contact.name} ${contact.company || ''} ${contact.phone || ''} ${contact.email || ''} ${contact.address || ''} ${contact.area || ''} ${contact.category || ''}`.toLowerCase().includes(search.value.toLowerCase())));
+const customerDueTotal = computed(() => customers.value.reduce((total, contact) => total + Math.max(0, Number(contact.balance_total) || 0), 0));
+const supplierDueTotal = computed(() => suppliers.value.reduce((total, contact) => total + Math.max(0, Number(contact.balance_total) || 0), 0));
+const directoryContacts = computed(() => (page.value === 'customers' ? customers.value : suppliers.value).filter(contact => (!directoryDueOnly.value || Number(contact.balance_total) > 0) && `${contact.name} ${contact.company || ''} ${contact.phone || ''} ${contact.email || ''} ${contact.address || ''} ${contact.area || ''} ${contact.category || ''}`.toLowerCase().includes(search.value.toLowerCase())));
 const directoryTotals = computed(() => directoryContacts.value.reduce((totals, contact) => ({ amount: totals.amount + Number(contact.sales_total || contact.purchases_total || 0), paid: totals.paid + Number(contact.paid_total || 0), balance: totals.balance + Number(contact.balance_total || 0) }), { amount: 0, paid: 0, balance: 0 }));
 const filteredDocuments = computed(() => documents.value.filter(d => d.type === page.value && `${d.number} ${d.contact?.name || ''}`.toLowerCase().includes(search.value.toLowerCase())));
 function customerDueDocuments(contactId) { return documents.value.filter(document => ['sale', 'resale'].includes(document.type) && Number(document.contact_id) === Number(contactId) && Number(document.balance_due) > 0).sort((a, b) => Number(b.balance_due) - Number(a.balance_due)); }
@@ -1602,7 +1625,7 @@ async function stopSupportSession() {
           <div v-if="item.id === 'reports'" class="report-nav-group">
             <button class="nav-item-app report-nav-toggle" :class="{ active: page === 'reports' }" :aria-expanded="reportsExpanded" aria-controls="report-subnav" @click="toggleReportsMenu"><component :is="item.icon" :size="18" :stroke-width="1.9" /><span>{{ item.label }}</span><ChevronDown :size="16" class="report-nav-chevron" :class="{ open: reportsExpanded }" /></button>
             <div v-if="reportsExpanded" id="report-subnav" class="report-subnav" aria-label="Report types">
-              <button v-for="report in availableReportKinds" :key="report.id" class="report-subnav-item" :class="{ active: page === 'reports' && reportKind === report.id }" :aria-current="page === 'reports' && reportKind === report.id ? 'page' : undefined" @click="selectReport(report.id)">{{ report.label }}</button>
+              <button v-for="report in availableReportKinds" :key="report.id" class="report-subnav-item" :class="{ active: page === 'reports' && (reportDetailOpen || isReportView) && reportKind === report.id }" :aria-current="page === 'reports' && (reportDetailOpen || isReportView) && reportKind === report.id ? 'page' : undefined" @click="selectReport(report.id)">{{ report.label }}</button>
             </div>
           </div>
           <button v-else class="nav-item-app" :class="{ active: page === item.id }" @click="navigate(item.id)"><component :is="item.icon" :size="18" :stroke-width="1.9" /><span>{{ item.label }}</span><span v-if="item.id === 'purchase_return'" class="nav-spacer"></span></button>
@@ -1619,8 +1642,24 @@ async function stopSupportSession() {
           <label class="mobile-language-select"><Languages :size="16" /><select v-model="language" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select><ChevronDown :size="14" /></label>
         </div>
         <div v-if="notice" class="toast-notice"><Check :size="17" />{{ notice }}</div>
+        <button v-if="['customers', 'suppliers'].includes(page) && directoryDueOnly" type="button" class="directory-due-filter" @click="directoryDueOnly = false">Showing accounts with a due balance <span>{{ page === 'customers' ? 'Show all customers' : 'Show all suppliers' }} <ArrowUpRight :size="15" /></span></button>
         <template v-if="page === 'reports'">
-          <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ isReportView ? activeReport.label : 'Reports' }}</h1><p>{{ isReportView ? `${activeReport.description} · ${branches.find(branch => branch.id === Number(activeBranchId))?.name || 'Current branch'}` : 'Review sales, stock, customer balances and team activity for this branch.' }}</p></div><button class="btn-secondary-app" :disabled="!reportResult.rows.length || reportLoading" @click="exportReportCsv"><ArrowDownRight :size="17" /> Export CSV</button></div>
+          <section v-if="!reportDetailOpen && !isReportView" class="reports-catalog" aria-labelledby="reports-catalog-title">
+            <div class="reports-catalog-header">
+              <div><span class="eyebrow">BUSINESS INSIGHTS</span><h1 id="reports-catalog-title">All reports</h1><p>Choose a report to view its details.</p></div>
+              <span class="reports-catalog-count"><strong>{{ qty(availableReportKinds.length) }}</strong> reports available</span>
+            </div>
+            <div class="reports-catalog-grid">
+              <button v-for="report in availableReportKinds" :key="report.id" type="button" class="reports-catalog-card" @click="selectReport(report.id)">
+                <span class="reports-catalog-icon" :class="reportVisuals[report.id].tone"><component :is="reportVisuals[report.id].icon" :size="23" /></span>
+                <span class="reports-catalog-copy"><strong>{{ report.label }}</strong><small>{{ report.description }}</small></span>
+                <ArrowUpRight class="reports-catalog-arrow" :size="18" aria-hidden="true" />
+              </button>
+            </div>
+          </section>
+          <div v-if="reportDetailOpen || isReportView" class="report-detail">
+          <button v-if="!isReportView" type="button" class="reports-catalog-back" @click="reportDetailOpen = false"><ArrowLeft :size="17" /> All reports</button>
+          <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ branches.find(branch => branch.id === Number(activeBranchId))?.name || 'Current branch' }}</p></div><button class="btn-secondary-app" :disabled="!reportResult.rows.length || reportLoading" @click="exportReportCsv"><ArrowDownRight :size="17" /> Export CSV</button></div>
           <section v-if="!isReportView" class="panel report-filter-panel">
             <div class="report-filter-grid">
               <div class="report-current"><span>Report</span><strong>{{ activeReport.label }}</strong></div>
@@ -1639,6 +1678,7 @@ async function stopSupportSession() {
             <div v-if="reportResult.rows.length" class="table-scroll"><table><thead><tr><th v-for="(column, index) in reportResult.columns" :key="index">{{ column }}</th></tr></thead><tbody><tr v-for="(row, index) in reportResult.rows" :key="index"><td v-for="([key, value], cellIndex) in Object.entries(row)" :key="key">{{ reportCell(reportResult.columns[cellIndex] || key, value) }}</td></tr></tbody></table></div>
             <div v-else-if="!reportLoading" class="empty-state"><ChartNoAxesCombined :size="32" /><strong>No report data</strong><span>Try changing the date range or search term.</span></div>
           </section>
+          </div>
         </template>
         <template v-if="page === 'admin_dashboard'"><div class="page-heading"><div><span class="eyebrow">SAAS OVERVIEW</span><h1>Company subscriptions</h1><p>Monitor every company, subscription validity and owner account from one place.</p></div><button class="btn-primary-app" @click="openClient()"><Plus :size="18" /> Add company</button></div><div class="stats-grid"><div class="stat-card"><div class="stat-top"><span>Total companies</span><span class="stat-icon violet"><Building2 :size="19" /></span></div><strong>{{ clientStats.total }}</strong><small>Companies using your software</small></div><div class="stat-card"><div class="stat-top"><span>Active subscriptions</span><span class="stat-icon green"><ShieldCheck :size="19" /></span></div><strong>{{ clientStats.active }}</strong><small>Active and trial companies</small></div><div class="stat-card"><div class="stat-top"><span>Expiring in 30 days</span><span class="stat-icon orange"><Clock3 :size="19" /></span></div><strong>{{ clientStats.expiring }}</strong><small>Renewal follow-up required</small></div><div class="stat-card"><div class="stat-top"><span>Needs attention</span><span class="stat-icon orange"><AlertTriangle :size="19" /></span></div><strong>{{ clientStats.attention }}</strong><small>Expired, overdue or suspended</small></div></div><section class="panel table-panel admin-subscription-panel"><div class="table-toolbar"><div><h2>Validity and support queue</h2><p>Expired subscriptions and upcoming renewals appear first.</p></div><button class="text-button" @click="navigate('clients')">Manage all companies <ArrowUpRight :size="16" /></button></div><div class="table-scroll"><table><thead><tr><th>COMPANY</th><th>OWNER</th><th>PLAN</th><th>STATUS</th><th>VALID UNTIL</th><th>USERS</th><th>SUPPORT</th></tr></thead><tbody><tr v-for="client in upcomingClients" :key="client.id"><td><div class="name-cell"><span class="product-avatar contact-avatar">{{ initial(client.name) }}</span><strong>{{ client.name }}</strong></div></td><td><div v-if="client.admins?.length" class="name-cell"><div><strong>{{ client.admins[0].name }}</strong><small>{{ client.admins[0].email }}</small></div></div><span v-else>Owner not assigned</span></td><td>{{ client.plan_name || '—' }}</td><td><span class="stock-pill" :class="client.subscription_active ? 'good' : 'low'">{{ clientValidityLabel(client) }}</span></td><td>{{ date(client.subscription_ends_at) }}</td><td>{{ client.users_count }}</td><td><button v-if="client.admins?.some(owner => owner.active)" class="btn-secondary-app small" :disabled="busy" @click="startSupportSession(client)"><Eye :size="15" /> View as owner</button><button v-else class="btn-secondary-app small" @click="openClient(client)"><UserCog :size="15" /> Set up owner</button></td></tr></tbody></table></div><div v-if="!upcomingClients.length" class="empty-state"><ShieldCheck :size="32" /><strong>No renewals need attention</strong><span>Add company validity dates to monitor renewals here.</span></div></section></template>
 
@@ -1656,6 +1696,13 @@ async function stopSupportSession() {
               <span class="mobile-business-label">Total sales</span>
               <strong class="mobile-business-total">{{ money(overview.sales_total) }}</strong>
               <div class="mobile-business-card-bottom"><div><span>Purchases</span><strong>{{ money(overview.purchase_total) }}</strong></div><div><span>Stock value</span><strong>{{ money(overview.stock_value) }}</strong></div><div><span>Low stock</span><strong>{{ qty(overview.low_stock) }} <span class="mobile-stock-unit">items</span></strong></div></div>
+              <div v-if="hasAbility('contacts')" class="mobile-business-dues">
+                <span class="mobile-business-dues-scope">Outstanding across accessible branches</span>
+                <div class="mobile-business-dues-grid">
+                  <button type="button" class="mobile-business-due" aria-label="View customers owing the store" @click="openDueDirectory('customers')"><span>Receivable from customers <ArrowUpRight :size="15" /></span><strong>{{ money(customerDueTotal) }}</strong></button>
+                  <button type="button" class="mobile-business-due" aria-label="View suppliers owed by the store" @click="openDueDirectory('suppliers')"><span>Payable to suppliers <ArrowUpRight :size="15" /></span><strong>{{ money(supplierDueTotal) }}</strong></button>
+                </div>
+              </div>
             </section>
 
             <section v-if="hasAbility('sales', 'pos_sale', 'purchases', 'products')" class="mobile-dashboard-section" aria-labelledby="mobile-quick-actions-title">
