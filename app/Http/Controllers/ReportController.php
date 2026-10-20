@@ -12,6 +12,7 @@ use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
 use App\Permission;
 use App\ReportType;
+use App\Services\GeneralLedgerReport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, GeneralLedgerReport $generalLedger): JsonResponse
     {
         $data = $request->validate([
             'report' => ['required', Rule::enum(ReportType::class)],
@@ -29,6 +30,7 @@ class ReportController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'search' => ['nullable', 'string', 'max:100'],
             'contact_id' => ['nullable', 'integer'],
+            'account' => ['nullable', Rule::in(array_keys(GeneralLedgerReport::accounts()))],
         ]);
 
         $organizationId = Auth::user()?->organization_id;
@@ -78,6 +80,7 @@ class ReportController extends Controller
             'customers' => $this->customers($organizationId, $branchId),
             'customer_ledger' => $this->customerLedger($documents, $data['contact_id'] ?? null),
             'customer_due' => $this->customerDue($documents),
+            'general_ledger' => $generalLedger->build($organizationId, $branchId, $dateFrom, $dateTo, $data['account'] ?? null),
         };
 
         return response()->json(['report' => $report, ...$result]);
