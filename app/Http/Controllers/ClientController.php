@@ -10,6 +10,7 @@ use App\Models\Document;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\DefaultCustomer;
 use App\Services\TenantProvisioner;
 use App\TenantContext;
 use App\UserRole;
@@ -84,6 +85,7 @@ class ClientController extends Controller
                 'role' => UserRole::Admin,
                 'active' => true,
             ]);
+            app(DefaultCustomer::class)->ensure(DB::connection(config('tenancy.central_connection')), $organization);
 
             return $organization;
         });

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\DefaultCustomer;
 use App\Services\TenantProvisioner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -48,6 +49,11 @@ class CpanelProvisioningTest extends TestCase
         $this->assertDatabaseHas('users', [
             'organization_id' => $company->id,
             'email' => 'demo-owner@example.test',
+        ]);
+        $this->assertDatabaseHas('contacts', [
+            'organization_id' => $company->id,
+            'name' => DefaultCustomer::NAME,
+            'type' => 'customer',
         ]);
         $this->getJson('http://demo.localhost/api/session')->assertNotFound();
     }

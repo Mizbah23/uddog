@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
+use App\Models\SupportImpersonation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -41,6 +42,9 @@ class SystemSetupController extends Controller
 
     private function organization(Request $request): Organization
     {
-        return Organization::query()->findOrFail($request->user()->organization_id);
+        $organization = Organization::query()->findOrFail($request->user()->organization_id);
+        abort_if($organization->isDemo() && ! SupportImpersonation::activeFor($request), 403);
+
+        return $organization;
     }
 }

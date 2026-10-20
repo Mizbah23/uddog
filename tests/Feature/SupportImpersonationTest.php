@@ -14,6 +14,46 @@ class SupportImpersonationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_demo_owner_cannot_open_system_setup_but_superadmin_view_as_can(): void
+    {
+        $organization = Organization::factory()->create(['subdomain' => 'demo']);
+        $owner = User::factory()->admin()->for($organization)->create();
+        $superadmin = User::factory()->superadmin()->create();
+
+        $this->actingAs($owner)->getJson('/api/session')
+            ->assertOk()
+            ->assertJsonPath('permissions.manage_settings', true)
+            ->assertJsonPath('permissions.manage_system_setup', false);
+        $this->getJson('/api/system-setup')->assertForbidden();
+        $this->putJson('/api/system-setup', [])->assertForbidden();
+
+        $this->actingAs($superadmin)
+            ->postJson("/api/clients/{$organization->id}/impersonate")
+            ->assertOk();
+
+        $this->getJson('/api/session')
+            ->assertOk()
+            ->assertJsonPath('permissions.manage_system_setup', true)
+            ->assertJsonPath('impersonation.organization.id', $organization->id);
+        $this->getJson('/api/system-setup')->assertOk();
+
+        $this->deleteJson('/api/support-session')->assertOk();
+        $this->actingAs($owner)->getJson('/api/session')
+            ->assertJsonPath('permissions.manage_system_setup', false);
+        $this->getJson('/api/system-setup')->assertForbidden();
+    }
+
+    public function test_regular_company_owner_keeps_system_setup_access(): void
+    {
+        $organization = Organization::factory()->create(['subdomain' => 'store']);
+        $owner = User::factory()->admin()->for($organization)->create();
+
+        $this->actingAs($owner)->getJson('/api/session')
+            ->assertOk()
+            ->assertJsonPath('permissions.manage_system_setup', true);
+        $this->getJson('/api/system-setup')->assertOk();
+    }
+
     public function test_superadmin_can_support_a_company_as_its_owner_and_return(): void
     {
         $organization = Organization::factory()->create([

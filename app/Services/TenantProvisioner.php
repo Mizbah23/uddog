@@ -122,6 +122,7 @@ class TenantProvisioner
 
             $tenant->statement('SET FOREIGN_KEY_CHECKS=0');
             try {
+                app(DefaultCustomer::class)->ensure($central, $organization);
                 foreach (self::ORGANIZATION_TABLES as $table) {
                     $this->copyTable($table, $central->table($table)->where('organization_id', $organization->id));
                 }

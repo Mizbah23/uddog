@@ -43,7 +43,7 @@ const managementNav = [
   { id: 'access_control', label: 'Access control', icon: ShieldCheck, permission: 'manage_clients' },
   { id: 'users', label: 'Users', icon: UserCog, permission: 'manage_users' },
   { id: 'staff', label: 'Staff & Payroll', icon: Users, permission: 'manage_settings' },
-  { id: 'system_setup', label: 'Settings / System Setup', icon: Settings2, permission: 'manage_settings' },
+  { id: 'system_setup', label: 'Settings / System Setup', icon: Settings2, permission: 'manage_system_setup' },
   { id: 'roadmap', label: 'Work progress', icon: ClipboardList, permission: 'manage_clients' },
 ];
 const titles = { ...Object.fromEntries([...workspaceNav, ...managementNav].map(item => [item.id, item.label])), profile: 'My profile' };
@@ -416,7 +416,7 @@ async function refresh() {
   }
   if (session.value?.permissions?.manage_clients) requests.push(api('clients').then(data => { clients.value = data; }));
   if (session.value?.permissions?.manage_users && (session.value?.permissions?.use_workspace || session.value?.permissions?.manage_clients)) requests.push(api('users').then(data => { users.value = data; }));
-  if (session.value?.permissions?.use_workspace && session.value?.permissions?.manage_settings) requests.push(api('system-setup').then(data => { systemSetup.value = data; }));
+  if (session.value?.permissions?.use_workspace && session.value?.permissions?.manage_system_setup) requests.push(api('system-setup').then(data => { systemSetup.value = data; }));
   await Promise.all(requests);
 }
 async function initialize() {
@@ -444,7 +444,7 @@ let localization;
 async function applyLanguage() {
   localStorage.setItem('uddog-language', language.value);
   document.documentElement.lang = language.value === 'bn' ? 'bn' : 'en';
-  document.title = language.value === 'bn' ? 'uddog · ইনভেন্টরি' : 'Uddog Inventory';
+  document.title = 'Uddog | ব্যাবসা পরিচালনার সফটওয়্যার';
   await nextTick();
   localization?.apply();
 }
@@ -1588,13 +1588,13 @@ async function stopSupportSession() {
 </script>
 
 <template>
-  <div v-if="loading" class="loading-screen"><div class="brand-mark">U</div><span>Loading your workspace...</span></div>
+  <div v-if="loading" class="loading-screen"><div class="brand-mark" role="img" aria-label="Uddog-Soft logo"></div><span>Loading your workspace...</span></div>
   <div v-else-if="!session?.user" class="auth-page">
-    <div class="auth-art"><div class="auth-art-content"><div class="brand brand-light"><span class="brand-mark">U</span><span>uddog<span class="brand-dot">.</span></span></div><h1>Keep every product<br>and transaction<br>in focus.</h1><p>A simple workspace for buying, selling, returning, and tracking stock.</p><div class="auth-art-footer">INVENTORY MANAGEMENT, MADE CLEAR</div></div></div>
+    <div class="auth-art"><div class="auth-art-content"><div class="brand brand-light"><span class="brand-mark" aria-hidden="true"></span><span>Uddog-Soft</span></div><h1>Keep every product<br>and transaction<br>in focus.</h1><p>A simple workspace for buying, selling, returning, and tracking stock.</p><div class="auth-art-footer">INVENTORY MANAGEMENT, MADE CLEAR</div></div></div>
     <div class="auth-panel">
       <form class="auth-card" @submit.prevent="authMode === 'forgot' ? requestPasswordReset() : authMode === 'reset' ? resetPassword() : authenticate()">
         <label class="language-switcher auth-language"><Languages :size="15" /><select v-model="language" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select></label>
-        <div class="auth-mobile-brand brand"><span class="brand-mark">U</span><span>uddog<span class="brand-dot">.</span></span></div>
+        <div class="auth-mobile-brand brand"><span class="brand-mark" aria-hidden="true"></span><span>Uddog-Soft</span></div>
         <span class="eyebrow">{{ session?.setup_required ? 'GET STARTED' : authMode === 'forgot' ? 'ACCOUNT RECOVERY' : authMode === 'reset' ? 'NEW PASSWORD' : 'WELCOME BACK' }}</span>
         <h2>{{ session?.setup_required ? 'Create your workspace' : authMode === 'forgot' ? 'Forgot your password?' : authMode === 'reset' ? 'Choose a new password' : 'Sign in to your workspace' }}</h2>
         <p class="muted">{{ session?.setup_required ? 'Set up the first administrator account.' : authMode === 'forgot' ? 'Enter your account email and we’ll send a reset link if it matches an account.' : authMode === 'reset' ? 'Set a new password for your account.' : 'Enter your account details to continue.' }}</p>
@@ -1623,7 +1623,7 @@ async function stopSupportSession() {
   <div v-else class="app-shell" :class="{ 'report-view-shell': isReportView, 'client-mobile-shell': session.user.role !== 'superadmin' && !session.impersonation && session.permissions.use_workspace, 'client-dashboard-shell': page === 'dashboard' }">
     <div v-if="mobileOpen" class="mobile-scrim" @click="mobileOpen = false"></div>
     <aside class="sidebar" :class="{ 'sidebar-open': mobileOpen }">
-      <div class="brand"><span class="brand-mark">U</span><span>uddog<span class="brand-dot">.</span></span><button class="icon-button sidebar-close" @click="mobileOpen = false"><X :size="20" /></button></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Uddog-Soft</span><button class="icon-button sidebar-close" @click="mobileOpen = false"><X :size="20" /></button></div>
       <div class="sidebar-caption">{{ session.user.role === 'superadmin' && !session.impersonation ? 'SAAS CONTROL' : 'WORKSPACE' }}</div>
       <nav class="nav-list">
         <template v-for="item in nav" :key="item.id">
