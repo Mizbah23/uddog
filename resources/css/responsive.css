@@ -28,6 +28,41 @@
   max-width: 100%;
 }
 
+.field-action > input,
+.field-action > select,
+.modal-head > div {
+  min-width: 0;
+}
+
+@media screen and (max-width: 800px) {
+  .sidebar {
+    width: min(284px, calc(100vw - 40px));
+    height: 100dvh;
+    min-height: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .sidebar .brand,
+  .sidebar-caption,
+  .sidebar-bottom {
+    flex-shrink: 0;
+  }
+
+  .sidebar .brand { height: 64px; }
+  .sidebar .nav-list { flex: 1; min-height: 0; overscroll-behavior: contain; }
+  .sidebar .sidebar-help { display: none; }
+  .sidebar-bottom { padding-top: 6px; }
+  .sidebar .nav-item-app { min-height: 44px; }
+
+  body:has(.sidebar-open),
+  body:has(.modal-backdrop-app) {
+    overflow: hidden;
+  }
+
+  .modal-card { overscroll-behavior: contain; }
+}
+
 /* The sidebar still occupies the screen at tablet widths, so let the
    workspace controls use a second line before they collide with the title. */
 @media (max-width: 1100px) {
@@ -130,6 +165,12 @@
     width: 100%;
   }
 
+  .page-heading > button,
+  .company-toolbar-actions > button {
+    min-width: 0;
+    white-space: normal;
+  }
+
   .panel-heading,
   .table-toolbar {
     align-items: stretch;
@@ -149,7 +190,35 @@
     box-sizing: border-box;
     max-height: 100dvh;
     height: 100dvh;
-    padding: 18px 16px 0;
+    width: 100%;
+    border-radius: 0;
+    padding: max(18px, env(safe-area-inset-top)) 16px 0;
+    scroll-padding-block: 16px 100px;
+  }
+
+  .modal-backdrop-app { padding: 0; }
+  .modal-head { gap: 12px; }
+  .modal-head h2 { overflow-wrap: anywhere; }
+  .modal-head .icon-button { width: 44px; height: 44px; }
+
+  .field input:not([type='checkbox']):not([type='radio']),
+  .field select,
+  .field textarea,
+  .search-box input,
+  .filter-select,
+  .target-period,
+  .pos-scanner input {
+    font-size: 16px;
+  }
+
+  .field input:not([type='checkbox']):not([type='radio']),
+  .field select,
+  .search-box,
+  .filter-select,
+  .target-period,
+  .pos-scanner input,
+  .field-action > button {
+    min-height: 44px;
   }
 
   .modal-actions {
@@ -160,8 +229,34 @@
   }
 
   .modal-actions > button {
-    flex: 1 1 auto;
+    flex: 1 1 120px;
     min-width: 0;
+    min-height: 44px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .staff-payroll-panel,
+  .report-filter-panel,
+  .expense-filter-panel {
+    padding: 16px;
+  }
+
+  .stat-card > strong {
+    overflow-wrap: anywhere;
+  }
+
+  .chart-summary span {
+    flex-wrap: wrap;
+  }
+
+  .monthly-chart {
+    overflow-x: auto;
+  }
+
+  .monthly-chart-plot,
+  .month-chart-labels {
+    min-width: 260px;
   }
 
   .report-view-shell .content {

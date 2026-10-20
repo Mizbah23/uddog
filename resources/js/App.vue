@@ -161,6 +161,9 @@ const authMessage = ref('');
 const resetToken = ref(decodeURIComponent(location.pathname.split('/').filter(Boolean).at(-1) || ''));
 const standardUnitOptions = [
   { value: 'pc', label: 'Pieces (pc)' },
+  { value: 'hali', label: '4 pieces (1 hali)' },
+  { value: '8 pcs', label: '8 pieces' },
+  { value: 'dozen', label: 'Dozen (12 pieces)' },
   { value: 'items', label: 'Items' },
   { value: 'units', label: 'Units' },
   { value: 'packs', label: 'Packs' },
@@ -1652,7 +1655,7 @@ async function stopSupportSession() {
               <div class="mobile-business-card-top"><span><ChartNoAxesCombined :size="16" /><span>Business overview</span></span><span>All time</span></div>
               <span class="mobile-business-label">Total sales</span>
               <strong class="mobile-business-total">{{ money(overview.sales_total) }}</strong>
-              <div class="mobile-business-card-bottom"><div><span>Purchases</span><strong>{{ money(overview.purchase_total) }}</strong></div><div><span>Stock value</span><strong>{{ money(overview.stock_value) }}</strong></div><div><span>Low stock</span><strong>{{ overview.low_stock }} <span class="mobile-stock-unit">items</span></strong></div></div>
+              <div class="mobile-business-card-bottom"><div><span>Purchases</span><strong>{{ money(overview.purchase_total) }}</strong></div><div><span>Stock value</span><strong>{{ money(overview.stock_value) }}</strong></div><div><span>Low stock</span><strong>{{ qty(overview.low_stock) }} <span class="mobile-stock-unit">items</span></strong></div></div>
             </section>
 
             <section v-if="hasAbility('sales', 'pos_sale', 'purchases', 'products')" class="mobile-dashboard-section" aria-labelledby="mobile-quick-actions-title">

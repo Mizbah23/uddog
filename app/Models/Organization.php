@@ -46,7 +46,7 @@ class Organization extends Model
                 'allow_stock_adjustments' => true,
                 'allow_stock_transfers' => true,
                 'default_reorder_level' => 0,
-                'units' => ['pc', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'],
+                'units' => ['pc', 'hali', '8 pcs', 'dozen', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'],
             ], $saved['store'] ?? []),
         ];
     }
