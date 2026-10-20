@@ -7,15 +7,41 @@ use App\Models\Organization;
 use App\Models\Product;
 use App\Models\SupportImpersonation;
 use App\Models\User;
+use App\Services\DefaultCustomer;
 use App\SubscriptionStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class ClientManagementTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_new_company_has_one_default_walk_in_customer(): void
+    {
+        $superadmin = User::factory()->superadmin()->create();
+
+        $companyId = $this->actingAs($superadmin)->postJson('/api/clients', [
+            'name' => 'New Store',
+            'subscription_status' => SubscriptionStatus::Trial->value,
+            'owner_name' => 'Store Owner',
+            'owner_email' => 'store-owner@example.test',
+            'owner_password' => 'Password123',
+        ])->assertCreated()->json('id');
+
+        $this->assertDatabaseHas('contacts', [
+            'organization_id' => $companyId,
+            'name' => DefaultCustomer::NAME,
+            'type' => 'customer',
+            'active' => true,
+        ]);
+
+        $company = Organization::query()->findOrFail($companyId);
+        app(DefaultCustomer::class)->ensure(DB::connection(config('tenancy.central_connection')), $company);
+        $this->assertSame(1, Contact::query()->where('organization_id', $companyId)->count());
+    }
 
     public function test_client_list_excludes_organizations_assigned_to_a_superadmin(): void
     {

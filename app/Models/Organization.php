@@ -117,4 +117,9 @@ class Organization extends Model
     {
         return ! $this->access_paused && $this->hasActiveSubscription();
     }
+
+    public function isDemo(): bool
+    {
+        return strtolower((string) $this->subdomain) === 'demo';
+    }
 }

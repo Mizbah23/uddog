@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Uddog">
-  <rect x="3" y="3" width="58" height="58" rx="17" fill="#7367f0" stroke="#2563eb" stroke-width="4"/>
-  <path fill="#fff" d="M19 17h8v21c0 4 1.8 6 5 6s5-2 5-6V17h8v21c0 8.5-5.2 13-13 13S19 46.5 19 38V17Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Uddog-Soft">
+  <defs>
+    <linearGradient id="brand-gradient" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#1e2db0"/>
+      <stop offset="1" stop-color="#9954f0"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="url(#brand-gradient)"/>
+  <path d="M13 14h12v25c0 7 2.2 11 7 11s7-4 7-11V14h12v25c0 15-7.5 21-19 21S13 54 13 39V14Z" fill="#fff"/>
+  <path d="M31 60c10-1 20-9 20-24V27c-1 8-8 12-16 21-5 5-9 9-14 10 3 1 6 2 10 2Z" fill="#ad83f3"/>
 </svg>

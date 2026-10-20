@@ -21,6 +21,7 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Middleware\ResolveTenant;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
@@ -121,4 +122,40 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 });
 
 Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
-Route::view('/', 'app')->middleware(ResolveTenant::class)->name('app.home');
+Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
+
+Route::get('/', function (Request $request) {
+    $host = strtolower($request->getHost());
+    if (config('tenancy.enabled') && $host === 'www.'.strtolower((string) config('tenancy.base_domain'))) {
+        return redirect()->away(rtrim((string) config('marketing.url'), '/').'/', 301);
+    }
+
+    $centralHosts = array_map('strtolower', array_filter([
+        config('tenancy.central_host'),
+        config('tenancy.base_domain'),
+    ]));
+
+    if (! config('tenancy.enabled') || in_array($host, $centralHosts, true)) {
+        return view('marketing.home');
+    }
+
+    return app(ResolveTenant::class)->handle($request, fn () => response()->view('app'));
+})->name('marketing.home');
+
+Route::get('/sitemap.xml', function (Request $request) {
+    $host = strtolower($request->getHost());
+    if (config('tenancy.enabled') && $host === 'www.'.strtolower((string) config('tenancy.base_domain'))) {
+        return redirect()->away(rtrim((string) config('marketing.url'), '/').'/sitemap.xml', 301);
+    }
+
+    $centralHosts = array_map('strtolower', array_filter([
+        config('tenancy.central_host'),
+        config('tenancy.base_domain'),
+    ]));
+
+    abort_unless(! config('tenancy.enabled') || in_array($host, $centralHosts, true), 404);
+
+    return response()->view('marketing.sitemap', [
+        'homepageUrl' => rtrim((string) config('marketing.url'), '/').'/',
+    ])->header('Content-Type', 'application/xml; charset=UTF-8');
+});

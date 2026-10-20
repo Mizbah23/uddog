@@ -58,6 +58,8 @@ class WorkspaceController extends Controller
                 'manage_clients' => $user->isSuperadmin(),
                 'manage_users' => $user->hasRole(UserRole::Superadmin, UserRole::Admin),
                 'manage_settings' => $user->hasRole(UserRole::Admin),
+                'manage_system_setup' => $user->hasRole(UserRole::Admin)
+                    && (! $organization?->isDemo() || (bool) $impersonation),
                 'use_workspace' => (bool) $impersonation
                     || (! $user->isSuperadmin() && $user->organization?->canUseWorkspace() === true),
                 'abilities' => $abilities,
