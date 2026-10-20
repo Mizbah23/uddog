@@ -99,6 +99,7 @@ const reportKinds = [
   { id: 'sales', label: 'Sales', abilities: ['sales', 'resales', 'sales_returns'], description: 'Sales, returns, collections and customer balances.' },
   { id: 'purchases', label: 'Purchases', abilities: ['purchases', 'purchase_returns'], description: 'Purchases and supplier returns for the selected period.' },
   { id: 'profit_loss', label: 'Profit & loss', abilities: ['expenses'], description: 'Gross profit less recorded operating expenses for the selected period.' },
+  { id: 'general_ledger', label: 'General ledger', abilities: ['sales', 'resales', 'sales_returns', 'purchases', 'purchase_returns', 'expenses'], description: 'Account-wise debits, credits and running balances derived from recorded transactions.' },
   { id: 'employee_sales', label: 'Employee-wise sales', abilities: ['sales', 'resales'], description: 'Sales totals and collections by the employee who created each sale.' },
   { id: 'stock', label: 'Stock', abilities: ['inventory', 'products'], description: 'Current branch stock, reorder levels and inventory values.' },
   { id: 'adjustments', label: 'Stock adjustments', abilities: ['stock_adjustments'], description: 'Manual adjustments and stock check variances.' },
@@ -113,6 +114,7 @@ const reportVisuals = {
   sales: { icon: ReceiptText, tone: 'violet' },
   purchases: { icon: ShoppingBag, tone: 'orange' },
   profit_loss: { icon: ChartNoAxesCombined, tone: 'green' },
+  general_ledger: { icon: ClipboardList, tone: 'slate' },
   employee_sales: { icon: Users, tone: 'blue' },
   stock: { icon: Boxes, tone: 'green' },
   adjustments: { icon: ClipboardCheck, tone: 'slate' },
@@ -131,6 +133,7 @@ const reportFilters = ref({
   date_to: isReportView ? reportViewParams.get('date_to') || '' : reportToday,
   search: isReportView ? reportViewParams.get('search') || '' : '',
   contact_id: isReportView ? reportViewParams.get('contact_id') || '' : '',
+  account: isReportView ? reportViewParams.get('account') || '' : '',
 });
 const reportResult = ref({ columns: [], rows: [], summary: {} });
 const reportLoading = ref(false);
@@ -478,6 +481,7 @@ const availableReportKinds = computed(() => reportKinds.filter(canOpenReport));
 function canGrantReport(report) {
   if (!['manager', 'staff'].includes(userForm.value.role)) return true;
   if (report.id === 'profit_loss') return userForm.value.permissions.includes('expenses') && (userForm.value.permissions.includes('sales') || userForm.value.permissions.includes('resales'));
+  if (report.id === 'general_ledger') return report.abilities.every(ability => userForm.value.permissions.includes(ability));
   return report.abilities.some(ability => userForm.value.permissions.includes(ability));
 }
 const userAccessibleReports = computed(() => {
@@ -537,6 +541,7 @@ function exportReportCsv() {
     ['Company / store', company],
     ['Branch', branch],
     ['Exported at', exportedAt],
+    ...(reportResult.value.note ? [['Note', reportResult.value.note]] : []),
     [],
     reportResult.value.columns,
     ...reportResult.value.rows.map(row => Object.values(row).map((value, index) => {
@@ -1133,7 +1138,7 @@ async function openClientDetails(client) {
 function openUser(user = null) {
   clearMessages(); editingId.value = user?.id || null;
   const inheritedReports = user && ['manager', 'staff'].includes(user.role)
-    ? reportKinds.filter(report => report.id === 'profit_loss' ? (user.permissions || []).includes('expenses') && ((user.permissions || []).includes('sales') || (user.permissions || []).includes('resales')) : report.abilities.some(ability => (user.permissions || []).includes(ability))).map(report => report.id)
+    ? reportKinds.filter(report => report.id === 'profit_loss' ? (user.permissions || []).includes('expenses') && ((user.permissions || []).includes('sales') || (user.permissions || []).includes('resales')) : report.id === 'general_ledger' ? report.abilities.every(ability => (user.permissions || []).includes(ability)) : report.abilities.some(ability => (user.permissions || []).includes(ability))).map(report => report.id)
     : [];
   userForm.value = user ? { name: user.name, email: user.email, password: '', role: user.role, organization_id: user.organization_id || '', active: user.active, permissions: [...(user.permissions || [])], report_permissions: [...(user.report_permissions ?? inheritedReports)], branch_ids: user.accessible_branches?.map(branch => branch.id) || [] } : { name: '', email: '', password: '', role: session.value.user.role === 'superadmin' ? 'admin' : 'manager', organization_id: session.value.user.role === 'superadmin' ? '' : session.value.user.organization_id, active: true, permissions: [], report_permissions: [], branch_ids: [] };
   modal.value = 'user';
@@ -1661,17 +1666,19 @@ async function stopSupportSession() {
           <button v-if="!isReportView" type="button" class="reports-catalog-back" @click="reportDetailOpen = false"><ArrowLeft :size="17" /> All reports</button>
           <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ branches.find(branch => branch.id === Number(activeBranchId))?.name || 'Current branch' }}</p></div><button class="btn-secondary-app" :disabled="!reportResult.rows.length || reportLoading" @click="exportReportCsv"><ArrowDownRight :size="17" /> Export CSV</button></div>
           <section v-if="!isReportView" class="panel report-filter-panel">
-            <div class="report-filter-grid">
+            <div class="report-filter-grid" :class="{ 'ledger-filter-grid': reportKind === 'general_ledger' }">
               <div class="report-current"><span>Report</span><strong>{{ activeReport.label }}</strong></div>
               <label class="field"><span>From</span><input v-model="reportFilters.date_from" type="date" :disabled="['stock', 'barcode_products', 'customers'].includes(reportKind)"></label>
               <label class="field"><span>To</span><input v-model="reportFilters.date_to" type="date" :disabled="['stock', 'barcode_products', 'customers'].includes(reportKind)"></label>
               <label v-if="['stock', 'barcode_products', 'barcode_sales'].includes(reportKind)" class="field"><span>Product or barcode</span><input v-model="reportFilters.search" placeholder="Enter a name or barcode"></label>
               <label v-if="reportKind === 'customer_ledger'" class="field"><span>Customer</span><select v-model="reportFilters.contact_id"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
+              <label v-if="reportKind === 'general_ledger'" class="field"><span>Account</span><select v-model="reportFilters.account"><option value="">All accounts</option><option value="cash">1000 · Cash</option><option value="bank">1010 · Bank and digital payments</option><option value="unclassified">1090 · Unclassified payments</option><option value="receivables">1100 · Accounts receivable</option><option value="inventory">1200 · Inventory</option><option value="payables">2000 · Accounts payable</option><option value="sales">4000 · Sales revenue</option><option value="sales_returns">4010 · Sales returns</option><option value="cost_of_goods">5000 · Cost of goods sold</option><option value="expenses">6000 · Operating expenses</option></select></label>
               <a class="btn-primary-app report-run-button" :href="reportViewUrl" target="_blank" rel="noopener"><Search :size="17" /> Run report</a>
             </div>
             <p class="report-description">{{ activeReport.description }} · {{ branches.find(branch => branch.id === Number(activeBranchId))?.name || 'Current branch' }}</p>
           </section>
           <div v-if="error" class="alert-box error report-error">{{ error }}</div>
+          <p v-if="reportResult.note" class="report-ledger-note">{{ reportResult.note }}</p>
           <div v-if="Object.keys(reportResult.summary || {}).length" class="report-summary-grid"><div v-for="(value, key) in reportResult.summary" :key="key" class="stat-card"><div class="stat-top"><span>{{ reportSummaryLabel(key) }}</span><span class="stat-icon violet"><ChartNoAxesCombined :size="18" /></span></div><strong>{{ reportSummaryValue(key, value) }}</strong><small>For the current report filters</small></div></div>
           <section class="panel table-panel report-table-panel">
             <div class="table-toolbar"><div><h2>{{ activeReport.label }}</h2><p>{{ reportResult.rows.length }} records</p></div><span v-if="reportLoading" class="report-loading">Loading report…</span></div>

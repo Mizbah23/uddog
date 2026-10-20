@@ -16,6 +16,7 @@ enum ReportType: string
     case Customers = 'customers';
     case CustomerLedger = 'customer_ledger';
     case CustomerDue = 'customer_due';
+    case GeneralLedger = 'general_ledger';
 
     /** @return list<Permission> */
     public function workspacePermissions(): array
@@ -30,6 +31,7 @@ enum ReportType: string
             self::BarcodeProducts => [Permission::Products],
             self::Categories => [Permission::Categories, Permission::Products],
             self::Customers, self::CustomerLedger => [Permission::Contacts],
+            self::GeneralLedger => [Permission::Sales, Permission::Resales, Permission::SalesReturns, Permission::Purchases, Permission::PurchaseReturns, Permission::Expenses],
         };
     }
 }
