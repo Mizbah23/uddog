@@ -36,7 +36,7 @@ defineProps({
       <div class="receipt-columns"><strong>Item</strong><strong>Line total</strong></div>
       <article v-for="item in document.items" :key="item.id" class="receipt-item">
         <strong>{{ item.product?.name || 'Product' }}</strong>
-        <div><span>{{ qty(item.quantity) }} {{ item.product?.unit }} × {{ money(item.unit_price) }}</span><strong>{{ money(item.line_total) }}</strong></div>
+        <div><span>{{ qty(item.entered_quantity ?? item.quantity) }} {{ item.entered_unit || item.product?.unit }} × {{ money(item.entered_unit_price ?? item.unit_price) }}</span><strong>{{ money(item.line_total) }}</strong></div>
       </article>
     </div>
 

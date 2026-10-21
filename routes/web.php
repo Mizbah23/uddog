@@ -123,6 +123,9 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 
 Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
 Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
+Route::view('/{workspacePage}', 'app')
+    ->where('workspacePage', 'dashboard|products|categories|branches|customers|suppliers|purchase|pos|sale|sale_return|resale|purchase_return|inventory|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
+    ->middleware(ResolveTenant::class);
 
 Route::get('/', function (Request $request) {
     $host = strtolower($request->getHost());

@@ -27,14 +27,23 @@ class SystemSetupController extends Controller
             'sales.default_payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
             'purchases' => ['required', 'array:allow_purchase_returns'],
             'purchases.allow_purchase_returns' => ['required', 'boolean'],
-            'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,default_reorder_level,units'],
+            'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,default_reorder_level,units,unit_conversions'],
             'store.allow_stock_adjustments' => ['required', 'boolean'],
             'store.allow_stock_transfers' => ['required', 'boolean'],
             'store.default_reorder_level' => ['required', 'numeric', 'min:0', 'max:999999', 'decimal:0,3'],
             'store.units' => ['sometimes', 'array', 'min:1', 'max:50'],
             'store.units.*' => ['required', 'string', 'max:30', 'distinct:strict'],
+            'store.unit_conversions' => ['sometimes', 'array'],
+            'store.unit_conversions.*' => ['required', 'integer', 'min:1', 'max:1000000'],
+            'store.unit_conversions.pc' => ['sometimes', 'integer', Rule::in([1])],
         ]);
         $data['store']['units'] = array_values(array_unique($data['store']['units'] ?? $organization->setup()['store']['units']));
+        $existingConversions = $organization->setup()['store']['unit_conversions'];
+        $submittedConversions = $data['store']['unit_conversions'] ?? $existingConversions;
+        $data['store']['unit_conversions'] = [];
+        foreach (array_unique([...array_keys(Organization::defaultUnitConversions()), ...$data['store']['units']]) as $unit) {
+            $data['store']['unit_conversions'][$unit] = $unit === 'pc' ? 1 : (int) ($submittedConversions[$unit] ?? $existingConversions[$unit] ?? 1);
+        }
         $organization->update(['system_settings' => $data]);
 
         return response()->json($organization->fresh()->setup());

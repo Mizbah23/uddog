@@ -291,6 +291,9 @@ class WorkspaceController extends Controller
         if (! $savedProduct && ! $request->exists('reorder_level')) {
             $request->merge(['reorder_level' => Auth::user()->organization()->firstOrFail()->setup()['store']['default_reorder_level']]);
         }
+        if (! $savedProduct && ! $request->exists('unit')) {
+            $request->merge(['unit' => 'pc']);
+        }
         if ($request->exists('sku')) {
             $sku = trim((string) $request->input('sku'));
             $request->merge(['sku' => $sku === '' ? null : $sku]);
@@ -301,6 +304,7 @@ class WorkspaceController extends Controller
         }
 
         $allowedUnits = Auth::user()->organization()->firstOrFail()->setup()['store']['units'];
+        $allowedUnits[] = 'pc';
         if ($savedProduct) {
             $allowedUnits[] = $savedProduct->unit;
         }
@@ -326,8 +330,8 @@ class WorkspaceController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'category_id' => ['nullable', Rule::exists(app(TenantContext::class)->validationTable('categories'), 'id')->where('organization_id', $organizationId)],
             'unit' => ['required', Rule::in(array_values(array_unique($allowedUnits)))],
-            'cost_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
-            'sale_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'cost_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'sale_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
             'reorder_level' => ['required', 'numeric', 'min:0', 'decimal:0,3'],
             'warranty_months' => ['nullable', 'integer', 'min:0', 'max:120'],
             'is_gold_item' => ['sometimes', 'boolean'],
@@ -343,8 +347,6 @@ class WorkspaceController extends Controller
             'hallmark_code' => ['nullable', 'string', 'max:80'],
             'active' => ['boolean'],
         ]);
-        $data['cost_price'] = $data['cost_price'] ?? $savedProduct?->cost_price ?? 0;
-        $data['sale_price'] = $data['sale_price'] ?? $savedProduct?->sale_price ?? 0;
         if (! Auth::user()->organization()->firstOrFail()->gold_store || ! ($data['is_gold_item'] ?? false)) {
             $data['is_gold_item'] = false;
             foreach (['gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code'] as $goldField) {
@@ -448,6 +450,7 @@ class WorkspaceController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', Rule::exists(app(TenantContext::class)->validationTable('products'), 'id')->where('organization_id', $organizationId), 'distinct'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,3'],
+            'items.*.unit' => ['sometimes', 'string', 'max:30'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
         ]);
         $setup = Auth::user()->organization()->firstOrFail()->setup();

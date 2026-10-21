@@ -45,6 +45,17 @@
 .setup-field { border-top: 1px solid #f0eff4; padding-top: 17px; margin-top: 7px; }
 .setup-field select, .setup-field input { max-width: 310px; }
 .setup-field.unit-select-field { position: relative; }
+.unit-conversions-field { display: grid; gap: 10px; }
+.unit-conversions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
+.unit-conversion-row { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid #e9e7f2; border-radius: 8px; background: #fafafe; font-size: 12px; font-weight: 700; }
+.unit-conversion-row input { width: 72px; min-width: 0; margin-left: auto; text-align: center; }
+.unit-conversion-row span:last-child { color: #85889a; }
+.item-row { grid-template-columns: minmax(190px, 1.8fr) minmax(94px, .7fr) minmax(80px, .65fr) minmax(110px, .85fr) minmax(95px, .8fr) 30px; }
+.transaction-unit-hint { display: block; margin-top: 5px; font-size: 11px; color: #85889a; }
+.pos-cart-controls { flex-wrap: wrap; }
+.pos-cart-controls > label select { max-width: 115px; min-height: 32px; padding: 5px; border: 1px solid #e3e3eb; border-radius: 5px; background: #fff; font-size: 11px; }
+.pos-cart-controls > label span { white-space: nowrap; }
+@media (max-width: 900px) { .item-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .item-row .field:first-child { grid-column: 1 / -1; } }
 .select2-multiple { position: relative; max-width: 620px; }
 .select2-selection { min-height: 44px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #dedde8; border-radius: 8px; background: #fff; cursor: text; transition: border-color .15s, box-shadow .15s; }
 .select2-multiple.open .select2-selection, .select2-selection:focus-within { border-color: #9a8df5; box-shadow: 0 0 0 3px rgba(115, 103, 240, .11); }
@@ -508,6 +519,50 @@ body {
 .collection-alert-panel { margin-top: 16px; }
 .customer-collection-panel { margin-bottom: 16px; }
 .sale-due-amount { display: block; margin-top: 5px; color: #8b899b; font-size: 10px; font-weight: 500; white-space: nowrap; }
+.transaction-history-table { min-width: 800px; white-space: normal; }
+.transaction-history-table th, .transaction-history-table td { padding: 10px 12px; vertical-align: middle; }
+.transaction-history-table th { white-space: nowrap; }
+.transaction-history-table .history-date { min-width: 148px; font-variant-numeric: tabular-nums; }
+.transaction-history-table .history-date strong, .transaction-history-table .history-date small { display: block; }
+.transaction-history-table .history-date small, .transaction-history-table .history-payment small { margin-top: 3px; color: #9295a5; font-size: 10px; font-weight: 500; }
+.transaction-history-table .history-party { min-width: 120px; font-weight: 650; overflow-wrap: anywhere; }
+.transaction-history-table .history-items { white-space: nowrap; }
+.transaction-history-table .history-total { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.transaction-history-table .history-payment { min-width: 94px; }
+.transaction-history-table .history-payment small { display: block; white-space: nowrap; }
+.transaction-history-table .history-processor { min-width: 135px; max-width: 210px; }
+.processed-by-name { white-space: normal; overflow-wrap: anywhere; }
+.history-processor-label { display: none; }
+.transaction-history-table th:last-child, .transaction-history-table .history-actions { min-width: 150px; text-align: center; }
+.transaction-history-table .history-actions .row-actions { justify-content: center; gap: 5px; }
+.transaction-history-table .history-detail td { padding: 0 12px 12px; }
+.transaction-history-table .detail-meta { flex-wrap: wrap; gap: 6px 16px; white-space: normal; }
+.transaction-history-table .detail-line { grid-template-columns: minmax(130px, 1fr) minmax(160px, auto) minmax(90px, auto); white-space: normal; }
+@media (max-width: 700px) {
+  .transaction-history-scroll { overflow: visible; }
+  .transaction-history-table, .transaction-history-table tbody { display: block; width: 100%; min-width: 0; }
+  .transaction-history-table thead { display: none; }
+  .transaction-history-table tbody { border: 1px solid #e9e8f1; border-radius: 12px; background: #fff; overflow: hidden; }
+  .transaction-history-table tbody + tbody { margin-top: 9px; }
+  .transaction-history-table .history-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; padding: 13px; }
+  .transaction-history-table .history-summary td { display: block; min-width: 0; max-width: none; padding: 0; border: 0; }
+  .transaction-history-table .history-party { grid-column: 1; order: 1; font-size: 13px; }
+  .transaction-history-table .history-total { grid-column: 2; order: 2; max-width: 45vw; text-align: right; white-space: normal; overflow-wrap: anywhere; }
+  .transaction-history-table .history-date { grid-column: 1 / -1; order: 3; display: flex !important; flex-wrap: wrap; gap: 4px 8px; color: #85899a; }
+  .transaction-history-table .history-date strong { font-weight: 500; }
+  .transaction-history-table .history-date small { margin: 0; align-self: center; }
+  .transaction-history-table .history-items { display: none !important; }
+  .transaction-history-table .history-payment { grid-column: 1 / -1; order: 4; display: flex !important; align-items: center; gap: 8px; }
+  .transaction-history-table .history-payment small { margin: 0; }
+  .transaction-history-table .history-processor { grid-column: 1 / -1; order: 5; color: #61667a; }
+  .transaction-history-table .history-processor-label { display: inline; margin-right: 6px; color: #9699a7; font-size: 11px; }
+  .transaction-history-table .history-actions { grid-column: 1 / -1; order: 6; padding-top: 8px !important; border-top: 1px solid #f0eff5 !important; }
+  .transaction-history-table .history-actions .row-actions { justify-content: center; flex-wrap: wrap; }
+  .transaction-history-table .history-detail { display: block; }
+  .transaction-history-table .history-detail td { display: block; padding: 0 10px 12px; border: 0; }
+  .transaction-history-table .history-detail .detail-card { padding: 11px; }
+  .transaction-history-table .history-detail .detail-line { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+}
 .dashboard-collections-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .dashboard-collections-grid .collection-alert-panel { margin-top: 0; min-width: 0; }
 .supplier-settlement-list { margin-top: 16px; }

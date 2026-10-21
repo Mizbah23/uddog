@@ -32,6 +32,13 @@ class Organization extends Model
     public function setup(): array
     {
         $saved = $this->system_settings ?? [];
+        $store = array_replace([
+            'allow_stock_adjustments' => true,
+            'allow_stock_transfers' => true,
+            'default_reorder_level' => 0,
+            'units' => ['pc', 'hali', '8 pcs', 'dozen', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'],
+        ], $saved['store'] ?? []);
+        $store['unit_conversions'] = array_replace(self::defaultUnitConversions(), $saved['store']['unit_conversions'] ?? []);
 
         return [
             'sales' => array_replace([
@@ -42,13 +49,14 @@ class Organization extends Model
                 'default_payment_method' => 'cash',
             ], $saved['sales'] ?? []),
             'purchases' => array_replace(['allow_purchase_returns' => true], $saved['purchases'] ?? []),
-            'store' => array_replace([
-                'allow_stock_adjustments' => true,
-                'allow_stock_transfers' => true,
-                'default_reorder_level' => 0,
-                'units' => ['pc', 'hali', '8 pcs', 'dozen', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'],
-            ], $saved['store'] ?? []),
+            'store' => $store,
         ];
+    }
+
+    /** @return array<string, int> */
+    public static function defaultUnitConversions(): array
+    {
+        return ['pc' => 1, 'hali' => 4, '8 pcs' => 8, 'dozen' => 12, 'items' => 1, 'units' => 1, 'packs' => 1, 'boxes' => 1, 'cartons' => 1, 'sets' => 1];
     }
 
     protected static function booted(): void

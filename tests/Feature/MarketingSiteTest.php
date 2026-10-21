@@ -55,6 +55,23 @@ class MarketingSiteTest extends TestCase
             ->assertSee('noindex,nofollow');
     }
 
+    public function test_workspace_pages_have_direct_hash_free_urls(): void
+    {
+        config([
+            'tenancy.enabled' => true,
+            'tenancy.base_domain' => 'test',
+            'tenancy.central_host' => 'test',
+        ]);
+
+        foreach (['dashboard', 'purchase', 'sale', 'reports', 'clients', 'profile'] as $page) {
+            $this->get("http://test/{$page}")
+                ->assertOk()
+                ->assertViewIs('app');
+        }
+
+        $this->get('http://test/unknown-workspace-page')->assertNotFound();
+    }
+
     public function test_www_homepage_redirects_to_the_canonical_domain(): void
     {
         config([

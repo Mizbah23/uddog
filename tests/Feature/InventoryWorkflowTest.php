@@ -59,6 +59,89 @@ class InventoryWorkflowTest extends TestCase
         $this->assertSame('-1.000', StockMovement::query()->latest('id')->first()->quantity_change);
     }
 
+    public function test_purchase_and_sale_units_convert_to_pieces_and_keep_the_entered_unit_snapshot(): void
+    {
+        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        $product->update(['unit' => 'pc']);
+        $this->actingAs($user);
+
+        $purchase = $this->payload('purchase', $supplier, $product, '2', '120.00');
+        $purchase['items'][0]['unit'] = 'dozen';
+        $this->postJson('/api/documents', $purchase)
+            ->assertCreated()
+            ->assertJsonPath('total', '240.00')
+            ->assertJsonPath('items.0.quantity', '24.000')
+            ->assertJsonPath('items.0.entered_quantity', '2.000')
+            ->assertJsonPath('items.0.entered_unit', 'dozen')
+            ->assertJsonPath('items.0.unit_conversion', 12)
+            ->assertJsonPath('items.0.unit_price', '10.00');
+
+        $sale = $this->payload('sale', $customer, $product, '2', '60.00');
+        $sale['items'][0]['unit'] = 'hali';
+        $firstSale = $this->postJson('/api/documents', $sale)
+            ->assertCreated()
+            ->assertJsonPath('total', '120.00')
+            ->assertJsonPath('stock_profit', '40.00')
+            ->assertJsonPath('items.0.quantity', '8.000')
+            ->assertJsonPath('items.0.entered_unit', 'hali')
+            ->assertJsonPath('items.0.unit_conversion', 4)
+            ->json();
+
+        $this->assertSame('16.000', $product->fresh()->quantity_on_hand);
+        $this->assertSame('-8.000', StockMovement::query()->latest('id')->first()->quantity_change);
+
+        $settings = $user->organization->fresh()->setup();
+        $settings['store']['unit_conversions']['hali'] = 5;
+        $user->organization->update(['system_settings' => $settings]);
+
+        $laterSale = $this->payload('sale', $customer, $product, '1', '75.00');
+        $laterSale['items'][0]['unit'] = 'hali';
+        $this->postJson('/api/documents', $laterSale)
+            ->assertCreated()
+            ->assertJsonPath('items.0.quantity', '5.000')
+            ->assertJsonPath('items.0.unit_conversion', 5);
+
+        $this->assertSame('11.000', $product->fresh()->quantity_on_hand);
+        $sales = $this->getJson('/api/documents?type=sale')->assertOk()->json();
+        $this->assertSame(4, collect($sales)->firstWhere('id', $firstSale['id'])['items'][0]['unit_conversion']);
+    }
+
+    public function test_piece_product_rejects_weight_unit_without_changing_stock(): void
+    {
+        [$user, $supplier, , $product] = $this->setupRecords();
+        $product->update(['unit' => 'pc']);
+        $this->actingAs($user);
+        $purchase = $this->payload('purchase', $supplier, $product, '2', '10.00');
+        $purchase['items'][0]['unit'] = 'kg';
+
+        $this->postJson('/api/documents', $purchase)->assertUnprocessable()->assertJsonValidationErrors('items');
+
+        $this->assertSame('0.000', $product->fresh()->quantity_on_hand);
+        $this->assertSame(0, Document::query()->count());
+    }
+
+    public function test_dozen_price_keeps_exact_line_total_and_rejects_sale_above_base_stock(): void
+    {
+        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        $product->update(['unit' => 'pc']);
+        $this->actingAs($user);
+        $purchase = $this->payload('purchase', $supplier, $product, '1', '100.00');
+        $purchase['items'][0]['unit'] = 'dozen';
+
+        $this->postJson('/api/documents', $purchase)
+            ->assertCreated()
+            ->assertJsonPath('subtotal', '100.00')
+            ->assertJsonPath('items.0.line_total', '100.00')
+            ->assertJsonPath('items.0.unit_price', '8.33');
+
+        $sale = $this->payload('sale', $customer, $product, '4', '40.00');
+        $sale['items'][0]['unit'] = 'hali';
+        $this->postJson('/api/documents', $sale)->assertUnprocessable()->assertJsonValidationErrors('items');
+
+        $this->assertSame('12.000', $product->fresh()->quantity_on_hand);
+        $this->assertSame(1, Document::query()->count());
+    }
+
     public function test_rejected_sale_rolls_back_document_and_stock(): void
     {
         [$user, , $customer, $product] = $this->setupRecords();
@@ -149,7 +232,7 @@ class InventoryWorkflowTest extends TestCase
             ->assertJsonPath('monthly_totals.9.purchases', 80);
     }
 
-    public function test_product_can_be_created_without_default_cost_or_sale_prices(): void
+    public function test_product_cannot_be_created_without_purchase_cost_and_sale_price(): void
     {
         $user = User::factory()->create();
 
@@ -158,9 +241,10 @@ class InventoryWorkflowTest extends TestCase
             'unit' => 'pc',
             'reorder_level' => 0,
             'active' => true,
-        ])->assertCreated()
-            ->assertJsonPath('cost_price', '0.00')
-            ->assertJsonPath('sale_price', '0.00');
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['cost_price', 'sale_price']);
+
+        $this->assertDatabaseMissing('products', ['name' => 'Price at transaction product']);
     }
 
     public function test_return_cannot_exceed_original_purchase(): void
