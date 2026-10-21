@@ -63,6 +63,23 @@
 .profit-loss-signatures strong { display: block; margin-top: 13px; color: #48465f; font-size: 12px; }
 .profit-loss-footer p { margin: 58px 0 0; color: #858498; font-size: 10px; }
 .profit-loss-sheet-status { padding: 32px 18px; text-align: center; color: #77778e; }
+.profit-loss-sheet-status strong, .profit-loss-sheet-status span { display: block; }
+.profit-loss-sheet-status strong { margin-bottom: 5px; color: #48465f; }
+
+.standard-report-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 1px; padding: 1px; background: #eae5fb; }
+.standard-report-stat { display: grid; align-content: center; gap: 7px; min-height: 92px; padding: 17px 20px; background: linear-gradient(125deg, #faf9ff, #f2efff); }
+.standard-report-stat span { color: #716a9e; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.standard-report-stat strong { color: #4d43aa; font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.standard-report-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.standard-report-table th, .standard-report-table td { padding: 13px 14px; border-bottom: 1px solid #f0eef7; color: #414154; vertical-align: middle; }
+.standard-report-table thead th { background: linear-gradient(110deg, #edeaff, #f7f5ff); color: #5a4fc2; font-size: 11px; font-weight: 750; text-align: left; white-space: nowrap; }
+.standard-report-table tbody tr:nth-child(even) { background: #fcfbff; }
+.standard-report-table tbody tr:hover { background: #f5f2ff; }
+.standard-report-table .standard-report-number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.standard-report-table .ledger-source-action { white-space: nowrap; }
+.standard-report-table .report-reference-link { border: 0; padding: 0; background: transparent; color: #5a4fc2; font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.standard-report-table .report-reference-link:hover, .standard-report-table .report-reference-link:focus-visible { color: #382ca1; }
+.standard-report-sheet .profit-loss-note { border-top: 1px solid #f0eef7; }
 
 .product-ledger-table { width: 100%; min-width: 1120px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
 .product-ledger-table th, .product-ledger-table td { padding: 13px 12px; border-bottom: 1px solid #f0eef7; color: #414154; }
@@ -85,6 +102,28 @@
 .product-ledger-table .product-ledger-total > * { color: #554bb0; }
 .product-ledger-table .product-ledger-total th { text-align: right; }
 
+.lifecycle-ledger-summary { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+.lifecycle-ledger-table { width: 100%; min-width: 1360px; border-collapse: collapse; font-size: 11px; }
+.lifecycle-ledger-table th, .lifecycle-ledger-table td { padding: 13px 12px; border-bottom: 1px solid #efedf7; vertical-align: top; }
+.lifecycle-ledger-table thead th { background: linear-gradient(110deg, #edeaff, #f7f5ff); color: #5a4fc2; font-weight: 750; text-align: left; white-space: nowrap; }
+.lifecycle-ledger-table tbody tr:nth-child(even) { background: #fcfbff; }
+.lifecycle-ledger-table tbody tr:hover { background: #f7f5ff; }
+.lifecycle-ledger-table td strong, .lifecycle-ledger-table td small { display: block; }
+.lifecycle-ledger-table td strong { color: #3e3d57; font-weight: 700; }
+.lifecycle-ledger-table td small { margin-top: 4px; color: #858399; line-height: 1.35; }
+.lifecycle-lot-details { margin-top: 6px; min-width: 150px; }
+.lifecycle-lot-details summary { color: #6559c2; font-weight: 700; cursor: pointer; }
+.lifecycle-lot-details > div { display: grid; gap: 3px; margin-top: 7px; padding: 8px; border: 1px solid #e8e3f8; border-radius: 8px; background: #faf9ff; color: #6c6885; line-height: 1.3; }
+.lifecycle-lot-details > div b { color: #494264; }
+.lifecycle-ledger-table .lifecycle-number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lifecycle-ledger-table .lifecycle-positive, .lifecycle-ledger-summary .lifecycle-positive { color: #159873; }
+.lifecycle-ledger-table .lifecycle-negative, .lifecycle-ledger-summary .lifecycle-negative, .lifecycle-ledger-totals .lifecycle-negative { color: #c05069; }
+.lifecycle-type { display: inline-block; padding: 5px 8px; border-radius: 7px; background: #ece9ff; color: #5a4fc2; font-weight: 750; white-space: nowrap; }
+.lifecycle-type.purchase, .lifecycle-type.sale_return, .lifecycle-type.transfer_in { background: #e6f8f1; color: #15835f; }
+.lifecycle-type.sale, .lifecycle-type.resale, .lifecycle-type.purchase_return, .lifecycle-type.transfer_out, .lifecycle-type.damage { background: #fff0e7; color: #b46a28; }
+.lifecycle-ledger-totals { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px 26px; padding: 17px 22px; border-top: 1px solid #e9e5f8; background: #f8f6ff; color: #6c668d; font-size: 12px; }
+.lifecycle-ledger-totals strong { margin-left: 6px; color: #4d43aa; font-size: 14px; }
+
 @media (max-width: 600px) {
   .profit-loss-footer { padding: 64px 15px 20px; }
   .profit-loss-signatures { gap: 10px; }
@@ -93,6 +132,7 @@
 }
 
 @page productLedgerPage { size: A4 landscape; margin: 12mm; }
+@page standardReportPage { size: A4 landscape; margin: 10mm; }
 @media print {
   body:has(.profit-loss-sheet) * { visibility: visible !important; }
   .report-view-shell:has(.profit-loss-sheet) .page-heading,
@@ -110,7 +150,22 @@
   .product-ledger-table { min-width: 0; font-size: 8pt; }
   .product-ledger-table th, .product-ledger-table td { padding: 7px 5px; }
   .product-ledger-table thead { display: table-header-group; }
+  .lifecycle-ledger-sheet { page: productLedgerPage; }
+  .lifecycle-ledger-table { min-width: 0; font-size: 7pt; }
+  .lifecycle-ledger-table th, .lifecycle-ledger-table td { padding: 6px 4px; }
+  .lifecycle-ledger-table thead { display: table-header-group; }
+  .lifecycle-ledger-table tr { break-inside: avoid; }
+  .lifecycle-lot-details > div { display: grid !important; }
   .product-ledger-table tr { break-inside: avoid; }
   .product-ledger-table thead th, .product-ledger-table .product-ledger-total { print-color-adjust: exact; }
+  .standard-report-sheet { page: standardReportPage; }
+  .standard-report-summary { grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); break-inside: avoid; }
+  .standard-report-stat { min-height: 54px; padding: 8px 10px; }
+  .standard-report-stat strong { font-size: 12pt; }
+  .standard-report-table { min-width: 0 !important; font-size: 8pt; }
+  .standard-report-table th, .standard-report-table td { padding: 7px 5px; }
+  .standard-report-table thead { display: table-header-group; }
+  .standard-report-table tr { break-inside: avoid; }
+  .standard-report-summary, .standard-report-table thead th { print-color-adjust: exact; }
   .profit-loss-sheet-header, .profit-loss-table .profit-loss-groups th, .profit-loss-table .profit-loss-columns th, .profit-loss-total, .profit-loss-net { print-color-adjust: exact; }
 }

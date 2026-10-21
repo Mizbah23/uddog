@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\User;
@@ -13,6 +14,68 @@ use Tests\TestCase;
 class ReportPermissionTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_customer_ledger_reference_opens_its_invoice_for_a_user_with_report_access(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Ledger Customer', 'type' => 'customer']);
+        $sale = Document::create([
+            'organization_id' => $owner->organization_id,
+            'branch_id' => $branch->id,
+            'number' => 'SAL-LEDGER-1',
+            'type' => 'sale',
+            'contact_id' => $customer->id,
+            'document_date' => '2026-10-20',
+            'subtotal' => 100,
+            'total' => 100,
+            'amount_paid' => 40,
+            'created_by' => $owner->id,
+        ]);
+        $staff = User::factory()->staff()->for($owner->organization)->create([
+            'permissions' => [Permission::Contacts->value],
+            'report_permissions' => ['customer_ledger'],
+        ]);
+
+        $this->actingAs($staff)->getJson("/api/reports?report=customer_ledger&branch_id={$branch->id}")
+            ->assertOk()
+            ->assertJsonPath('rows.0.reference', 'SAL-LEDGER-1')
+            ->assertJsonPath('rows.0.document_id', $sale->id);
+        $this->getJson("/api/reports/customer-ledger/invoices/{$sale->id}?branch_id={$branch->id}")
+            ->assertOk()
+            ->assertJsonPath('id', $sale->id)
+            ->assertJsonPath('number', 'SAL-LEDGER-1')
+            ->assertJsonPath('contact.name', 'Ledger Customer');
+    }
+
+    public function test_customer_ledger_invoice_rejects_other_branches_tenants_and_users_without_report_access(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $otherBranch = Branch::create(['organization_id' => $owner->organization_id, 'name' => 'Other branch', 'code' => 'OTHER', 'active' => true]);
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Ledger Customer', 'type' => 'customer']);
+        $sale = Document::create([
+            'organization_id' => $owner->organization_id,
+            'branch_id' => $branch->id,
+            'number' => 'SAL-LEDGER-2',
+            'type' => 'sale',
+            'contact_id' => $customer->id,
+            'document_date' => '2026-10-20',
+            'subtotal' => 100,
+            'total' => 100,
+            'amount_paid' => 100,
+            'created_by' => $owner->id,
+        ]);
+        $withoutReport = User::factory()->staff()->for($owner->organization)->create([
+            'permissions' => [Permission::Contacts->value],
+            'report_permissions' => [],
+        ]);
+        $otherOwner = User::factory()->admin()->create();
+
+        $this->actingAs($owner)->getJson("/api/reports/customer-ledger/invoices/{$sale->id}?branch_id={$otherBranch->id}")->assertNotFound();
+        $this->actingAs($withoutReport)->getJson("/api/reports/customer-ledger/invoices/{$sale->id}?branch_id={$branch->id}")->assertForbidden();
+        $this->actingAs($otherOwner)->getJson("/api/reports/customer-ledger/invoices/{$sale->id}")->assertNotFound();
+    }
 
     public function test_sales_report_exposes_the_recorded_time_separately_from_the_sale_date(): void
     {

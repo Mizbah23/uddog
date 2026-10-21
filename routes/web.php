@@ -46,6 +46,8 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->middleware('permission:expenses');
             Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->middleware('permission:expenses');
             Route::get('reports', [ReportController::class, 'index']);
+            Route::get('reports/customer-ledger/invoices/{document}', [ReportController::class, 'customerLedgerInvoice']);
+            Route::get('reports/supplier-ledger/invoices/{document}', [ReportController::class, 'supplierLedgerInvoice']);
             Route::get('gold/rates', [GoldStoreController::class, 'rates'])->middleware('permission:products,purchases,sales,pos_sale');
             Route::middleware('permission:products,purchases,sales')->group(function () {
                 Route::post('gold/rates', [GoldStoreController::class, 'saveRate'])->middleware('role:admin,manager');

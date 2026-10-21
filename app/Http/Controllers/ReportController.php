@@ -13,6 +13,7 @@ use App\Models\SupportImpersonation;
 use App\Permission;
 use App\ReportType;
 use App\Services\GeneralLedgerReport;
+use App\Services\ProductLifecycleLedgerReport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,14 +22,15 @@ use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
-    public function index(Request $request, GeneralLedgerReport $generalLedger): JsonResponse
+    public function index(Request $request, GeneralLedgerReport $generalLedger, ProductLifecycleLedgerReport $productLifecycleLedger): JsonResponse
     {
         $data = $request->validate([
             'report' => ['required', Rule::enum(ReportType::class)],
-            'branch_id' => ['nullable', in_array($request->input('report'), ['profit_loss', 'product_ledger'], true) ? 'regex:/\A(?:all|[1-9][0-9]*)\z/' : 'integer'],
+            'branch_id' => ['nullable', in_array($request->input('report'), ['profit_loss', 'product_ledger', 'product_lifecycle_ledger'], true) ? 'regex:/\A(?:all|[1-9][0-9]*)\z/' : 'integer'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'search' => ['nullable', 'string', 'max:100'],
+            'product_id' => ['nullable', 'integer'],
             'contact_id' => ['nullable', 'integer'],
             'account' => ['nullable', Rule::in(array_keys(GeneralLedgerReport::accounts()))],
         ]);
@@ -43,7 +45,7 @@ class ReportController extends Controller
         abort_unless(Auth::user()->hasReportAccess(ReportType::from($report)), 403, 'Your owner has not granted access to this report.');
 
         $branchAccess = app(BranchAccess::class);
-        $allBranches = in_array($report, ['profit_loss', 'product_ledger'], true) && ($data['branch_id'] ?? null) === 'all';
+        $allBranches = in_array($report, ['profit_loss', 'product_ledger', 'product_lifecycle_ledger'], true) && ($data['branch_id'] ?? null) === 'all';
         if ($allBranches) {
             $branches = $branchAccess->query(Auth::user(), $organizationId)->where('active', true)->get(['id', 'name']);
             abort_unless($branches->count() > 1, 403, 'Multiple branch access is required to view an all-branch report.');
@@ -75,6 +77,12 @@ class ReportController extends Controller
         if (Auth::user()->hasPermission(Permission::PurchaseReturns)) {
             $visibleTypes->push('purchase', 'purchase_return');
         }
+        if ($report === 'customer_ledger') {
+            $visibleTypes->push('sale', 'resale', 'sale_return');
+        }
+        if ($report === 'supplier_ledger') {
+            $visibleTypes->push('purchase', 'purchase_return');
+        }
         $visibleTypes = $visibleTypes->unique()->values()->all();
         $documents = Document::query()->where('organization_id', $organizationId)->whereIn('branch_id', $branchIds)->whereIn('type', $visibleTypes)
             ->when($dateFrom, fn ($query) => $query->whereDate('document_date', '>=', $dateFrom))
@@ -85,6 +93,7 @@ class ReportController extends Controller
             'purchases' => $this->purchases($documents),
             'profit_loss' => $this->profitLoss($documents, $organizationId, $branchIds, $branchName, $dateFrom, $dateTo),
             'product_ledger' => $this->productLedger($documents, $branchName, $search),
+            'product_lifecycle_ledger' => $productLifecycleLedger->build($organizationId, $branchIds, $branchName, $data['product_id'] ?? null, $dateFrom, $dateTo),
             'employee_sales' => $this->employeeSales($documents),
             'stock' => $this->stock($organizationId, $branchId, $search),
             'adjustments' => $this->adjustments($organizationId, $branchId, $dateFrom, $dateTo),
@@ -94,10 +103,40 @@ class ReportController extends Controller
             'customers' => $this->customers($organizationId, $branchId),
             'customer_ledger' => $this->customerLedger($documents, $data['contact_id'] ?? null),
             'customer_due' => $this->customerDue($documents),
+            'suppliers' => $this->suppliers($organizationId, $branchId),
+            'supplier_ledger' => $this->supplierLedger($documents, $data['contact_id'] ?? null),
+            'supplier_due' => $this->supplierDue($documents),
             'general_ledger' => $generalLedger->build($organizationId, $branchId, $dateFrom, $dateTo, $data['account'] ?? null),
         };
 
         return response()->json(['report' => $report, ...$result]);
+    }
+
+    public function customerLedgerInvoice(Request $request, int $document): JsonResponse
+    {
+        return $this->ledgerInvoice($request, $document, ReportType::CustomerLedger, ['sale', 'resale', 'sale_return'], ['customer', 'both']);
+    }
+
+    public function supplierLedgerInvoice(Request $request, int $document): JsonResponse
+    {
+        return $this->ledgerInvoice($request, $document, ReportType::SupplierLedger, ['purchase', 'purchase_return'], ['supplier', 'both']);
+    }
+
+    private function ledgerInvoice(Request $request, int $document, ReportType $report, array $types, array $contactTypes): JsonResponse
+    {
+        $user = Auth::user();
+        abort_unless($user?->hasReportAccess($report), 403);
+        if ($user->isSuperadmin() && ! SupportImpersonation::activeFor($request)) {
+            abort(403, 'Open a company through View as owner before using its workspace.');
+        }
+
+        $branchId = app(BranchAccess::class)->activeBranch($user, $user->organization_id, $request->integer('branch_id') ?: null)->id;
+        $invoice = Document::query()->where('organization_id', $user->organization_id)->where('branch_id', $branchId)
+            ->whereIn('type', $types)
+            ->whereHas('contact', fn ($query) => $query->whereIn('type', $contactTypes))
+            ->findOrFail($document);
+
+        return response()->json($invoice->load('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total'));
     }
 
     private function sales(Builder $documents): array
@@ -352,7 +391,7 @@ class ReportController extends Controller
         }
         $rows = (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])->whereHas('contact', fn ($query) => $query->whereIn('type', ['customer', 'both']))
             ->when($contactId, fn ($query) => $query->where('contact_id', $contactId))->with('contact:id,name')->orderBy('document_date')->get()
-            ->map(fn (Document $document) => ['date' => $document->document_date, 'customer' => $document->contact?->name ?? '—', 'reference' => $document->number, 'type' => $document->type, 'debit' => $document->type === 'sale_return' ? 0 : (float) $document->total, 'credit' => $document->type === 'sale_return' ? (float) $document->total : (float) $document->amount_paid, 'balance' => (float) $document->balance_due]);
+            ->map(fn (Document $document) => ['date' => $document->document_date, 'customer' => $document->contact?->name ?? '—', 'reference' => $document->number, 'type' => $document->type, 'debit' => $document->type === 'sale_return' ? 0 : (float) $document->total, 'credit' => $document->type === 'sale_return' ? (float) $document->total : (float) $document->amount_paid, 'balance' => (float) $document->balance_due, 'document_id' => $document->id]);
 
         return $this->table(['Date', 'Customer', 'Reference', 'Type', 'Debit', 'Credit', 'Open balance'], $rows, ['debit' => $rows->sum('debit'), 'credit' => $rows->sum('credit'), 'balance' => $rows->sum('balance')]);
     }
@@ -363,6 +402,66 @@ class ReportController extends Controller
             ->map(fn (Document $document) => ['date' => $document->document_date, 'invoice' => $document->number, 'customer' => $document->contact?->name ?? '—', 'phone' => $document->contact?->phone ?? '—', 'total' => (float) $document->total, 'paid' => (float) $document->amount_paid, 'due' => (float) $document->balance_due, 'status' => $document->payment_status]);
 
         return $this->table(['Date', 'Invoice', 'Customer', 'Phone', 'Total', 'Paid', 'Due', 'Status'], $rows, ['invoices' => $rows->count(), 'due' => $rows->sum('due')]);
+    }
+
+    private function suppliers(int $organizationId, int $branchId): array
+    {
+        $documentsByContact = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('type', ['purchase', 'purchase_return'])
+            ->get(['contact_id', 'type', 'total', 'amount_paid'])->groupBy('contact_id');
+        $rows = Contact::query()->where('organization_id', $organizationId)->whereIn('type', ['supplier', 'both'])->orderBy('name')->get()
+            ->map(function (Contact $contact) use ($documentsByContact) {
+                $documents = $documentsByContact->get($contact->id, collect());
+                $purchases = $documents->where('type', 'purchase');
+                $returns = $documents->where('type', 'purchase_return')->sum(fn (Document $document) => (float) $document->total);
+                $purchaseTotal = $purchases->sum(fn (Document $document) => (float) $document->total);
+                $paid = $purchases->sum(fn (Document $document) => (float) $document->amount_paid);
+                $openingPayable = (float) $contact->opening_payable;
+
+                return ['supplier' => $contact->name, 'phone' => $contact->phone ?? '—', 'purchases_count' => $purchases->count(), 'purchases' => $purchaseTotal, 'returns' => $returns, 'paid' => $paid, 'opening_payable' => $openingPayable, 'due' => $openingPayable + $purchaseTotal - $returns - $paid];
+            })->values();
+
+        return $this->table(['Supplier', 'Phone', 'Purchases count', 'Purchases', 'Returns', 'Paid', 'Opening payable', 'Due'], $rows, ['suppliers' => $rows->count(), 'purchases' => $rows->sum('purchases'), 'returns' => $rows->sum('returns'), 'paid' => $rows->sum('paid'), 'due' => $rows->sum('due')]);
+    }
+
+    private function supplierLedger(Builder $documents, ?int $contactId): array
+    {
+        if ($contactId) {
+            Contact::query()->where('organization_id', Auth::user()->organization_id)->whereIn('type', ['supplier', 'both'])->findOrFail($contactId);
+        }
+        $rows = (clone $documents)->whereIn('type', ['purchase', 'purchase_return'])
+            ->whereHas('contact', fn ($query) => $query->whereIn('type', ['supplier', 'both']))
+            ->when($contactId, fn ($query) => $query->where('contact_id', $contactId))
+            ->with(['contact:id,name', 'purchaseReturns:id,purchase_id,total'])
+            ->orderBy('document_date')->orderBy('id')->get()
+            ->map(fn (Document $document) => [
+                'date' => $document->document_date,
+                'supplier' => $document->contact?->name ?? '—',
+                'reference' => $document->number,
+                'type' => $document->type,
+                'debit' => $document->type === 'purchase_return' ? (float) $document->total : (float) $document->amount_paid,
+                'credit' => $document->type === 'purchase_return' ? 0 : (float) $document->total,
+                'balance' => $document->type === 'purchase_return' ? 0 : (float) $document->balance_due,
+                'document_id' => $document->id,
+            ]);
+
+        return $this->table(['Date', 'Supplier', 'Reference', 'Type', 'Debit', 'Credit', 'Open balance'], $rows, ['debit' => $rows->sum('debit'), 'credit' => $rows->sum('credit'), 'balance' => $rows->sum('balance')]);
+    }
+
+    private function supplierDue(Builder $documents): array
+    {
+        $rows = (clone $documents)->where('type', 'purchase')
+            ->whereHas('contact', fn ($query) => $query->whereIn('type', ['supplier', 'both']))
+            ->with(['contact:id,name,phone', 'purchaseReturns:id,purchase_id,total'])
+            ->orderByDesc('document_date')->get()
+            ->filter(fn (Document $document) => (float) $document->balance_due > 0)
+            ->map(function (Document $document) {
+                $returned = $document->purchaseReturns->sum(fn (Document $return) => (float) $return->total);
+
+                return ['date' => $document->document_date, 'invoice' => $document->number, 'supplier' => $document->contact?->name ?? '—', 'phone' => $document->contact?->phone ?? '—', 'total' => (float) $document->total, 'returned' => $returned, 'paid' => (float) $document->amount_paid, 'due' => (float) $document->balance_due, 'status' => (float) $document->amount_paid + $returned > 0 ? 'Partial due' : 'Due'];
+            })->values();
+
+        return $this->table(['Date', 'Invoice', 'Supplier', 'Phone', 'Total', 'Returned', 'Paid', 'Due', 'Status'], $rows, ['invoices' => $rows->count(), 'due' => $rows->sum('due')]);
     }
 
     private function table(array $columns, $rows, array $summary): array
