@@ -293,6 +293,7 @@ body {
 @media (max-width: 650px) { .expense-filter-grid { grid-template-columns: 1fr; } .expense-pagination { justify-content: center; } }
 .report-filter-grid { display: grid; grid-template-columns: minmax(190px, 1.35fr) repeat(2, minmax(145px, .8fr)) minmax(160px, 1fr) auto; gap: 13px; align-items: end; }
 .report-filter-grid.ledger-filter-grid { grid-template-columns: minmax(170px, 1fr) repeat(2, minmax(140px, .8fr)) minmax(240px, 1.3fr) auto; }
+.report-filter-grid.product-ledger-filter-grid { grid-template-columns: minmax(160px, 1.2fr) repeat(2, minmax(130px, .7fr)) minmax(140px, .8fr) minmax(160px, 1fr) auto; }
 .report-current { display: flex; flex-direction: column; gap: 7px; align-self: stretch; justify-content: end; }
 .report-current span { color: #6b6e7e; font-size: 11.5px; font-weight: 700; }
 .report-current strong { display: flex; align-items: center; min-height: 38px; color: #45415f; font-size: 13px; }
@@ -350,12 +351,12 @@ body {
 .category-chart-track { height: 7px; overflow: hidden; border-radius: 99px; background: #f0eef7; }
 .category-chart-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7760dc, #aa89ef); }
 @media (max-width: 1000px) {
-  .report-filter-grid, .report-filter-grid.ledger-filter-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  .report-filter-grid, .report-filter-grid.ledger-filter-grid, .report-filter-grid.product-ledger-filter-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
   .report-run-button { grid-column: 1 / -1; }
   .dashboard-analytics-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 580px) {
-  .report-filter-grid, .report-filter-grid.ledger-filter-grid { grid-template-columns: 1fr; }
+  .report-filter-grid, .report-filter-grid.ledger-filter-grid, .report-filter-grid.product-ledger-filter-grid { grid-template-columns: 1fr; }
   .monthly-chart-plot, .month-chart-labels { gap: 3px; }
   .month-chart-labels small { font-size: 9px; }
   .month-bar { width: min(10px, 37%); }
@@ -487,7 +488,8 @@ body {
 
 .compact-page-heading .page-heading > div { display: none; }
 .compact-page-heading .page-heading > .company-toolbar-actions { display: flex; }
-.compact-page-heading .page-heading:not(:has(> button, > .company-toolbar-actions)) { display: none; }
+.compact-page-heading .page-heading > .report-action-group { display: flex; }
+.compact-page-heading .page-heading:not(:has(> button, > .company-toolbar-actions, > .report-action-group)) { display: none; }
 
 .expense-new-category-input { margin-top: 8px; }
 

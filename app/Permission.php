@@ -17,6 +17,7 @@ enum Permission: string
     case PurchaseReturns = 'purchase_returns';
     case Inventory = 'inventory';
     case StockAdjustments = 'stock_adjustments';
+    case ProductDamages = 'product_damages';
     case StockChecks = 'stock_checks';
     case StockTransfers = 'stock_transfers';
     case WarrantySearch = 'warranty_search';
@@ -39,6 +40,7 @@ enum Permission: string
             self::PurchaseReturns => 'Purchase returns',
             self::Inventory => 'Inventory and stock history',
             self::StockAdjustments => 'Manual stock adjustments',
+            self::ProductDamages => 'Damaged products',
             self::StockChecks => 'Stock checks',
             self::StockTransfers => 'Stock transfers',
             self::WarrantySearch => 'Warranty search',

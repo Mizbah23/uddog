@@ -25,7 +25,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'report' => ['required', Rule::enum(ReportType::class)],
-            'branch_id' => ['nullable', 'integer'],
+            'branch_id' => ['nullable', in_array($request->input('report'), ['profit_loss', 'product_ledger'], true) ? 'regex:/\A(?:all|[1-9][0-9]*)\z/' : 'integer'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'search' => ['nullable', 'string', 'max:100'],
@@ -42,7 +42,20 @@ class ReportController extends Controller
         $report = $data['report'];
         abort_unless(Auth::user()->hasReportAccess(ReportType::from($report)), 403, 'Your owner has not granted access to this report.');
 
-        $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
+        $branchAccess = app(BranchAccess::class);
+        $allBranches = in_array($report, ['profit_loss', 'product_ledger'], true) && ($data['branch_id'] ?? null) === 'all';
+        if ($allBranches) {
+            $branches = $branchAccess->query(Auth::user(), $organizationId)->where('active', true)->get(['id', 'name']);
+            abort_unless($branches->count() > 1, 403, 'Multiple branch access is required to view an all-branch report.');
+            $branchIds = $branches->pluck('id')->all();
+            $branchId = null;
+            $branchName = 'All permitted branches';
+        } else {
+            $branch = $branchAccess->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null);
+            $branchId = $branch->id;
+            $branchIds = [$branchId];
+            $branchName = $branch->name;
+        }
         $dateFrom = $data['date_from'] ?? null;
         $dateTo = $data['date_to'] ?? null;
         $search = trim($data['search'] ?? '');
@@ -63,14 +76,15 @@ class ReportController extends Controller
             $visibleTypes->push('purchase', 'purchase_return');
         }
         $visibleTypes = $visibleTypes->unique()->values()->all();
-        $documents = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->whereIn('type', $visibleTypes)
+        $documents = Document::query()->where('organization_id', $organizationId)->whereIn('branch_id', $branchIds)->whereIn('type', $visibleTypes)
             ->when($dateFrom, fn ($query) => $query->whereDate('document_date', '>=', $dateFrom))
             ->when($dateTo, fn ($query) => $query->whereDate('document_date', '<=', $dateTo));
 
         $result = match ($report) {
             'sales' => $this->sales($documents),
             'purchases' => $this->purchases($documents),
-            'profit_loss' => $this->profitLoss($documents, $organizationId, $branchId, $dateFrom, $dateTo),
+            'profit_loss' => $this->profitLoss($documents, $organizationId, $branchIds, $branchName, $dateFrom, $dateTo),
+            'product_ledger' => $this->productLedger($documents, $branchName, $search),
             'employee_sales' => $this->employeeSales($documents),
             'stock' => $this->stock($organizationId, $branchId, $search),
             'adjustments' => $this->adjustments($organizationId, $branchId, $dateFrom, $dateTo),
@@ -113,29 +127,141 @@ class ReportController extends Controller
         return $this->table(['Date', 'Reference', 'Type', 'Supplier', 'Employee', 'Net total'], $rows, ['net_purchases' => $rows->sum('total')]);
     }
 
-    private function profitLoss(Builder $documents, int $organizationId, int $branchId, ?string $dateFrom, ?string $dateTo): array
+    private function profitLoss(Builder $documents, int $organizationId, array $branchIds, string $branchName, ?string $dateFrom, ?string $dateTo): array
     {
         $sales = (clone $documents)->whereIn('type', ['sale', 'resale'])->with('items')->get();
         $returnDocuments = (clone $documents)->where('type', 'sale_return')->with('items')->get();
+        $totalSales = $sales->sum(fn (Document $document) => (float) $document->total);
         $returns = $returnDocuments->sum(fn (Document $document) => (float) $document->total);
         $returnProfit = $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->line_total - ((float) $item->cost_price * (float) $item->quantity)));
         $grossProfit = $sales->sum(fn (Document $document) => (float) $document->total_profit);
-        $netSales = $sales->sum(fn (Document $document) => (float) $document->total) - (float) $returns;
-        $expenses = Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+        $netSales = $totalSales - $returns;
+        $expenses = Expense::query()->where('organization_id', $organizationId)->whereIn('branch_id', $branchIds)
             ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
             ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))->get();
         $expenseTotal = $expenses->sum(fn (Expense $expense) => (float) $expense->amount);
         $grossProfitAfterReturns = $grossProfit - $returnProfit;
         $netProfit = $grossProfitAfterReturns - $expenseTotal;
-        $rows = collect([
-            ['item' => 'Net sales after returns', 'amount' => $netSales],
-            ['item' => 'Gross profit after returns', 'amount' => $grossProfitAfterReturns],
-            ['item' => 'Sales returns', 'amount' => -(float) $returns],
-            ['item' => 'Operating expenses', 'amount' => -$expenseTotal],
-            ['item' => 'Net profit after operating expenses', 'amount' => $netProfit],
-        ]);
+        $costOfSales = $sales->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->cost_price * (float) $item->quantity))
+            - $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->cost_price * (float) $item->quantity));
+        $salesAdjustments = $netSales - $grossProfitAfterReturns - $costOfSales;
+        $totalCostsAndExpenses = $netSales - $netProfit;
+        $income = collect([
+            ['account' => 'Total sales', 'amount' => $totalSales],
+            ['account' => 'Sales returns', 'amount' => -$returns],
+        ])->filter(fn (array $item) => $item['amount'] != 0)->values();
+        $expenseAccounts = collect([
+            ['account' => 'Cost of sales', 'amount' => $costOfSales],
+            ['account' => 'Tax & sales adjustments', 'amount' => $salesAdjustments],
+        ])->filter(fn (array $item) => $item['amount'] != 0)->concat($expenses->groupBy(fn (Expense $expense) => $expense->category ?: 'Uncategorized')
+            ->map(fn ($items, string $category) => ['account' => $category, 'amount' => $items->sum(fn (Expense $expense) => (float) $expense->amount)])
+            ->sortBy('account')->values())->values();
+        $rows = collect(range(0, max($income->count(), $expenseAccounts->count(), 1) - 1))
+            ->map(fn (int $index) => [
+                'income_account' => $income->get($index)['account'] ?? '',
+                'income_amount' => $income->get($index)['amount'] ?? null,
+                'expense_account' => $expenseAccounts->get($index)['account'] ?? '',
+                'expense_amount' => $expenseAccounts->get($index)['amount'] ?? null,
+            ])->push([
+                'income_account' => 'Total income',
+                'income_amount' => $netSales,
+                'expense_account' => 'Total costs & expenses',
+                'expense_amount' => $totalCostsAndExpenses,
+            ])->push([
+                'income_account' => 'Profit / loss for this period',
+                'income_amount' => $netProfit,
+                'expense_account' => '',
+                'expense_amount' => null,
+            ]);
 
-        return $this->table(['Metric', 'Amount'], $rows, ['net_sales' => $netSales, 'gross_profit' => $grossProfitAfterReturns, 'operating_expenses' => $expenseTotal, 'net_profit' => $netProfit]);
+        return [
+            ...$this->table(['Income Head', 'Income amount', 'Expense Head', 'Expense amount'], $rows, ['total_sales' => $totalSales, 'sales_returns' => $returns, 'net_sales' => $netSales, 'cost_of_sales' => $costOfSales, 'gross_profit' => $grossProfitAfterReturns, 'operating_expenses' => $expenseTotal, 'total_costs_and_expenses' => $totalCostsAndExpenses, 'net_profit' => $netProfit]),
+            'income' => $income,
+            'expenses' => $expenseAccounts,
+            'branch_name' => $branchName,
+        ];
+    }
+
+    private function productLedger(Builder $documents, string $branchName, string $search): array
+    {
+        $documents = (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])
+            ->with('items.product:id,name,sku,barcode')->get();
+        $products = [];
+
+        foreach ($documents as $document) {
+            $items = $document->items->values();
+            $subtotalCents = $items->sum(fn ($item) => (int) round((float) $item->line_total * 100));
+            $discountCents = (int) round((float) $document->discount * 100);
+            $interestCents = (int) round((float) $document->interest_amount * 100);
+            $remainingDiscount = $discountCents;
+            $remainingInterest = $interestCents;
+            $direction = $document->type === 'sale_return' ? -1 : 1;
+
+            foreach ($items as $index => $item) {
+                $lineCents = (int) round((float) $item->line_total * 100);
+                $share = $subtotalCents > 0 ? $lineCents / $subtotalCents : 1 / max(1, $items->count());
+                $isLast = $index === $items->count() - 1;
+                $itemDiscount = $isLast ? $remainingDiscount : min($remainingDiscount, (int) round($discountCents * $share));
+                $itemInterest = $isLast ? $remainingInterest : min($remainingInterest, (int) round($interestCents * $share));
+                $remainingDiscount -= $itemDiscount;
+                $remainingInterest -= $itemInterest;
+
+                $product = $item->product;
+                if ($search !== '' && ! str_contains(mb_strtolower(($product?->name ?? '').' '.($product?->sku ?? '').' '.($product?->barcode ?? '')), mb_strtolower($search))) {
+                    continue;
+                }
+
+                $productId = $item->product_id;
+                $products[$productId] ??= [
+                    'product' => $product?->name ?? "Product #{$productId}",
+                    'quantity' => 0,
+                    'sales_cents' => 0,
+                    'cost_cents' => 0,
+                    'stock_profit_cents' => 0,
+                    'interest_cents' => 0,
+                    'period_profit_cents' => 0,
+                ];
+                $quantity = (float) $item->quantity * $direction;
+                $salesCents = ($lineCents - $itemDiscount) * $direction;
+                $costCents = (int) round((float) $item->cost_price * (float) $item->quantity * 100) * $direction;
+                $stockProfitCents = $salesCents - $costCents;
+                $installmentProfitCents = $itemInterest * $direction;
+                $products[$productId]['quantity'] += $quantity;
+                $products[$productId]['sales_cents'] += $salesCents;
+                $products[$productId]['cost_cents'] += $costCents;
+                $products[$productId]['stock_profit_cents'] += $stockProfitCents;
+                $products[$productId]['interest_cents'] += $installmentProfitCents;
+                $products[$productId]['period_profit_cents'] += $stockProfitCents + $installmentProfitCents;
+            }
+        }
+
+        $rows = collect($products)->sortBy('product', SORT_NATURAL | SORT_FLAG_CASE)->values()
+            ->map(fn (array $product, int $index) => [
+                'serial' => $index + 1,
+                'product' => $product['product'],
+                'quantity' => round($product['quantity'], 3),
+                'total_sales' => $product['sales_cents'] / 100,
+                'costing' => $product['cost_cents'] / 100,
+                'stock_profit' => $product['stock_profit_cents'] / 100,
+                'installment_profit' => $product['interest_cents'] / 100,
+                'period_profit' => $product['period_profit_cents'] / 100,
+            ]);
+
+        return [
+            ...$this->table(
+                ['SL', 'Product name', 'Quantity (Qty)', 'Total sales', 'Costing', 'Stock profit', 'Installment profit', 'Profit / loss for period'],
+                $rows,
+                [
+                    'quantity' => round($rows->sum('quantity'), 3),
+                    'total_sales' => $rows->sum('total_sales'),
+                    'costing' => $rows->sum('costing'),
+                    'stock_profit' => $rows->sum('stock_profit'),
+                    'installment_profit' => $rows->sum('installment_profit'),
+                    'period_profit' => $rows->sum('period_profit'),
+                ],
+            ),
+            'branch_name' => $branchName,
+        ];
     }
 
     private function employeeSales(Builder $documents): array

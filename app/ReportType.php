@@ -7,6 +7,7 @@ enum ReportType: string
     case Sales = 'sales';
     case Purchases = 'purchases';
     case ProfitLoss = 'profit_loss';
+    case ProductLedger = 'product_ledger';
     case EmployeeSales = 'employee_sales';
     case Stock = 'stock';
     case Adjustments = 'adjustments';
@@ -25,7 +26,7 @@ enum ReportType: string
             self::Sales => [Permission::Sales, Permission::Resales, Permission::SalesReturns],
             self::Purchases => [Permission::Purchases, Permission::PurchaseReturns],
             self::ProfitLoss => [Permission::Expenses],
-            self::EmployeeSales, self::BarcodeSales, self::CustomerDue => [Permission::Sales, Permission::Resales],
+            self::ProductLedger, self::EmployeeSales, self::BarcodeSales, self::CustomerDue => [Permission::Sales, Permission::Resales],
             self::Stock => [Permission::Inventory, Permission::Products],
             self::Adjustments => [Permission::StockAdjustments],
             self::BarcodeProducts => [Permission::Products],
