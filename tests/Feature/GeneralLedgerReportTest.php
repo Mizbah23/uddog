@@ -26,7 +26,7 @@ class GeneralLedgerReportTest extends TestCase
         $sale->items()->create(['product_id' => $product->id, 'quantity' => 2, 'unit_price' => 50, 'cost_price' => 30, 'line_total' => 100]);
         $sale->payments()->create(['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'amount' => 40, 'payment_method' => 'cash', 'kind' => 'initial', 'payment_date' => '2026-10-01', 'created_by' => $owner->id]);
         $sale->payments()->create(['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'amount' => 30, 'payment_method' => 'bank_transfer', 'kind' => 'payment', 'payment_date' => '2026-10-03', 'created_by' => $owner->id]);
-        Expense::create(['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'category' => 'Rent', 'description' => 'Shop', 'amount' => 10, 'expense_date' => '2026-10-04', 'payment_method' => 'cash', 'created_by' => $owner->id]);
+        $expense = Expense::create(['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'category' => 'Rent', 'description' => 'Shop', 'amount' => 10, 'expense_date' => '2026-10-04', 'payment_method' => 'cash', 'created_by' => $owner->id]);
 
         $response = $this->actingAs($owner)->getJson('/api/reports?report=general_ledger&date_from=2026-10-01&date_to=2026-10-31')
             ->assertOk()
@@ -34,10 +34,23 @@ class GeneralLedgerReportTest extends TestCase
             ->assertJsonPath('summary.total_credit', 240)
             ->assertJsonPath('summary.entries', 10);
 
+        $this->assertSame('Customer/Supplier', $response->json('columns.1'));
+        $this->assertSame('Action/Invoice', $response->json('columns.7'));
         $receivables = collect($response->json('rows'))->where('account', '1100 · Accounts receivable')->values();
         $this->assertSame([100, 0, 0], $receivables->pluck('debit')->all());
         $this->assertSame([0, 40, 30], $receivables->pluck('credit')->all());
         $this->assertSame([100, 60, 30], $receivables->pluck('balance')->all());
+        $this->assertSame('Customer A', $receivables[0]['customer_supplier']);
+        $this->assertSame('SAL-GL-1', $receivables[0]['invoice']);
+        $this->assertSame('document', $receivables[0]['source_type']);
+        $this->assertSame($sale->id, $receivables[0]['source_id']);
+        $this->assertSame($sale->id, $receivables[1]['source_id']);
+
+        $expensePosting = collect($response->json('rows'))->firstWhere('reference', 'EXP-'.$expense->id);
+        $this->assertSame('—', $expensePosting['customer_supplier']);
+        $this->assertSame('expense', $expensePosting['source_type']);
+        $this->assertSame($expense->id, $expensePosting['source_id']);
+        $this->assertSame('Shop', $expensePosting['source_record']['description']);
     }
 
     public function test_account_filter_uses_prior_transactions_as_opening_balance_and_payment_dates(): void
@@ -52,6 +65,9 @@ class GeneralLedgerReportTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'rows')
             ->assertJsonPath('rows.0.reference', 'PUR-GL-1')
+            ->assertJsonPath('rows.0.customer_supplier', 'Supplier A')
+            ->assertJsonPath('rows.0.source_type', 'document')
+            ->assertJsonPath('rows.0.source_id', $purchase->id)
             ->assertJsonPath('rows.0.debit', 30)
             ->assertJsonPath('rows.0.balance', -70)
             ->assertJsonPath('summary.opening_balance', -100)

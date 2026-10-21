@@ -29,13 +29,15 @@ class GeneralLedgerReport
     {
         $entries = [];
         $sequence = 0;
-        $post = function (string $date, string $reference, string $details, string $accountKey, int $debit, int $credit) use (&$entries, &$sequence): void {
+        $post = function (string $date, string $reference, string $details, string $accountKey, int $debit, int $credit, ?string $party = null, ?string $sourceType = null, ?int $sourceId = null, ?array $sourceRecord = null) use (&$entries, &$sequence): void {
             if ($debit === 0 && $credit === 0) {
                 return;
             }
             $entries[] = [
                 'date' => $date, 'account_key' => $accountKey, 'reference' => $reference,
                 'details' => $details, 'debit_cents' => $debit, 'credit_cents' => $credit,
+                'party' => $party, 'source_type' => $sourceType, 'source_id' => $sourceId,
+                'source_record' => $sourceRecord,
                 'sequence' => $sequence++,
             ];
         };
@@ -45,6 +47,7 @@ class GeneralLedgerReport
             ->with(['contact:id,name', 'items:id,document_id,quantity,cost_price', 'payments:id,document_id,amount,payment_method,payment_date', 'purchasePayments:id,document_id,amount,payment_method,payment_date'])
             ->orderBy('id')->chunkById(200, function ($documents) use ($post): void {
                 foreach ($documents as $document) {
+                    $postDocument = fn (string $date, string $reference, string $details, string $accountKey, int $debit, int $credit) => $post($date, $reference, $details, $accountKey, $debit, $credit, $document->contact?->name, 'document', $document->id);
                     $date = $document->document_date->toDateString();
                     $reference = $document->number;
                     $details = ucfirst(str_replace('_', ' ', $document->type)).' · '.($document->contact?->name ?? 'Unknown contact');
@@ -52,21 +55,21 @@ class GeneralLedgerReport
                     $cost = (int) $document->items->sum(fn ($item) => (int) round((float) $item->quantity * self::cents($item->cost_price)));
 
                     if (in_array($document->type, ['sale', 'resale'], true)) {
-                        $post($date, $reference, $details, 'receivables', $total, 0);
-                        $post($date, $reference, $details, 'sales', 0, $total);
-                        $post($date, $reference, $details, 'cost_of_goods', $cost, 0);
-                        $post($date, $reference, $details, 'inventory', 0, $cost);
+                        $postDocument($date, $reference, $details, 'receivables', $total, 0);
+                        $postDocument($date, $reference, $details, 'sales', 0, $total);
+                        $postDocument($date, $reference, $details, 'cost_of_goods', $cost, 0);
+                        $postDocument($date, $reference, $details, 'inventory', 0, $cost);
                     } elseif ($document->type === 'sale_return') {
-                        $post($date, $reference, $details, 'sales_returns', $total, 0);
-                        $post($date, $reference, $details, 'receivables', 0, $total);
-                        $post($date, $reference, $details, 'inventory', $cost, 0);
-                        $post($date, $reference, $details, 'cost_of_goods', 0, $cost);
+                        $postDocument($date, $reference, $details, 'sales_returns', $total, 0);
+                        $postDocument($date, $reference, $details, 'receivables', 0, $total);
+                        $postDocument($date, $reference, $details, 'inventory', $cost, 0);
+                        $postDocument($date, $reference, $details, 'cost_of_goods', 0, $cost);
                     } elseif ($document->type === 'purchase') {
-                        $post($date, $reference, $details, 'inventory', $total, 0);
-                        $post($date, $reference, $details, 'payables', 0, $total);
+                        $postDocument($date, $reference, $details, 'inventory', $total, 0);
+                        $postDocument($date, $reference, $details, 'payables', 0, $total);
                     } else {
-                        $post($date, $reference, $details, 'payables', $total, 0);
-                        $post($date, $reference, $details, 'inventory', 0, $total);
+                        $postDocument($date, $reference, $details, 'payables', $total, 0);
+                        $postDocument($date, $reference, $details, 'inventory', 0, $total);
                     }
 
                     $payments = $document->type === 'purchase' ? $document->purchasePayments : $document->payments;
@@ -76,11 +79,11 @@ class GeneralLedgerReport
                         $paymentDetails = 'Payment · '.($document->contact?->name ?? 'Unknown contact');
                         $moneyAccount = $payment->payment_method === 'gold_exchange' ? 'inventory' : self::moneyAccount($payment->payment_method);
                         if ($document->type === 'purchase') {
-                            $post($paymentDate, $reference, $paymentDetails, 'payables', $amount, 0);
-                            $post($paymentDate, $reference, $paymentDetails, $moneyAccount, 0, $amount);
+                            $postDocument($paymentDate, $reference, $paymentDetails, 'payables', $amount, 0);
+                            $postDocument($paymentDate, $reference, $paymentDetails, $moneyAccount, 0, $amount);
                         } else {
-                            $post($paymentDate, $reference, $paymentDetails, $moneyAccount, $amount, 0);
-                            $post($paymentDate, $reference, $paymentDetails, 'receivables', 0, $amount);
+                            $postDocument($paymentDate, $reference, $paymentDetails, $moneyAccount, $amount, 0);
+                            $postDocument($paymentDate, $reference, $paymentDetails, 'receivables', 0, $amount);
                         }
                     }
 
@@ -90,11 +93,11 @@ class GeneralLedgerReport
                         if ($unrecorded > 0) {
                             $moneyAccount = self::moneyAccount($document->payment_method);
                             if ($document->type === 'purchase') {
-                                $post($date, $reference, 'Payment recorded on invoice', 'payables', $unrecorded, 0);
-                                $post($date, $reference, 'Payment recorded on invoice', $moneyAccount, 0, $unrecorded);
+                                $postDocument($date, $reference, 'Payment recorded on invoice', 'payables', $unrecorded, 0);
+                                $postDocument($date, $reference, 'Payment recorded on invoice', $moneyAccount, 0, $unrecorded);
                             } else {
-                                $post($date, $reference, 'Payment recorded on invoice', $moneyAccount, $unrecorded, 0);
-                                $post($date, $reference, 'Payment recorded on invoice', 'receivables', 0, $unrecorded);
+                                $postDocument($date, $reference, 'Payment recorded on invoice', $moneyAccount, $unrecorded, 0);
+                                $postDocument($date, $reference, 'Payment recorded on invoice', 'receivables', 0, $unrecorded);
                             }
                         }
                     }
@@ -108,8 +111,9 @@ class GeneralLedgerReport
                     $date = $expense->expense_date->toDateString();
                     $amount = self::cents($expense->amount);
                     $details = $expense->category.' · '.$expense->description;
-                    $post($date, 'EXP-'.$expense->id, $details, 'expenses', $amount, 0);
-                    $post($date, 'EXP-'.$expense->id, $details, self::moneyAccount($expense->payment_method), 0, $amount);
+                    $sourceRecord = $expense->only(['category', 'description', 'amount', 'expense_date', 'payment_method', 'notes']);
+                    $post($date, 'EXP-'.$expense->id, $details, 'expenses', $amount, 0, null, 'expense', $expense->id, $sourceRecord);
+                    $post($date, 'EXP-'.$expense->id, $details, self::moneyAccount($expense->payment_method), 0, $amount, null, 'expense', $expense->id, $sourceRecord);
                 }
             });
 
@@ -142,10 +146,13 @@ class GeneralLedgerReport
             $totalDebit += $entry['debit_cents'];
             $totalCredit += $entry['credit_cents'];
             $rows->push([
-                'date' => $entry['date'], 'account' => $accounts[$entry['account_key']],
+                'date' => $entry['date'], 'customer_supplier' => $entry['party'] ?? '—',
                 'reference' => $entry['reference'], 'details' => $entry['details'],
                 'debit' => $entry['debit_cents'] / 100, 'credit' => $entry['credit_cents'] / 100,
                 'balance' => $balances[$entry['account_key']] / 100,
+                'invoice' => $entry['reference'], 'account' => $accounts[$entry['account_key']],
+                'source_type' => $entry['source_type'], 'source_id' => $entry['source_id'],
+                'source_record' => $entry['source_record'],
             ]);
         }
 
@@ -163,7 +170,7 @@ class GeneralLedgerReport
         }
 
         return [
-            'columns' => ['Date', 'Account', 'Reference', 'Details', 'Debit', 'Credit', 'Balance (Dr+/Cr−)'],
+            'columns' => ['Date', 'Customer/Supplier', 'Reference', 'Details', 'Debit', 'Credit', 'Balance (Dr+/Cr−)', 'Action/Invoice'],
             'rows' => $rows,
             'summary' => $summary,
             'accounts' => $accounts,

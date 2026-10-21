@@ -79,6 +79,10 @@ class User extends Authenticatable
             return false;
         }
 
+        if ($report === ReportType::ProductLifecycleLedger && (! $this->hasPermission(Permission::Purchases) || ! ($this->hasPermission(Permission::Sales) || $this->hasPermission(Permission::Resales)))) {
+            return false;
+        }
+
         if (! collect($report->workspacePermissions())->contains(fn (Permission $permission) => $this->hasPermission($permission))) {
             return false;
         }
