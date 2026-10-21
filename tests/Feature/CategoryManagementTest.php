@@ -28,6 +28,8 @@ class CategoryManagementTest extends TestCase
             'name' => 'Wireless Mouse',
             'category_id' => $category['id'],
             'unit' => 'pc',
+            'cost_price' => 10,
+            'sale_price' => 15,
             'reorder_level' => 1,
             'active' => true,
         ])->assertCreated()->assertJsonPath('category_id', $category['id']);
@@ -61,6 +63,8 @@ class CategoryManagementTest extends TestCase
             'name' => 'Foreign category attempt',
             'category_id' => $foreignCategory->id,
             'unit' => 'pc',
+            'cost_price' => 10,
+            'sale_price' => 15,
             'reorder_level' => 0,
             'active' => true,
         ])->assertUnprocessable()->assertJsonValidationErrors('category_id');

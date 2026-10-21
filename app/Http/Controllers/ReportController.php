@@ -118,7 +118,7 @@ class ReportController extends Controller
         $sales = (clone $documents)->whereIn('type', ['sale', 'resale'])->with('items')->get();
         $returnDocuments = (clone $documents)->where('type', 'sale_return')->with('items')->get();
         $returns = $returnDocuments->sum(fn (Document $document) => (float) $document->total);
-        $returnProfit = $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => ((float) $item->unit_price - (float) $item->cost_price) * (float) $item->quantity));
+        $returnProfit = $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->line_total - ((float) $item->cost_price * (float) $item->quantity)));
         $grossProfit = $sales->sum(fn (Document $document) => (float) $document->total_profit);
         $netSales = $sales->sum(fn (Document $document) => (float) $document->total) - (float) $returns;
         $expenses = Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)

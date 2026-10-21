@@ -40,13 +40,29 @@ class InventoryService
             $items = [];
             $subtotalCents = 0;
             $organization = Organization::query()->findOrFail($organizationId);
+            $storeSetup = $organization->setup()['store'];
             foreach ($data['items'] as $item) {
                 $product = Product::query()->where('organization_id', $organizationId)->lockForUpdate()->find($item['product_id']);
                 if (! $product || (! $product->active && ! in_array($type, ['purchase_return', 'sale_return'], true))) {
                     throw ValidationException::withMessages(['items' => 'Every product must be active.']);
                 }
-                $quantity = self::scaled($item['quantity'], 3);
-                $unitCents = self::scaled($item['unit_price'], 2);
+                $enteredUnit = $item['unit'] ?? $product->unit;
+                $pieceProduct = in_array($product->unit, ['pc', 'pcs'], true) && ! $product->is_gold_item;
+                $nonPieceUnits = ['kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'];
+                if (in_array($type, ['purchase_return', 'sale_return'], true) && $enteredUnit !== $product->unit) {
+                    throw ValidationException::withMessages(['items' => 'Returns must use the product base unit.']);
+                }
+                if ($enteredUnit !== $product->unit && (! $pieceProduct || ! array_key_exists($enteredUnit, $storeSetup['unit_conversions']) || in_array($enteredUnit, $nonPieceUnits, true))) {
+                    throw ValidationException::withMessages(['items' => "Unit {$enteredUnit} cannot be used for {$product->name}."]);
+                }
+                $conversion = $enteredUnit === $product->unit ? 1 : (int) ($storeSetup['unit_conversions'][$enteredUnit] ?? 1);
+                $enteredQuantity = self::scaled($item['quantity'], 3);
+                $quantity = $enteredQuantity * $conversion;
+                if ($conversion < 1 || $quantity > 99999999999999) {
+                    throw ValidationException::withMessages(['items' => 'Converted quantity exceeds the supported stock range.']);
+                }
+                $enteredPriceCents = self::scaled($item['unit_price'], 2);
+                $unitCents = intdiv($enteredPriceCents + intdiv($conversion, 2), $conversion);
                 $sourceCostCents = null;
                 $goldSnapshot = $this->goldSnapshot($product, $organization->gold_store && in_array($type, ['sale', 'resale'], true) ? $branchId : null, $data['document_date']);
                 if ($sale) {
@@ -63,9 +79,12 @@ class InventoryService
                     }
                     $unitCents = self::scaled($goldSnapshot['unit_price'], 2);
                 }
-                $lineCents = intdiv($quantity * $unitCents + 500, 1000);
+                if ($sale || ($organization->gold_store && in_array($type, ['sale', 'resale'], true) && $product->is_gold_item)) {
+                    $enteredPriceCents = $unitCents;
+                }
+                $lineCents = intdiv($enteredQuantity * $enteredPriceCents + 500, 1000);
                 $subtotalCents += $lineCents;
-                $items[] = [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot];
+                $items[] = [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot, $enteredUnit, $conversion, $enteredQuantity, $enteredPriceCents];
             }
 
             $discountCents = $type === 'sale_return' ? 0 : self::scaled($data['discount'] ?? 0, 2);
@@ -152,7 +171,7 @@ class InventoryService
                 }
             }
 
-            foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot]) {
+            foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot, $enteredUnit, $conversion, $enteredQuantity, $enteredPriceCents]) {
                 if ($purchase) {
                     $purchased = self::scaled($purchase->items()->where('product_id', $product->id)->sum('quantity'), 3);
                     $returned = self::scaled(DB::connection(app(TenantContext::class)->connectionName())->table('document_items')
@@ -195,10 +214,10 @@ class InventoryService
                 }
                 $productUpdate = ['quantity_on_hand' => self::quantity($aggregateBalance)];
                 if ($type === 'purchase') {
-                    $averageCostCents = intdiv(($aggregateQuantity * $currentCostCents) + ($quantity * $unitCents) + intdiv($aggregateBalance, 2), $aggregateBalance);
+                    $averageCostCents = intdiv(($aggregateQuantity * $currentCostCents) + ($lineCents * 1000) + intdiv($aggregateBalance, 2), $aggregateBalance);
                     $productUpdate['cost_price'] = self::money($averageCostCents);
                 } elseif ($type === 'purchase_return') {
-                    $remainingValue = ($aggregateQuantity * $currentCostCents) - ($quantity * $unitCents);
+                    $remainingValue = ($aggregateQuantity * $currentCostCents) - ($lineCents * 1000);
                     $averageCostCents = $aggregateBalance > 0 ? max(0, intdiv($remainingValue + intdiv($aggregateBalance, 2), $aggregateBalance)) : 0;
                     $productUpdate['cost_price'] = self::money($averageCostCents);
                 } elseif ($type === 'sale_return') {
@@ -211,6 +230,10 @@ class InventoryService
                     'product_id' => $product->id,
                     'quantity' => self::quantity($quantity),
                     'unit_price' => self::money($unitCents),
+                    'entered_unit' => $enteredUnit,
+                    'unit_conversion' => $conversion,
+                    'entered_quantity' => self::quantity($enteredQuantity),
+                    'entered_unit_price' => self::money($enteredPriceCents),
                     'cost_price' => $capturedCost,
                     'warranty_months' => in_array($type, ['sale', 'resale'], true) ? $product->warranty_months : null,
                     'line_total' => self::money($lineCents),

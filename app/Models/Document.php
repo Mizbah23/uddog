@@ -77,7 +77,7 @@ class Document extends TenantModel
         }
 
         $items = $this->relationLoaded('items') ? $this->items : $this->items()->get();
-        $profit = $items->sum(fn (DocumentItem $item) => ((float) $item->unit_price - (float) $item->cost_price) * (float) $item->quantity);
+        $profit = $items->sum(fn (DocumentItem $item) => (float) $item->line_total - ((float) $item->cost_price * (float) $item->quantity));
 
         return number_format($profit, 2, '.', '');
     }

@@ -71,4 +71,32 @@ class ProductCatalogTest extends TestCase
         $this->postJson('/api/products', $this->productData(['unit' => 'bucket']))
             ->assertUnprocessable()->assertJsonValidationErrors('unit');
     }
+
+    public function test_new_product_defaults_to_one_piece_when_unit_is_not_sent(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $response = $this->postJson('/api/products', array_diff_key($this->productData(), ['unit' => true]))
+            ->assertCreated()
+            ->assertJsonPath('unit', 'pc');
+
+        $this->assertDatabaseHas('products', ['id' => $response->json('id'), 'unit' => 'pc']);
+    }
+
+    public function test_purchase_cost_and_sale_price_are_required_when_updating_a_product(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $product = $this->postJson('/api/products', $this->productData())->assertCreated()->json();
+
+        $this->putJson('/api/products/'.$product['id'], $this->productData([
+            'cost_price' => '',
+            'sale_price' => '',
+        ]))->assertUnprocessable()->assertJsonValidationErrors(['cost_price', 'sale_price']);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $product['id'],
+            'cost_price' => '12.00',
+            'sale_price' => '15.00',
+        ]);
+    }
 }

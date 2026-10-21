@@ -52,6 +52,25 @@ class SystemSetupTest extends TestCase
         ])->assertCreated()->assertJsonPath('unit', 'ভরি');
     }
 
+    public function test_owner_can_change_piece_unit_conversions_but_invalid_factor_is_rejected(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $settings = $owner->organization->setup();
+        $settings['store']['unit_conversions']['hali'] = 6;
+
+        $this->actingAs($owner)->putJson('/api/system-setup', $settings)
+            ->assertOk()
+            ->assertJsonPath('store.unit_conversions.hali', 6)
+            ->assertJsonPath('store.unit_conversions.dozen', 12);
+
+        $settings['store']['unit_conversions']['hali'] = 0;
+        $this->putJson('/api/system-setup', $settings)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('store.unit_conversions.hali');
+
+        $this->assertSame(6, $owner->organization->fresh()->setup()['store']['unit_conversions']['hali']);
+    }
+
     public function test_operational_settings_do_not_assign_staff_permissions(): void
     {
         $owner = User::factory()->admin()->create();
