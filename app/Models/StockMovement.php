@@ -4,7 +4,7 @@ namespace App\Models;
 
 class StockMovement extends TenantModel
 {
-    protected $fillable = ['organization_id', 'branch_id', 'product_id', 'document_id', 'stock_check_id', 'stock_transfer_id', 'type', 'quantity_change', 'balance_after', 'notes', 'created_by'];
+    protected $fillable = ['organization_id', 'branch_id', 'product_id', 'document_id', 'stock_check_id', 'stock_transfer_id', 'product_damage_id', 'type', 'quantity_change', 'balance_after', 'notes', 'created_by'];
 
     protected function casts(): array
     {
@@ -34,5 +34,10 @@ class StockMovement extends TenantModel
     public function stockTransfer()
     {
         return $this->belongsTo(StockTransfer::class);
+    }
+
+    public function productDamage()
+    {
+        return $this->belongsTo(ProductDamage::class);
     }
 }

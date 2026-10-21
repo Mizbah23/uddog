@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\GoldRate;
 use App\Models\Organization;
 use App\Models\Product;
+use App\Models\ProductDamage;
 use App\Models\ProductStock;
 use App\Models\PurchaseInstallment;
 use App\Models\PurchasePayment;
@@ -179,8 +180,9 @@ class InventoryService
                         ->where('documents.purchase_id', $purchase->id)
                         ->where('document_items.product_id', $product->id)
                         ->sum('document_items.quantity'), 3);
-                    if ($quantity > $purchased - $returned) {
-                        throw ValidationException::withMessages(['items' => "Return quantity exceeds the remaining purchased quantity for {$product->name}."]);
+                    $damaged = self::scaled(ProductDamage::query()->where('purchase_id', $purchase->id)->where('product_id', $product->id)->sum('quantity'), 3);
+                    if ($quantity > $purchased - $returned - $damaged) {
+                        throw ValidationException::withMessages(['items' => "Return quantity exceeds the remaining purchased and undamaged quantity for {$product->name}."]);
                     }
                 }
                 if ($sale) {

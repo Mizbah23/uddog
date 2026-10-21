@@ -3,6 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { installLocalization, translate } from './localization';
 import PosReceipt from './PosReceipt.vue';
 import StaffModule from './StaffModule.vue';
+import ProductDamages from './ProductDamages.vue';
+import { saveProfitLossImage, saveProfitLossPdf } from './profitLossExport';
+import { saveProductLedgerImage, saveProductLedgerPdf } from './productLedgerExport';
 import '../css/warranty.css';
 import '../css/sales-targets.css';
 import '../css/design-refresh.css';
@@ -11,7 +14,8 @@ import '../css/branch-access.css';
 import '../css/staff-module.css';
 import '../css/responsive.css';
 import '../css/client-mobile-dashboard.css';
-import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowLeft, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
+import '../css/profit-loss-report.css';
+import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowLeft, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, FileText, Image as ImageIcon, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
 
 const workspaceNav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, abilities: ['dashboard'] },
@@ -27,6 +31,7 @@ const workspaceNav = [
   { id: 'resale', label: 'Resales', icon: Repeat2, abilities: ['resales'] },
   { id: 'purchase_return', label: 'Purchase returns', icon: Undo2, abilities: ['purchase_returns'] },
   { id: 'inventory', label: 'Inventory', icon: Boxes, abilities: ['inventory', 'stock_adjustments'] },
+  { id: 'product_damages', label: 'Damaged products', icon: AlertTriangle, abilities: ['product_damages'] },
   { id: 'stock_checks', label: 'Stock Check', icon: ClipboardCheck, abilities: ['stock_checks'] },
   { id: 'stock_transfers', label: 'Stock Transfer', icon: ArrowLeftRight, abilities: ['stock_transfers'] },
   { id: 'warranties', label: 'Warranty Search', icon: ShieldCheck, abilities: ['warranty_search'] },
@@ -101,6 +106,7 @@ const reportKinds = [
   { id: 'sales', label: 'Sales', abilities: ['sales', 'resales', 'sales_returns'], description: 'Sales, returns, collections and customer balances.' },
   { id: 'purchases', label: 'Purchases', abilities: ['purchases', 'purchase_returns'], description: 'Purchases and supplier returns for the selected period.' },
   { id: 'profit_loss', label: 'Profit & loss', abilities: ['expenses'], description: 'Gross profit less recorded operating expenses for the selected period.' },
+  { id: 'product_ledger', label: 'Product Ledger Report', abilities: ['sales', 'resales'], description: 'Product-wise sales quantities, costs and profit for the selected period.' },
   { id: 'general_ledger', label: 'General ledger', abilities: ['sales', 'resales', 'sales_returns', 'purchases', 'purchase_returns', 'expenses'], description: 'Account-wise debits, credits and running balances derived from recorded transactions.' },
   { id: 'employee_sales', label: 'Employee-wise sales', abilities: ['sales', 'resales'], description: 'Sales totals and collections by the employee who created each sale.' },
   { id: 'stock', label: 'Stock', abilities: ['inventory', 'products'], description: 'Current branch stock, reorder levels and inventory values.' },
@@ -116,6 +122,7 @@ const reportVisuals = {
   sales: { icon: ReceiptText, tone: 'violet' },
   purchases: { icon: ShoppingBag, tone: 'orange' },
   profit_loss: { icon: ChartNoAxesCombined, tone: 'green' },
+  product_ledger: { icon: Package, tone: 'violet' },
   general_ledger: { icon: ClipboardList, tone: 'slate' },
   employee_sales: { icon: Users, tone: 'blue' },
   stock: { icon: Boxes, tone: 'green' },
@@ -129,6 +136,10 @@ const reportVisuals = {
 };
 const reportKind = ref(isReportView.value && reportKinds.some(report => report.id === reportViewParams.get('report')) ? reportViewParams.get('report') : 'sales');
 const reportDetailOpen = ref(false);
+const reportScopeBranchId = ref(isReportView.value && ['profit_loss', 'product_ledger'].includes(reportKind.value) ? reportViewParams.get('branch_id') || 'all' : 'all');
+const reportBranches = computed(() => branches.value.filter(branch => branch.active));
+const reportBranchId = computed(() => ['profit_loss', 'product_ledger'].includes(reportKind.value) && reportBranches.value.length > 1 ? reportScopeBranchId.value : activeBranchId.value);
+const reportBranchName = computed(() => ['profit_loss', 'product_ledger'].includes(reportKind.value) && reportBranchId.value === 'all' ? 'All permitted branches' : branches.value.find(branch => branch.id === Number(reportBranchId.value))?.name || reportResult.value.branch_name || 'Current branch');
 const reportToday = new Date().toLocaleDateString('en-CA');
 const reportFilters = ref({
   date_from: isReportView.value ? reportViewParams.get('date_from') || '' : `${reportToday.slice(0, 7)}-01`,
@@ -138,8 +149,19 @@ const reportFilters = ref({
   account: isReportView.value ? reportViewParams.get('account') || '' : '',
 });
 const reportResult = ref({ columns: [], rows: [], summary: {} });
+const reportCanExport = computed(() => reportKind.value === 'profit_loss' ? Boolean(reportResult.value.income?.length || reportResult.value.expenses?.length) : Boolean(reportResult.value.rows.length));
 const reportLoading = ref(false);
+const reportSaveBusy = ref(false);
+const reportGeneratedAt = ref(new Date());
+const reportGeneratedLabel = computed(() => `${translate('Generated by Uddog-Soft', language.value)} · ${reportGeneratedAt.value.toLocaleString(localeCode(), { dateStyle: 'medium', timeStyle: 'short' })}`);
 const reportExportContext = ref({ kind: reportKind.value, branchId: activeBranchId.value, filters: { ...reportFilters.value } });
+const reportPeriod = computed(() => {
+  const { date_from: from, date_to: to } = reportExportContext.value.filters;
+  if (from && to) return `${date(from)}${language.value === 'bn' ? ' থেকে ' : ' to '}${date(to)}`;
+  if (from) return `From ${date(from)}`;
+  if (to) return `Through ${date(to)}`;
+  return 'All dates';
+});
 const stockChecks = ref([]);
 const stockTransfers = ref([]);
 const warrantyResults = ref([]);
@@ -255,6 +277,7 @@ const permissionOptions = [
   { value: 'purchase_returns', label: 'Purchase returns' },
   { value: 'inventory', label: 'Inventory and stock history' },
   { value: 'stock_adjustments', label: 'Manual stock adjustments' },
+  { value: 'product_damages', label: 'Damaged products' },
   { value: 'stock_checks', label: 'Stock checks' },
   { value: 'stock_transfers', label: 'Stock transfers' },
   { value: 'warranty_search', label: 'Warranty search' },
@@ -310,7 +333,7 @@ function historyPaymentLabel(document) {
   if (Number(document.balance_due) > 0) return Number(document.amount_paid) > 0 ? 'Part paid' : 'Due';
   return 'Paid';
 }
-function label(type) { return translate(({ purchase: 'Purchase', sale: 'Sale', resale: 'Resale', purchase_return: 'Purchase return', sale_return: 'Sales return', adjustment: 'Adjustment', stock_check: 'Stock check', transfer_out: 'Transfer out', transfer_in: 'Transfer in' })[type] || type, language.value); }
+function label(type) { return translate(({ purchase: 'Purchase', sale: 'Sale', resale: 'Resale', purchase_return: 'Purchase return', sale_return: 'Sales return', adjustment: 'Adjustment', damage: 'Damage', stock_check: 'Stock check', transfer_out: 'Transfer out', transfer_in: 'Transfer in' })[type] || type, language.value); }
 function initial(name) { return (name || 'U').trim().charAt(0).toUpperCase(); }
 function productOption(product) { return product.sku ? `${product.name} · ${product.sku}` : product.name; }
 function roleLabel(role) { return translate(({ superadmin: 'Superadmin', admin: 'Owner admin', manager: 'Manager', staff: 'Staff' })[role] || role, language.value); }
@@ -417,7 +440,7 @@ async function refresh() {
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
     const branchQuery = selectedBranch ? `?branch_id=${selectedBranch.id}` : '';
     if (hasAbility('dashboard')) requests.push(api(`overview${branchQuery}`).then(data => { overview.value = data; }));
-    if (hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory', 'stock_adjustments', 'stock_transfers')) requests.push(api(`products${branchQuery}`).then(data => { products.value = data; }));
+    if (hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory', 'stock_adjustments', 'stock_transfers', 'product_damages')) requests.push(api(`products${branchQuery}`).then(data => { products.value = data; }));
     if (hasAbility('categories', 'products', 'purchases', 'pos_sale')) requests.push(api('categories').then(data => { categories.value = data; }));
     if (hasAbility('contacts', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns')) requests.push(api('contacts').then(data => { contacts.value = data; }));
     if (hasAbility('contacts')) {
@@ -535,7 +558,7 @@ const reportViewUrl = computed(() => {
   url.search = '';
   url.searchParams.set('report_view', '1');
   url.searchParams.set('report', reportKind.value);
-  url.searchParams.set('branch_id', String(activeBranchId.value));
+  url.searchParams.set('branch_id', String(reportBranchId.value));
   Object.entries(reportFilters.value).forEach(([key, value]) => {
     if (value !== '' && value !== null && value !== undefined) url.searchParams.set(key, String(value));
   });
@@ -551,11 +574,12 @@ async function loadReport() {
   reportResult.value = { columns: [], rows: [], summary: {} };
   error.value = '';
   try {
-    const exportContext = { kind: reportKind.value, branchId: activeBranchId.value, filters: { ...reportFilters.value } };
-    const params = new URLSearchParams({ report: reportKind.value, branch_id: activeBranchId.value });
+    const exportContext = { kind: reportKind.value, branchId: reportBranchId.value, filters: { ...reportFilters.value } };
+    const params = new URLSearchParams({ report: reportKind.value, branch_id: reportBranchId.value });
     Object.entries(reportFilters.value).forEach(([key, value]) => { if (value) params.set(key, value); });
     reportResult.value = await api(`reports?${params.toString()}`);
     reportExportContext.value = exportContext;
+    reportGeneratedAt.value = new Date();
   } catch (e) { error.value = e.message; reportResult.value = { columns: [], rows: [], summary: {} }; }
   finally { reportLoading.value = false; }
 }
@@ -568,7 +592,7 @@ function exportReportCsv() {
       : filters.date_from ? `From ${date(filters.date_from)}` : filters.date_to ? `Through ${date(filters.date_to)}` : 'All dates';
   const title = `${name} Report (${period})`;
   const company = session.value?.user?.organization?.name || 'Company';
-  const branch = branches.value.find(item => item.id === Number(branchId))?.name || 'Current branch';
+  const branch = kind === 'profit_loss' && branchId === 'all' ? 'All permitted branches' : branches.value.find(item => item.id === Number(branchId))?.name || 'Current branch';
   const exportedAt = new Date().toLocaleString(localeCode(), { dateStyle: 'medium', timeStyle: 'short' });
   const rows = [
     [title],
@@ -595,6 +619,76 @@ function exportReportCsv() {
   link.download = `${name} Report (${period}).csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+function profitLossExportData() {
+  const localized = value => translate(value, language.value);
+  const summary = reportResult.value.summary;
+  return {
+    eyebrow: localized('FINANCIAL OVERVIEW'),
+    company: session.value?.user?.organization?.name || 'Company / store',
+    title: `${localized('Profit & loss')} · ${reportPeriod.value} · ${localized(reportBranchName.value)}`,
+    incomeLabel: localized('Income'),
+    expensesLabel: localized('Expenses'),
+    serialLabel: localized('SL'),
+    incomeHead: localized('Income Head'),
+    expenseHead: localized('Expense Head'),
+    amountLabel: localized('Amount'),
+    income: reportResult.value.income.map(item => ({ ...item, account: localized(item.account) })),
+    expenses: reportResult.value.expenses.map(item => ({ ...item, account: localized(item.account) })),
+    totalIncomeLabel: localized('Total income'),
+    totalExpensesLabel: localized('Total costs & expenses'),
+    netSales: summary.net_sales,
+    totalExpenses: summary.total_costs_and_expenses,
+    netProfit: summary.net_profit,
+    netLabel: localized(Number(summary.net_profit) < 0 ? 'Loss for this period' : 'Profit for this period'),
+    note: localized('Cost of sales = Opening Inventory + Purchases - Closing Inventory'),
+    preparedLabel: localized('Prepared by:'),
+    verifiedLabel: localized('Verified by:'),
+    approvedLabel: localized('Approved by:'),
+    generatedLabel: reportGeneratedLabel.value,
+    money,
+  };
+}
+function profitLossFilename() {
+  const { date_from: from, date_to: to } = reportExportContext.value.filters;
+  return `profit-loss-${from || 'all'}-to-${to || 'all'}-${reportExportContext.value.branchId}`;
+}
+function productLedgerExportData() {
+  const localized = value => translate(value, language.value);
+  return {
+    eyebrow: localized('PRODUCT PERFORMANCE'),
+    company: session.value?.user?.organization?.name || localized('Company / store'),
+    title: `${localized('Product Ledger Report')} · ${reportPeriod.value} · ${localized(reportBranchName.value)}`,
+    columns: ['SL', 'Product name', 'Quantity (Qty)', 'Total sales', 'Costing', 'Stock profit', 'Installment profit', 'Profit / loss for period'].map(localized),
+    totalLabel: localized('Total'),
+    rows: reportResult.value.rows,
+    summary: reportResult.value.summary,
+    note: localized('Sales returns reduce quantity, sales and cost. Sales exclude tax; stock profit includes the allocated invoice discount.'),
+    preparedLabel: localized('Prepared by:'),
+    verifiedLabel: localized('Verified by:'),
+    approvedLabel: localized('Approved by:'),
+    generatedLabel: reportGeneratedLabel.value,
+    money,
+    qty,
+  };
+}
+function productLedgerFilename() {
+  const { date_from: from, date_to: to } = reportExportContext.value.filters;
+  return `product-ledger-${from || 'all'}-to-${to || 'all'}-${reportExportContext.value.branchId}`;
+}
+function printReport() { window.print(); }
+async function saveReportFile(format) {
+  if (!isReportView.value || !['profit_loss', 'product_ledger'].includes(reportKind.value) || !reportCanExport.value || reportSaveBusy.value) return;
+  reportSaveBusy.value = true;
+  error.value = '';
+  try {
+    if (reportKind.value === 'profit_loss') {
+      if (format === 'pdf') saveProfitLossPdf(profitLossExportData(), profitLossFilename());
+      else await saveProfitLossImage(profitLossExportData(), profitLossFilename());
+    } else if (format === 'pdf') saveProductLedgerPdf(productLedgerExportData(), productLedgerFilename());
+    else await saveProductLedgerImage(productLedgerExportData(), productLedgerFilename());
+  } catch (exception) { error.value = exception.message || 'Could not save this report.'; }
+  finally { reportSaveBusy.value = false; }
 }
 function reportSummaryLabel(key) { return key.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
 function reportSummaryValue(key, value) { return /sales|purchase|paid|due|profit|value|collected|debit|credit|balance/i.test(key) ? money(value) : qty(value); }
@@ -1703,23 +1797,40 @@ async function stopSupportSession() {
           </section>
           <div v-if="reportDetailOpen || isReportView" class="report-detail">
           <button v-if="!isReportView" type="button" class="reports-catalog-back" @click="reportDetailOpen = false"><ArrowLeft :size="17" /> All reports</button>
-          <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ branches.find(branch => branch.id === Number(activeBranchId))?.name || 'Current branch' }}</p></div><button class="btn-secondary-app" :disabled="!reportResult.rows.length || reportLoading" @click="exportReportCsv"><ArrowDownRight :size="17" /> Export CSV</button></div>
+          <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ reportBranchName }}</p></div><div v-if="isReportView && !reportLoading && reportCanExport && ['profit_loss', 'product_ledger'].includes(reportKind)" class="report-action-group" aria-label="Report actions"><button type="button" class="report-icon-action" title="Print" aria-label="Print" data-tooltip="Print" @click="printReport"><Printer :size="19" /></button><button type="button" class="report-icon-action" title="Save as PDF" aria-label="Save as PDF" data-tooltip="Save as PDF" :disabled="reportSaveBusy" @click="saveReportFile('pdf')"><FileText :size="19" /></button><button type="button" class="report-icon-action" title="Save as image" aria-label="Save as image" data-tooltip="Save as image" :disabled="reportSaveBusy" @click="saveReportFile('image')"><ImageIcon :size="19" /></button></div><button v-else-if="isReportView && !['profit_loss', 'product_ledger'].includes(reportKind) && !reportLoading && reportCanExport" class="btn-secondary-app" @click="exportReportCsv"><ArrowDownRight :size="17" /> Export CSV</button></div>
           <section v-if="!isReportView" class="panel report-filter-panel">
-            <div class="report-filter-grid" :class="{ 'ledger-filter-grid': reportKind === 'general_ledger' }">
+            <div class="report-filter-grid" :class="{ 'ledger-filter-grid': reportKind === 'general_ledger', 'product-ledger-filter-grid': reportKind === 'product_ledger' }">
               <div class="report-current"><span>Report</span><strong>{{ activeReport.label }}</strong></div>
               <label class="field"><span>From</span><input v-model="reportFilters.date_from" type="date" :disabled="['stock', 'barcode_products', 'customers'].includes(reportKind)"></label>
               <label class="field"><span>To</span><input v-model="reportFilters.date_to" type="date" :disabled="['stock', 'barcode_products', 'customers'].includes(reportKind)"></label>
-              <label v-if="['stock', 'barcode_products', 'barcode_sales'].includes(reportKind)" class="field"><span>Product or barcode</span><input v-model="reportFilters.search" placeholder="Enter a name or barcode"></label>
+              <label v-if="['profit_loss', 'product_ledger'].includes(reportKind) && reportBranches.length > 1" class="field"><span>Branch</span><select v-model="reportScopeBranchId" aria-label="Report branch"><option value="all">All permitted branches</option><option v-for="branch in reportBranches" :key="branch.id" :value="String(branch.id)">{{ branch.name }}</option></select></label>
+              <label v-if="['stock', 'barcode_products', 'barcode_sales', 'product_ledger'].includes(reportKind)" class="field"><span>Product or barcode</span><input v-model="reportFilters.search" placeholder="Enter a name or barcode"></label>
               <label v-if="reportKind === 'customer_ledger'" class="field"><span>Customer</span><select v-model="reportFilters.contact_id"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
               <label v-if="reportKind === 'general_ledger'" class="field"><span>Account</span><select v-model="reportFilters.account"><option value="">All accounts</option><option value="cash">1000 · Cash</option><option value="bank">1010 · Bank and digital payments</option><option value="unclassified">1090 · Unclassified payments</option><option value="receivables">1100 · Accounts receivable</option><option value="inventory">1200 · Inventory</option><option value="payables">2000 · Accounts payable</option><option value="sales">4000 · Sales revenue</option><option value="sales_returns">4010 · Sales returns</option><option value="cost_of_goods">5000 · Cost of goods sold</option><option value="expenses">6000 · Operating expenses</option></select></label>
               <a class="btn-primary-app report-run-button" :href="reportViewUrl" target="_blank" rel="noopener"><Search :size="17" /> Run report</a>
             </div>
-            <p class="report-description">{{ activeReport.description }} · {{ branches.find(branch => branch.id === Number(activeBranchId))?.name || 'Current branch' }}</p>
+            <p class="report-description">{{ activeReport.description }} · {{ reportBranchName }}</p>
           </section>
           <div v-if="error" class="alert-box error report-error">{{ error }}</div>
           <p v-if="reportResult.note" class="report-ledger-note">{{ reportResult.note }}</p>
-          <div v-if="Object.keys(reportResult.summary || {}).length" class="report-summary-grid"><div v-for="(value, key) in reportResult.summary" :key="key" class="stat-card"><div class="stat-top"><span>{{ reportSummaryLabel(key) }}</span><span class="stat-icon violet"><ChartNoAxesCombined :size="18" /></span></div><strong>{{ reportSummaryValue(key, value) }}</strong><small>For the current report filters</small></div></div>
-          <section class="panel table-panel report-table-panel">
+          <div v-if="!['profit_loss', 'product_ledger'].includes(reportKind) && Object.keys(reportResult.summary || {}).length" class="report-summary-grid"><div v-for="(value, key) in reportResult.summary" :key="key" class="stat-card"><div class="stat-top"><span>{{ reportSummaryLabel(key) }}</span><span class="stat-icon violet"><ChartNoAxesCombined :size="18" /></span></div><strong>{{ reportSummaryValue(key, value) }}</strong><small>For the current report filters</small></div></div>
+          <section v-if="reportKind === 'profit_loss'" class="profit-loss-sheet" aria-label="Profit and loss statement">
+            <div class="profit-loss-sheet-header"><small>FINANCIAL OVERVIEW</small><strong>{{ session.user.organization?.name || 'Company / store' }}</strong><span>Profit &amp; Loss · {{ reportPeriod }} · {{ reportBranchName }}</span></div>
+            <div v-if="reportLoading" class="profit-loss-sheet-status">Loading report…</div>
+            <div v-else-if="reportResult.income && reportResult.expenses" class="profit-loss-table-wrap"><table class="profit-loss-table"><colgroup><col class="profit-loss-col-serial"><col class="profit-loss-col-account"><col class="profit-loss-col-amount"><col class="profit-loss-col-serial"><col class="profit-loss-col-account"><col class="profit-loss-col-amount"></colgroup><thead><tr class="profit-loss-groups"><th colspan="3">Income</th><th colspan="3">Expenses</th></tr><tr class="profit-loss-columns"><th class="profit-loss-serial">SL</th><th>{{ translate('Income Head', language) }}</th><th>Amount</th><th class="profit-loss-serial">SL</th><th>{{ translate('Expense Head', language) }}</th><th>Amount</th></tr></thead><tbody><tr v-for="index in Math.max(reportResult.income.length, reportResult.expenses.length, 1)" :key="index"><td class="profit-loss-serial">{{ reportResult.income[index - 1] ? index : '' }}</td><td>{{ reportResult.income[index - 1]?.account || '' }}</td><td class="profit-loss-amount">{{ reportResult.income[index - 1] ? money(reportResult.income[index - 1].amount) : '' }}</td><td class="profit-loss-serial">{{ reportResult.expenses[index - 1] ? index : '' }}</td><td>{{ reportResult.expenses[index - 1]?.account || '' }}</td><td class="profit-loss-amount">{{ reportResult.expenses[index - 1] ? money(reportResult.expenses[index - 1].amount) : '' }}</td></tr><tr class="profit-loss-total"><th colspan="2">Total income</th><td class="profit-loss-amount">{{ money(reportResult.summary.net_sales) }}</td><th colspan="2">Total costs &amp; expenses</th><td class="profit-loss-amount">{{ money(reportResult.summary.total_costs_and_expenses) }}</td></tr><tr class="profit-loss-net"><th colspan="5">{{ Number(reportResult.summary.net_profit) < 0 ? 'Loss for this period' : 'Profit for this period' }}</th><td class="profit-loss-amount">{{ money(reportResult.summary.net_profit) }}</td></tr></tbody></table></div>
+            <div v-else class="profit-loss-sheet-status">No report data. Check the date range and branch selection.</div>
+            <p v-if="reportResult.income" class="profit-loss-note">{{ translate('Cost of sales = Opening Inventory + Purchases - Closing Inventory', language) }}</p>
+            <footer v-if="reportResult.income" class="profit-loss-footer"><div class="profit-loss-signatures"><div><span></span><strong>{{ translate('Prepared by:', language) }}</strong></div><div><span></span><strong>{{ translate('Verified by:', language) }}</strong></div><div><span></span><strong>{{ translate('Approved by:', language) }}</strong></div></div><p>{{ reportGeneratedLabel }}</p></footer>
+          </section>
+          <section v-else-if="reportKind === 'product_ledger'" class="profit-loss-sheet product-ledger-sheet" aria-label="Product ledger report">
+            <div class="profit-loss-sheet-header"><small>{{ translate('PRODUCT PERFORMANCE', language) }}</small><strong>{{ session.user.organization?.name || translate('Company / store', language) }}</strong><span>{{ translate('Product Ledger Report', language) }} · {{ reportPeriod }} · {{ translate(reportBranchName, language) }}</span></div>
+            <div v-if="reportLoading" class="profit-loss-sheet-status">Loading report…</div>
+            <div v-else-if="reportResult.rows.length" class="profit-loss-table-wrap"><table class="product-ledger-table"><thead><tr><th>{{ translate('SL', language) }}</th><th>{{ translate('Product name', language) }}</th><th>{{ translate('Quantity (Qty)', language) }}</th><th>{{ translate('Total sales', language) }}</th><th>{{ translate('Costing', language) }}</th><th>{{ translate('Stock profit', language) }}</th><th>{{ translate('Installment profit', language) }}</th><th>{{ translate('Profit / loss for period', language) }}</th></tr></thead><tbody><tr v-for="row in reportResult.rows" :key="row.serial"><td class="product-ledger-serial">{{ qty(row.serial) }}</td><td class="product-ledger-product">{{ row.product }}</td><td class="product-ledger-number">{{ qty(row.quantity) }}</td><td class="product-ledger-number">{{ money(row.total_sales) }}</td><td class="product-ledger-number">{{ money(row.costing) }}</td><td class="product-ledger-number">{{ money(row.stock_profit) }}</td><td class="product-ledger-number">{{ money(row.installment_profit) }}</td><td class="product-ledger-number product-ledger-profit" :class="{ negative: row.period_profit < 0 }">{{ money(row.period_profit) }}</td></tr><tr class="product-ledger-total"><th colspan="2">{{ translate('Total', language) }}</th><td class="product-ledger-number">{{ qty(reportResult.summary.quantity) }}</td><td class="product-ledger-number">{{ money(reportResult.summary.total_sales) }}</td><td class="product-ledger-number">{{ money(reportResult.summary.costing) }}</td><td class="product-ledger-number">{{ money(reportResult.summary.stock_profit) }}</td><td class="product-ledger-number">{{ money(reportResult.summary.installment_profit) }}</td><td class="product-ledger-number">{{ money(reportResult.summary.period_profit) }}</td></tr></tbody></table></div>
+            <div v-else class="profit-loss-sheet-status">No product sales found for this period.</div>
+            <p v-if="!reportLoading && reportResult.rows.length" class="profit-loss-note">{{ translate('Sales returns reduce quantity, sales and cost. Sales exclude tax; stock profit includes the allocated invoice discount.', language) }}</p>
+            <footer v-if="!reportLoading && reportResult.rows.length" class="profit-loss-footer"><div class="profit-loss-signatures"><div><span></span><strong>{{ translate('Prepared by:', language) }}</strong></div><div><span></span><strong>{{ translate('Verified by:', language) }}</strong></div><div><span></span><strong>{{ translate('Approved by:', language) }}</strong></div></div><p>{{ reportGeneratedLabel }}</p></footer>
+          </section>
+          <section v-else class="panel table-panel report-table-panel">
             <div class="table-toolbar"><div><h2>{{ activeReport.label }}</h2><p>{{ reportResult.rows.length }} records</p></div><span v-if="reportLoading" class="report-loading">Loading report…</span></div>
             <div v-if="reportResult.rows.length" class="table-scroll"><table><thead><tr><th v-for="(column, index) in reportResult.columns" :key="index">{{ column }}</th></tr></thead><tbody><tr v-for="(row, index) in reportResult.rows" :key="index"><td v-for="([key, value], cellIndex) in Object.entries(row)" :key="key">{{ reportCell(reportResult.columns[cellIndex] || key, value) }}</td></tr></tbody></table></div>
             <div v-else-if="!reportLoading" class="empty-state"><ChartNoAxesCombined :size="32" /><strong>No report data</strong><span>Try changing the date range or search term.</span></div>
@@ -1881,7 +1992,11 @@ async function stopSupportSession() {
             </table>
           </div><div v-if="!filteredDocuments.length" class="empty-state"><ShoppingCart :size="32" /><strong>No {{ titles[page].toLowerCase() }} yet</strong><span>Create a record to see it here.</span></div></section></template>
 
-        <template v-else-if="page === 'inventory'"><div class="page-heading"><div><span class="eyebrow">STOCK CONTROL</span><h1>Inventory</h1><p>See current balances and the history behind every change.</p></div><button v-if="hasAbility('stock_adjustments')" class="btn-primary-app" @click="openAdjustment()"><Plus :size="18" /> Adjust stock</button></div><div class="inventory-grid"><section class="panel table-panel"><div class="table-toolbar"><div><h2>Stock on hand</h2><p>{{ products.length }} products</p></div></div><div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>AVAILABLE</th><th>REORDER AT</th><th v-if="hasAbility('stock_adjustments')"></th></tr></thead><tbody><tr v-for="product in products" :key="product.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.sku || 'No SKU' }}</small></div></div></td><td><span class="stock-pill" :class="lowStock(product) ? 'low' : 'good'">{{ qty(product.quantity_on_hand) }} {{ product.unit }}</span></td><td>{{ qty(product.reorder_level) }}</td><td v-if="hasAbility('stock_adjustments')"><button class="icon-button" title="Adjust stock" @click="openAdjustment(product)"><Pencil :size="17" /></button></td></tr></tbody></table></div><div v-if="!products.length" class="empty-state"><Package :size="32" /><strong>No products yet</strong><span>Add products to start tracking stock.</span></div></section><section class="panel movements-panel"><div class="panel-heading"><div><h2>Recent movements</h2><p>Latest 200 entries</p></div></div><div v-if="movements.length" class="movement-list"><div v-for="movement in movements" :key="movement.id" class="movement-row"><span class="movement-symbol" :class="Number(movement.quantity_change) > 0 ? 'in' : 'out'"><ArrowDownRight v-if="Number(movement.quantity_change) > 0" :size="18" /><ArrowUpRight v-else :size="18" /></span><div class="movement-copy"><strong>{{ movement.product?.name }}</strong><span>{{ movement.document?.number || label(movement.type) }} · {{ date(movement.created_at) }}</span><small v-if="movement.notes">{{ movement.notes }}</small></div><div class="movement-qty" :class="Number(movement.quantity_change) > 0 ? 'positive' : 'negative'"><strong>{{ Number(movement.quantity_change) > 0 ? '+' : '' }}{{ qty(movement.quantity_change) }}</strong><span>Balance {{ qty(movement.balance_after) }}</span></div></div></div><div v-else class="empty-state compact"><Boxes :size="32" /><strong>No stock movements</strong><span>Purchases and adjustments will appear here.</span></div></section></div></template>
+        <template v-else-if="page === 'inventory'"><div class="page-heading"><div><span class="eyebrow">STOCK CONTROL</span><h1>Inventory</h1><p>See current balances and the history behind every change.</p></div><button v-if="hasAbility('stock_adjustments')" class="btn-primary-app" @click="openAdjustment()"><Plus :size="18" /> Adjust stock</button></div><div class="inventory-grid"><section class="panel table-panel"><div class="table-toolbar"><div><h2>Stock on hand</h2><p>{{ products.length }} products</p></div></div><div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>{{ language === 'bn' ? 'স্টকে আছে' : 'AVAILABLE' }}</th><th>REORDER AT</th><th v-if="hasAbility('stock_adjustments')"></th></tr></thead><tbody><tr v-for="product in products" :key="product.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.sku || 'No SKU' }}</small></div></div></td><td><span class="stock-pill" :class="lowStock(product) ? 'low' : 'good'">{{ qty(product.quantity_on_hand) }} {{ product.unit }}</span></td><td>{{ qty(product.reorder_level) }}</td><td v-if="hasAbility('stock_adjustments')"><button class="icon-button" title="Adjust stock" @click="openAdjustment(product)"><Pencil :size="17" /></button></td></tr></tbody></table></div><div v-if="!products.length" class="empty-state"><Package :size="32" /><strong>No products yet</strong><span>Add products to start tracking stock.</span></div></section><section class="panel movements-panel"><div class="panel-heading"><div><h2>Recent movements</h2><p>Latest 200 entries</p></div></div><div v-if="movements.length" class="movement-list"><div v-for="movement in movements" :key="movement.id" class="movement-row"><span class="movement-symbol" :class="Number(movement.quantity_change) > 0 ? 'in' : 'out'"><ArrowDownRight v-if="Number(movement.quantity_change) > 0" :size="18" /><ArrowUpRight v-else :size="18" /></span><div class="movement-copy"><strong>{{ movement.product?.name }}</strong><span>{{ movement.document?.number || label(movement.type) }} · {{ date(movement.created_at) }}</span><small v-if="movement.notes">{{ movement.notes }}</small></div><div class="movement-qty" :class="Number(movement.quantity_change) > 0 ? 'positive' : 'negative'"><strong>{{ Number(movement.quantity_change) > 0 ? '+' : '' }}{{ qty(movement.quantity_change) }}</strong><span>Balance {{ qty(movement.balance_after) }}</span></div></div></div><div v-else class="empty-state compact"><Boxes :size="32" /><strong>No stock movements</strong><span>Purchases and adjustments will appear here.</span></div></section></div></template>
+
+        <template v-else-if="page === 'product_damages'">
+          <ProductDamages :branch-id="activeBranchId" :products="products" :api="api" :language="language" @saved="refresh" />
+        </template>
 
         <template v-else-if="page === 'stock_checks'">
           <div class="page-heading"><div><span class="eyebrow">PHYSICAL INVENTORY</span><h1>Stock Check</h1><p>Count the products in the current branch and reconcile any variance.</p></div><button class="btn-primary-app" :disabled="busy || stockChecks.some(check => check.status === 'draft')" :title="stockChecks.some(check => check.status === 'draft') ? 'Complete the current draft first' : 'Start a new physical count'" @click="startStockCheck"><Plus :size="18" /> Start stock check</button></div>

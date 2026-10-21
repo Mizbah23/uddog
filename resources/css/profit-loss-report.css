@@ -1,0 +1,116 @@
+.report-action-group { display: flex; align-items: center; gap: 8px; }
+.report-icon-action { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid #e5e0f8; border-radius: 10px; background: #fff; color: #675bc8; box-shadow: 0 4px 12px rgba(71, 59, 127, .05); cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
+.report-icon-action:hover, .report-icon-action:focus-visible { border-color: #bcb2f4; background: #f4f1ff; transform: translateY(-1px); }
+.report-icon-action:disabled { cursor: wait; opacity: .55; }
+.report-icon-action::after { position: absolute; right: 50%; bottom: calc(100% + 8px); padding: 6px 9px; border-radius: 6px; background: #34304b; color: #fff; content: attr(data-tooltip); font-size: 11px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(50%, 3px); transition: opacity .15s ease, transform .15s ease; }
+.report-icon-action:hover::after, .report-icon-action:focus-visible::after { opacity: 1; transform: translate(50%, 0); }
+
+.profit-loss-sheet {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #e6e2f7;
+  border-radius: 16px;
+  background: #fff;
+  color: #36354d;
+  box-shadow: 0 16px 42px rgba(72, 55, 145, .09);
+}
+
+.profit-loss-sheet-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 22px;
+  overflow: hidden;
+  background: linear-gradient(112deg, #5548c7 0%, #7367f0 56%, #9487f5 100%);
+  color: #fff;
+  text-align: center;
+}
+
+.profit-loss-sheet-header::before,
+.profit-loss-sheet-header::after { content: ''; position: absolute; width: 210px; height: 210px; border-radius: 50%; background: rgba(255, 255, 255, .09); pointer-events: none; }
+.profit-loss-sheet-header::before { top: -138px; left: -55px; }
+.profit-loss-sheet-header::after { right: -48px; bottom: -160px; }
+.profit-loss-sheet-header > * { position: relative; z-index: 1; }
+.profit-loss-sheet-header small { font-size: 10px; font-weight: 800; letter-spacing: .16em; opacity: .8; }
+.profit-loss-sheet-header strong { font-size: 21px; line-height: 1.25; }
+.profit-loss-sheet-header span { font-size: 12px; font-weight: 600; opacity: .9; }
+.profit-loss-table-wrap { max-width: 100%; overflow-x: auto; }
+.profit-loss-table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.profit-loss-col-serial { width: 5%; }
+.profit-loss-col-account { width: 30%; }
+.profit-loss-col-amount { width: 15%; }
+.profit-loss-table th, .profit-loss-table td { padding: 13px 15px; border-bottom: 1px solid #f0eef7; color: #414154; }
+.profit-loss-table tr > :nth-child(4) { border-left: 1px solid #ebe7f8; }
+.profit-loss-table thead th { color: #655ac5; font-weight: 750; text-align: left; }
+.profit-loss-table .profit-loss-groups th { padding: 15px; background: linear-gradient(110deg, #edeaff, #f7f5ff); color: #5a4fc2; font-size: 14px; text-align: center; }
+.profit-loss-table .profit-loss-groups th + th { border-left: 1px solid #ded8fa; background: linear-gradient(110deg, #f7f5ff, #eeebff); }
+.profit-loss-table .profit-loss-columns th { background: #faf9ff; font-size: 11px; }
+.profit-loss-table .profit-loss-serial { text-align: center; }
+.profit-loss-table .profit-loss-amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.profit-loss-table tbody tr:not(.profit-loss-total, .profit-loss-net):nth-child(even) { background: #fcfbff; }
+.profit-loss-total { background: #f2f0ff; font-weight: 750; }
+.profit-loss-total > * { color: #554bb0 !important; }
+.profit-loss-total th, .profit-loss-net th { text-align: right; }
+.profit-loss-net { background: linear-gradient(110deg, #5d50ca, #887af0); font-weight: 800; }
+.profit-loss-net > * { border-bottom: 0 !important; color: #fff !important; }
+.profit-loss-note { margin: 0; padding: 16px 20px; color: #77778e; font-size: 11px; line-height: 1.5; }
+.profit-loss-footer { padding: 78px 22px 24px; background: #fff; }
+.profit-loss-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.profit-loss-signatures > div { min-width: 0; text-align: center; }
+.profit-loss-signatures span { display: block; border-top: 1px solid #a8a5b5; }
+.profit-loss-signatures strong { display: block; margin-top: 13px; color: #48465f; font-size: 12px; }
+.profit-loss-footer p { margin: 58px 0 0; color: #858498; font-size: 10px; }
+.profit-loss-sheet-status { padding: 32px 18px; text-align: center; color: #77778e; }
+
+.product-ledger-table { width: 100%; min-width: 1120px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.product-ledger-table th, .product-ledger-table td { padding: 13px 12px; border-bottom: 1px solid #f0eef7; color: #414154; }
+.product-ledger-table thead th { background: linear-gradient(110deg, #edeaff, #f7f5ff); color: #5a4fc2; font-size: 11px; font-weight: 750; text-align: right; }
+.product-ledger-table thead th:nth-child(1), .product-ledger-table thead th:nth-child(2) { text-align: left; }
+.product-ledger-table th:nth-child(1), .product-ledger-table td:nth-child(1) { width: 5%; text-align: center; }
+.product-ledger-table th:nth-child(2), .product-ledger-table td:nth-child(2) { width: 25%; text-align: left; }
+.product-ledger-table th:nth-child(3), .product-ledger-table td:nth-child(3) { width: 10%; }
+.product-ledger-table th:nth-child(4), .product-ledger-table td:nth-child(4) { width: 12%; }
+.product-ledger-table th:nth-child(5), .product-ledger-table td:nth-child(5) { width: 11%; }
+.product-ledger-table th:nth-child(6), .product-ledger-table td:nth-child(6) { width: 11%; }
+.product-ledger-table th:nth-child(7), .product-ledger-table td:nth-child(7) { width: 12%; }
+.product-ledger-table th:nth-child(8), .product-ledger-table td:nth-child(8) { width: 14%; }
+.product-ledger-table tbody tr:not(.product-ledger-total):nth-child(even) { background: #fcfbff; }
+.product-ledger-table .product-ledger-number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.product-ledger-table .product-ledger-product { font-weight: 650; overflow-wrap: anywhere; }
+.product-ledger-table .product-ledger-profit { color: #5147ac; font-weight: 750; }
+.product-ledger-table .product-ledger-profit.negative { color: #bd4b61; }
+.product-ledger-table .product-ledger-total { background: #f2f0ff; font-weight: 800; }
+.product-ledger-table .product-ledger-total > * { color: #554bb0; }
+.product-ledger-table .product-ledger-total th { text-align: right; }
+
+@media (max-width: 600px) {
+  .profit-loss-footer { padding: 64px 15px 20px; }
+  .profit-loss-signatures { gap: 10px; }
+  .profit-loss-signatures strong { font-size: 10px; }
+  .profit-loss-footer p { margin-top: 44px; }
+}
+
+@page productLedgerPage { size: A4 landscape; margin: 12mm; }
+@media print {
+  body:has(.profit-loss-sheet) * { visibility: visible !important; }
+  .report-view-shell:has(.profit-loss-sheet) .page-heading,
+  .report-view-shell:has(.profit-loss-sheet) .reports-catalog-back,
+  .report-view-shell:has(.profit-loss-sheet) .topbar,
+  .report-view-shell:has(.profit-loss-sheet) .sidebar { display: none !important; }
+  .report-view-shell:has(.profit-loss-sheet) .content { max-width: none; padding: 0; }
+  .profit-loss-sheet { margin: 0; border-radius: 0; box-shadow: none; break-inside: auto; }
+  .profit-loss-table-wrap { overflow: visible; }
+  .profit-loss-table { min-width: 0; font-size: 10pt; }
+  .profit-loss-table thead { display: table-header-group; }
+  .profit-loss-table tr { break-inside: avoid; }
+  .profit-loss-footer { break-inside: avoid; }
+  .product-ledger-sheet { page: productLedgerPage; }
+  .product-ledger-table { min-width: 0; font-size: 8pt; }
+  .product-ledger-table th, .product-ledger-table td { padding: 7px 5px; }
+  .product-ledger-table thead { display: table-header-group; }
+  .product-ledger-table tr { break-inside: avoid; }
+  .product-ledger-table thead th, .product-ledger-table .product-ledger-total { print-color-adjust: exact; }
+  .profit-loss-sheet-header, .profit-loss-table .profit-loss-groups th, .profit-loss-table .profit-loss-columns th, .profit-loss-total, .profit-loss-net { print-color-adjust: exact; }
+}

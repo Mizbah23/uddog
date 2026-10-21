@@ -8,6 +8,7 @@ use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GoldStoreController;
 use App\Http\Controllers\PasswordRecoveryController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\ProductDamageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SalesTargetController;
@@ -55,7 +56,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
                 Route::post('gold/jobs', [GoldStoreController::class, 'saveJob']);
                 Route::put('gold/jobs/{job}', [GoldStoreController::class, 'updateJob']);
             });
-            Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,pos_sale,resales,purchase_returns,inventory,stock_adjustments,stock_transfers');
+            Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,pos_sale,resales,purchase_returns,inventory,stock_adjustments,stock_transfers,product_damages');
             Route::post('products', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products,purchases');
             Route::put('products/{product}', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products');
             Route::get('categories', [CategoryController::class, 'index'])->middleware('permission:categories,products,purchases,pos_sale');
@@ -73,6 +74,12 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');
+            Route::middleware('permission:product_damages')->group(function () {
+                Route::get('product-damages', [ProductDamageController::class, 'index']);
+                Route::get('product-damages/purchases', [ProductDamageController::class, 'purchases']);
+                Route::get('product-damages/timeline/{product}', [ProductDamageController::class, 'timeline']);
+                Route::post('product-damages', [ProductDamageController::class, 'store']);
+            });
             Route::get('stock-checks', [StockCheckController::class, 'index'])->middleware('permission:stock_checks');
             Route::post('stock-checks', [StockCheckController::class, 'store'])->middleware('permission:stock_checks');
             Route::put('stock-checks/{stockCheck}', [StockCheckController::class, 'update'])->middleware('permission:stock_checks');
@@ -124,7 +131,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
 Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
 Route::view('/{workspacePage}', 'app')
-    ->where('workspacePage', 'dashboard|products|categories|branches|customers|suppliers|purchase|pos|sale|sale_return|resale|purchase_return|inventory|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
+    ->where('workspacePage', 'dashboard|products|categories|branches|customers|suppliers|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
     ->middleware(ResolveTenant::class);
 
 Route::get('/', function (Request $request) {
