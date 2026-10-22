@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\UserRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class SupportImpersonation extends Model
 {
@@ -54,9 +56,17 @@ class SupportImpersonation extends Model
 
         if (! $impersonation
             || ! $impersonation->impersonator?->active
+            || $impersonation->impersonator?->access_paused
+            || ! $impersonation->impersonatedUser?->active
             || $impersonation->impersonatedUser?->access_paused
-            || ! $impersonation->impersonator->isSuperadmin()) {
+            || ! ($impersonation->impersonator->isSuperadmin()
+                || ($impersonation->impersonator->hasRole(UserRole::Admin)
+                    && $impersonation->impersonator->organization_id === $impersonation->organization_id
+                    && $impersonation->impersonatedUser->organization_id === $impersonation->organization_id
+                    && $impersonation->impersonatedUser->hasRole(UserRole::Manager, UserRole::Staff)))) {
             $request->session()->forget(self::SESSION_KEY);
+            $impersonation?->update(['ended_at' => now()]);
+            Auth::logout();
 
             return null;
         }

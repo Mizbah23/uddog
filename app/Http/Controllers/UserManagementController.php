@@ -6,16 +6,35 @@ use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\Branch;
 use App\Models\Organization;
+use App\Models\SupportImpersonation;
 use App\Models\User;
 use App\Services\TenantProvisioner;
 use App\TenantContext;
 use App\UserRole;
+use Illuminate\Database\Connection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class UserManagementController extends Controller
 {
+    private const USER_HISTORY_COLUMNS = [
+        'documents' => ['created_by'],
+        'expenses' => ['created_by'],
+        'gold_jobs' => ['created_by'],
+        'gold_rates' => ['created_by'],
+        'payroll_runs' => ['created_by'],
+        'product_damages' => ['created_by'],
+        'purchase_payments' => ['created_by'],
+        'sale_payments' => ['created_by'],
+        'sales_targets' => ['created_by', 'user_id'],
+        'stock_checks' => ['created_by', 'completed_by'],
+        'stock_movements' => ['created_by'],
+        'stock_transfers' => ['created_by'],
+    ];
+
     public function index(): JsonResponse
     {
         $actor = request()->user();
@@ -180,6 +199,92 @@ class UserManagementController extends Controller
         });
 
         return response()->json($user);
+    }
+
+    public function impersonate(Request $request, int $managedUser): JsonResponse
+    {
+        $actor = $request->user();
+        $user = User::query()
+            ->where('organization_id', $actor->organization_id)
+            ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value])
+            ->findOrFail($managedUser);
+
+        if (! $user->active || $user->access_paused) {
+            throw ValidationException::withMessages(['user' => 'Only an active, unpaused user can be viewed.']);
+        }
+
+        $impersonation = SupportImpersonation::create([
+            'impersonator_id' => $actor->id,
+            'impersonated_user_id' => $user->id,
+            'organization_id' => $actor->organization_id,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        $request->session()->put(SupportImpersonation::SESSION_KEY, $impersonation->id);
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        return response()->json([
+            'user' => $user->load('organization'),
+            'message' => "You are now viewing the workspace as {$user->name}.",
+        ]);
+    }
+
+    public function destroy(Request $request, int $managedUser): JsonResponse
+    {
+        $actor = $request->user();
+        $user = User::query()
+            ->where('organization_id', $actor->organization_id)
+            ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value])
+            ->findOrFail($managedUser);
+
+        if ($user->active) {
+            throw ValidationException::withMessages(['user' => 'Deactivate this user before permanently deleting the account.']);
+        }
+        $central = DB::connection(config('tenancy.central_connection'));
+        $company = $user->organization;
+
+        $central->transaction(function () use ($central, $company, $user): void {
+            $locked = User::query()->lockForUpdate()->findOrFail($user->id);
+            if ($locked->active || $this->hasBusinessHistory($central, $locked->id)) {
+                throw ValidationException::withMessages(['user' => 'This user is active or has recorded activity and cannot be permanently deleted.']);
+            }
+
+            if (config('tenancy.enabled') && $company?->tenant_database) {
+                app(TenantContext::class)->run($company, function () use ($user): void {
+                    $tenant = DB::connection('tenant');
+                    $tenant->transaction(function () use ($tenant, $user): void {
+                        if ($this->hasBusinessHistory($tenant, $user->id)) {
+                            throw ValidationException::withMessages(['user' => 'This user has recorded activity and cannot be permanently deleted.']);
+                        }
+                        $tenant->table('users')->where('id', $user->id)->delete();
+                    });
+                });
+            }
+
+            SupportImpersonation::query()->where('impersonated_user_id', $user->id)->delete();
+            $central->table('sessions')->where('user_id', $user->id)->delete();
+            if ($user->email) {
+                $central->table('password_reset_tokens')->where('email', $user->email)->delete();
+            }
+            $locked->delete();
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function hasBusinessHistory(Connection $connection, int $userId): bool
+    {
+        foreach (self::USER_HISTORY_COLUMNS as $table => $columns) {
+            foreach ($columns as $column) {
+                if ($connection->table($table)->where($column, $userId)->exists()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function validateBranchAccess(array $branchIds, string $role, int $organizationId): void

@@ -1489,6 +1489,22 @@ Object.assign(bangla, {
     'More sections': 'আরও বিভাগ',
     'items': 'টি পণ্য',
     'Create your first sale or purchase to see activity here.': 'এখানে কার্যক্রম দেখতে প্রথম বিক্রয় বা ক্রয় তৈরি করুন।',
+    'Delete product': 'পণ্য মুছুন',
+    'Delete customer': 'ক্রেতা মুছুন',
+    'Delete supplier': 'সরবরাহকারী মুছুন',
+    'Delete this product? This cannot be undone.': 'এই পণ্যটি মুছবেন? এটি আর ফিরিয়ে আনা যাবে না।',
+    'Delete this customer or supplier? This cannot be undone.': 'এই ক্রেতা বা সরবরাহকারীকে মুছবেন? এটি আর ফিরিয়ে আনা যাবে না।',
+    'Product deleted.': 'পণ্য মুছে ফেলা হয়েছে।',
+    'Contact deleted.': 'যোগাযোগের তথ্য মুছে ফেলা হয়েছে।',
+    'This product has stock or transaction history and cannot be deleted.': 'এই পণ্যের মজুদ বা লেনদেনের ইতিহাস আছে, তাই এটি মুছা যাবে না।',
+    'This customer or supplier has transactions or an opening balance and cannot be deleted.': 'এই ক্রেতা বা সরবরাহকারীর লেনদেন বা প্রারম্ভিক বকেয়া আছে, তাই এটি মুছা যাবে না।',
+    'The default customer cannot be deleted.': 'ডিফল্ট ক্রেতাকে মুছা যাবে না।',
+    'View as user': 'ব্যবহারকারী হিসেবে দেখুন',
+    'Return to owner': 'মালিকের অ্যাকাউন্টে ফিরুন',
+    'Permanently delete': 'স্থায়ীভাবে মুছুন',
+    'Only an active, unpaused user can be viewed.': 'শুধু সক্রিয় ও বিরতিহীন ব্যবহারকারীকে দেখা যাবে।',
+    'Deactivate this user before permanently deleting the account.': 'অ্যাকাউন্ট স্থায়ীভাবে মুছতে আগে ব্যবহারকারীকে নিষ্ক্রিয় করুন।',
+    'This user has recorded activity and cannot be permanently deleted.': 'এই ব্যবহারকারীর লেনদেনের ইতিহাস আছে, তাই স্থায়ীভাবে মুছা যাবে না।',
 });
 
 const normalizedBangla = new Map(Object.entries(bangla).map(([source, result]) => [source.toLocaleLowerCase('en'), result]));

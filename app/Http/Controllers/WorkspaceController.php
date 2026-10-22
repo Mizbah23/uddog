@@ -5,12 +5,17 @@ namespace App\Http\Controllers;
 use App\BranchAccess;
 use App\Models\Contact;
 use App\Models\Document;
+use App\Models\DocumentItem;
+use App\Models\GoldJob;
 use App\Models\Organization;
 use App\Models\Product;
+use App\Models\ProductDamage;
 use App\Models\PurchaseInstallment;
 use App\Models\PurchasePayment;
 use App\Models\SaleInstallment;
+use App\Models\StockCheckItem;
 use App\Models\StockMovement;
+use App\Models\StockTransferItem;
 use App\Models\SupportImpersonation;
 use App\Models\User;
 use App\Permission;
@@ -31,6 +36,7 @@ class WorkspaceController extends Controller
 {
     public function session(): JsonResponse
     {
+        $impersonation = SupportImpersonation::activeFor(request());
         $user = Auth::user()?->load('organization');
         if ($user && (! $user->active || $user->access_paused)) {
             Auth::logout();
@@ -41,7 +47,6 @@ class WorkspaceController extends Controller
                 'account_disabled' => true,
             ]);
         }
-        $impersonation = $user ? SupportImpersonation::activeFor(request()) : null;
         $organization = $user?->organization;
         $expiryDate = $organization?->subscription_ends_at;
         $abilities = $user ? collect(Permission::cases())
@@ -60,7 +65,7 @@ class WorkspaceController extends Controller
                 'manage_settings' => $user->hasRole(UserRole::Admin),
                 'manage_system_setup' => $user->hasRole(UserRole::Admin)
                     && (! $organization?->isDemo() || (bool) $impersonation),
-                'use_workspace' => (bool) $impersonation
+                'use_workspace' => (bool) ($impersonation?->impersonator->isSuperadmin())
                     || (! $user->isSuperadmin() && $user->organization?->canUseWorkspace() === true),
                 'abilities' => $abilities,
                 'reports' => collect(ReportType::cases())->filter(fn (ReportType $report) => $user->hasReportAccess($report))
@@ -68,7 +73,7 @@ class WorkspaceController extends Controller
             ] : null,
             'impersonation' => $impersonation ? [
                 'id' => $impersonation->id,
-                'impersonator' => $impersonation->impersonator->only(['id', 'name']),
+                'impersonator' => $impersonation->impersonator->only(['id', 'name', 'role']),
                 'owner' => $user->only(['id', 'name']),
                 'organization' => $impersonation->organization->only(['id', 'name']),
                 'started_at' => $impersonation->created_at,
@@ -366,6 +371,31 @@ class WorkspaceController extends Controller
         return response()->json($saved, $savedProduct ? 200 : 201);
     }
 
+    public function deleteProduct(int $product): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $saved = Product::query()->where('organization_id', $organizationId)->findOrFail($product);
+
+        $saved->getConnection()->transaction(function () use ($organizationId, $product): void {
+            $saved = Product::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($product);
+            $hasHistory = DocumentItem::query()->where('product_id', $product)->exists()
+                || StockMovement::query()->where('product_id', $product)->exists()
+                || StockCheckItem::query()->where('product_id', $product)->exists()
+                || StockTransferItem::query()->where('product_id', $product)->exists()
+                || ProductDamage::query()->where('product_id', $product)->exists()
+                || GoldJob::query()->where('product_id', $product)->exists();
+
+            if ($hasHistory || (float) $saved->quantity_on_hand !== 0.0 || $saved->stocks()->where('quantity_on_hand', '!=', 0)->exists()) {
+                throw ValidationException::withMessages(['product' => 'This product has stock or transaction history and cannot be deleted.']);
+            }
+
+            $saved->stocks()->delete();
+            $saved->delete();
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
     public function contacts(): JsonResponse
     {
         return response()->json(Contact::query()->where('organization_id', $this->organizationId())->orderBy('name')->get());
@@ -400,6 +430,30 @@ class WorkspaceController extends Controller
         $saved = $savedContact ? tap($savedContact)->update($data) : Contact::create([...$data, 'organization_id' => $organizationId]);
 
         return response()->json($saved, $savedContact ? 200 : 201);
+    }
+
+    public function deleteContact(int $contact): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $saved = Contact::query()->where('organization_id', $organizationId)->findOrFail($contact);
+
+        $saved->getConnection()->transaction(function () use ($organizationId, $contact): void {
+            $saved = Contact::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($contact);
+            if ($saved->is_default) {
+                throw ValidationException::withMessages(['contact' => 'The default customer cannot be deleted.']);
+            }
+
+            $hasHistory = Document::query()->where('contact_id', $contact)->exists()
+                || GoldJob::query()->where('contact_id', $contact)->exists();
+
+            if ($hasHistory || (float) $saved->opening_due !== 0.0 || (float) $saved->opening_payable !== 0.0) {
+                throw ValidationException::withMessages(['contact' => 'This customer or supplier has transactions or an opening balance and cannot be deleted.']);
+            }
+
+            $saved->delete();
+        });
+
+        return response()->json(['ok' => true]);
     }
 
     public function documents(Request $request): JsonResponse

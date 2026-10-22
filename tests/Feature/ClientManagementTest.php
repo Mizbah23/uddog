@@ -36,6 +36,7 @@ class ClientManagementTest extends TestCase
             'name' => DefaultCustomer::NAME,
             'type' => 'customer',
             'active' => true,
+            'is_default' => true,
         ]);
 
         $company = Organization::query()->findOrFail($companyId);

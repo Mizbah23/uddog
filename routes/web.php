@@ -61,6 +61,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::get('products', [WorkspaceController::class, 'products'])->middleware('permission:products,purchases,sales,pos_sale,resales,purchase_returns,inventory,stock_adjustments,stock_transfers,product_damages');
             Route::post('products', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products,purchases');
             Route::put('products/{product}', [WorkspaceController::class, 'saveProduct'])->middleware('permission:products');
+            Route::delete('products/{product}', [WorkspaceController::class, 'deleteProduct'])->middleware(['role:superadmin,admin', 'permission:products']);
             Route::get('categories', [CategoryController::class, 'index'])->middleware('permission:categories,products,purchases,pos_sale');
             Route::post('categories', [CategoryController::class, 'store'])->middleware('permission:categories');
             Route::put('categories/{category}', [CategoryController::class, 'update'])->middleware('permission:categories');
@@ -70,6 +71,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::get('suppliers', [ContactDirectoryController::class, 'suppliers'])->middleware('permission:contacts');
             Route::post('contacts', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts,purchases,sales,pos_sale,resales,purchase_returns');
             Route::put('contacts/{contact}', [WorkspaceController::class, 'saveContact'])->middleware('permission:contacts');
+            Route::delete('contacts/{contact}', [WorkspaceController::class, 'deleteContact'])->middleware(['role:superadmin,admin', 'permission:contacts']);
             Route::get('documents', [WorkspaceController::class, 'documents'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
             Route::post('documents', [WorkspaceController::class, 'saveDocument'])->middleware('permission:purchases,sales,pos_sale,sales_returns,resales,purchase_returns');
             Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,pos_sale,resales');
@@ -109,6 +111,10 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
                 Route::get('users', [UserManagementController::class, 'index']);
                 Route::post('users', [UserManagementController::class, 'store']);
                 Route::put('users/{managedUser}', [UserManagementController::class, 'update']);
+            });
+            Route::middleware('role:admin')->group(function () {
+                Route::post('users/{managedUser}/impersonate', [UserManagementController::class, 'impersonate']);
+                Route::delete('users/{managedUser}', [UserManagementController::class, 'destroy']);
             });
         });
 

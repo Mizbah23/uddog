@@ -58,7 +58,9 @@ class SupportImpersonationController extends Controller
 
         return response()->json([
             'user' => $impersonator->load('organization'),
-            'message' => 'You have returned to the superadmin workspace.',
+            'message' => $impersonator->isSuperadmin()
+                ? 'You have returned to the superadmin workspace.'
+                : 'You have returned to your owner workspace.',
         ]);
     }
 }
