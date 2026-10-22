@@ -21,7 +21,10 @@ class EnsureActiveSubscription
             return $next($request);
         }
 
-        if (SupportImpersonation::activeFor($request)) {
+        $impersonation = SupportImpersonation::activeFor($request);
+        abort_unless($request->user(), 401);
+
+        if ($impersonation?->impersonator->isSuperadmin()) {
             return $next($request);
         }
 

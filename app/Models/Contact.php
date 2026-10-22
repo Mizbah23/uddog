@@ -8,6 +8,6 @@ class Contact extends TenantModel
 
     protected function casts(): array
     {
-        return ['credit_limit' => 'decimal:2', 'opening_due' => 'decimal:2', 'opening_payable' => 'decimal:2', 'active' => 'boolean'];
+        return ['credit_limit' => 'decimal:2', 'opening_due' => 'decimal:2', 'opening_payable' => 'decimal:2', 'active' => 'boolean', 'is_default' => 'boolean'];
     }
 }
