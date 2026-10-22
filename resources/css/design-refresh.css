@@ -300,6 +300,7 @@ body {
 .report-loading { color: #77768b; font-size: 12px; }
 .report-error { margin-bottom: 16px; }
 .dashboard-analytics-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .9fr); gap: 18px; margin-bottom: 18px; }
+.dashboard-analytics-grid.dashboard-analytics-single { grid-template-columns: 1fr; }
 .analytics-panel { min-height: 300px; padding: 21px; }
 .analytics-panel .panel-heading { margin-bottom: 19px; }
 .analytics-heading-icon { color: #7464d9; }

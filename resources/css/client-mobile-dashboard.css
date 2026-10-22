@@ -435,6 +435,10 @@
     background: rgba(35, 29, 120, .17);
   }
 
+  .mobile-business-card-bottom.mobile-stock-summary {
+    grid-template-columns: 1fr;
+  }
+
   .mobile-business-card-bottom > div {
     min-width: 0;
   }
