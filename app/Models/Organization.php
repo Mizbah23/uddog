@@ -14,7 +14,7 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'subdomain', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'notes', 'system_settings', 'tenant_database'];
+    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'notes', 'system_settings', 'tenant_database'];
 
     protected $appends = ['subscription_active'];
 

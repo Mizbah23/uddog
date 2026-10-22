@@ -7,7 +7,7 @@ use Illuminate\Database\Connection;
 
 class DefaultCustomer
 {
-    public const NAME = 'Walk-in Customer';
+    public const NAME = 'General Customer';
 
     public function ensure(Connection $connection, Organization $organization): void
     {

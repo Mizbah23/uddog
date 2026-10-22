@@ -39,7 +39,8 @@ class UpdateClientRequest extends FormRequest
             'gold_store' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'owner_name' => ['required', 'string', 'max:100'],
-            'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($ownerId)],
+            'owner_email' => ['nullable', 'required_without:owner_mobile', 'email', 'max:255', Rule::unique('users', 'email')->ignore($ownerId)],
+            'owner_mobile' => ['nullable', 'required_without:owner_email', 'string', 'max:30', 'regex:/\A\+?[0-9]{7,15}\z/D', Rule::unique('users', 'mobile')->ignore($ownerId)],
             'owner_password' => [Rule::requiredIf(! $ownerId), 'nullable', 'string', Password::min(8)],
             'owner_active' => ['required', 'boolean'],
         ];
@@ -49,6 +50,11 @@ class UpdateClientRequest extends FormRequest
     {
         if (is_string($this->input('subdomain'))) {
             $this->merge(['subdomain' => strtolower(trim($this->input('subdomain'))) ?: null]);
+        }
+        foreach (['owner_email', 'owner_mobile'] as $field) {
+            if (is_string($this->input($field))) {
+                $this->merge([$field => trim($this->input($field)) ?: null]);
+            }
         }
     }
 }

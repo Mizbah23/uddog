@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Product;
@@ -230,6 +231,44 @@ class InventoryWorkflowTest extends TestCase
             ->assertJsonPath('monthly_totals.9.month', 'Oct')
             ->assertJsonPath('monthly_totals.9.sales', 15)
             ->assertJsonPath('monthly_totals.9.purchases', 80);
+    }
+
+    public function test_dashboard_ranks_three_highest_and_lowest_products_by_branch_and_net_units_sold_this_year(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 22));
+        $user = User::factory()->admin()->create();
+        $branch = Branch::query()->where('organization_id', $user->organization_id)->where('is_default', true)->firstOrFail();
+        $otherBranch = Branch::create(['organization_id' => $user->organization_id, 'name' => 'Other Branch', 'code' => 'OTHER', 'active' => true]);
+        $customer = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Buyer', 'type' => 'customer']);
+        $sales = ['Alpha' => 12, 'Bravo' => 10, 'Charlie' => 8, 'Delta' => 6, 'Echo' => 4, 'Foxtrot' => 2];
+        $products = [];
+
+        foreach ($sales as $name => $quantity) {
+            $products[$name] = Product::create(['organization_id' => $user->organization_id, 'name' => $name, 'unit' => 'pc', 'cost_price' => 1, 'sale_price' => 2]);
+            $document = Document::create(['organization_id' => $user->organization_id, 'branch_id' => $branch->id, 'number' => 'SAL-'.$name, 'type' => 'sale', 'contact_id' => $customer->id, 'document_date' => '2026-10-22', 'subtotal' => $quantity * 2, 'total' => $quantity * 2, 'created_by' => $user->id]);
+            $document->items()->create(['product_id' => $products[$name]->id, 'quantity' => $quantity, 'unit_price' => 2, 'line_total' => $quantity * 2]);
+        }
+
+        $returned = Document::create(['organization_id' => $user->organization_id, 'branch_id' => $branch->id, 'number' => 'SRT-Bravo', 'type' => 'sale_return', 'contact_id' => $customer->id, 'document_date' => '2026-10-22', 'subtotal' => 6, 'total' => 6, 'created_by' => $user->id]);
+        $returned->items()->create(['product_id' => $products['Bravo']->id, 'quantity' => 3, 'unit_price' => 2, 'line_total' => 6]);
+        $otherSale = Document::create(['organization_id' => $user->organization_id, 'branch_id' => $otherBranch->id, 'number' => 'SAL-Other', 'type' => 'sale', 'contact_id' => $customer->id, 'document_date' => '2026-10-22', 'subtotal' => 200, 'total' => 200, 'created_by' => $user->id]);
+        $otherSale->items()->create(['product_id' => $products['Foxtrot']->id, 'quantity' => 100, 'unit_price' => 2, 'line_total' => 200]);
+        $oldSale = Document::create(['organization_id' => $user->organization_id, 'branch_id' => $branch->id, 'number' => 'SAL-Old', 'type' => 'sale', 'contact_id' => $customer->id, 'document_date' => '2025-10-22', 'subtotal' => 200, 'total' => 200, 'created_by' => $user->id]);
+        $oldSale->items()->create(['product_id' => $products['Foxtrot']->id, 'quantity' => 100, 'unit_price' => 2, 'line_total' => 200]);
+
+        $this->actingAs($user)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()
+            ->assertJsonCount(3, 'highest_selling_products')
+            ->assertJsonCount(3, 'lowest_selling_products')
+            ->assertJsonPath('highest_selling_products.0.name', 'Alpha')
+            ->assertJsonPath('highest_selling_products.0.quantity', 12)
+            ->assertJsonPath('highest_selling_products.1.name', 'Charlie')
+            ->assertJsonPath('highest_selling_products.2.name', 'Bravo')
+            ->assertJsonPath('highest_selling_products.2.quantity', 7)
+            ->assertJsonPath('lowest_selling_products.0.name', 'Foxtrot')
+            ->assertJsonPath('lowest_selling_products.0.quantity', 2)
+            ->assertJsonPath('lowest_selling_products.1.name', 'Echo')
+            ->assertJsonPath('lowest_selling_products.2.name', 'Delta');
     }
 
     public function test_product_cannot_be_created_without_purchase_cost_and_sale_price(): void
