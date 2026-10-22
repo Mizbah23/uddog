@@ -218,6 +218,31 @@ class WorkspaceController extends Controller
             ->map(fn (array $product) => ['id' => $product['id'], 'name' => $product['name'], 'unit' => $product['unit'], 'quantity' => $product['quantity_mills'] / 1000]);
         $highestSellingProducts = $rankedProducts->sort(fn (array $first, array $second) => ($second['quantity'] <=> $first['quantity']) ?: strcmp($first['name'], $second['name']))->take(3)->values();
         $lowestSellingProducts = $rankedProducts->sort(fn (array $first, array $second) => ($first['quantity'] <=> $second['quantity']) ?: strcmp($first['name'], $second['name']))->take(3)->values();
+        $lowStockProducts = $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values();
+
+        if (! $user->hasRole(UserRole::Admin)) {
+            return response()->json([
+                'products' => $products->count(),
+                'low_stock' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
+                'recent_documents' => (clone $documents)
+                    ->when($visibleTypes, fn ($query) => $query->whereIn('type', $visibleTypes), fn ($query) => $query->whereRaw('1 = 0'))
+                    ->with('contact:id,name')
+                    ->latest()
+                    ->limit(6)
+                    ->get(['id', 'contact_id', 'number', 'type', 'document_date', 'created_at'])
+                    ->map(fn (Document $document) => [
+                        'id' => $document->id,
+                        'number' => $document->number,
+                        'type' => $document->type,
+                        'document_date' => $document->document_date,
+                        'contact' => $document->contact?->only(['name']),
+                    ]),
+                'low_stock_products' => $lowStockProducts->map(fn (Product $product) => $product->only(['id', 'name', 'sku', 'unit', 'quantity_on_hand'])),
+                'highest_selling_products' => $highestSellingProducts,
+                'lowest_selling_products' => $lowestSellingProducts,
+            ]);
+        }
+
         $collectionAlerts = $canViewSales
             ? SaleInstallment::query()
                 ->where('organization_id', $organizationId)
@@ -257,7 +282,7 @@ class WorkspaceController extends Controller
             'sales_total' => $canViewSales ? (clone $documents)->whereIn('type', ['sale', 'resale'])->sum('total') - (clone $documents)->where('type', 'sale_return')->sum('total') : 0,
             'purchase_total' => $canViewPurchases ? (clone $documents)->where('type', 'purchase')->sum('total') : 0,
             'recent_documents' => (clone $documents)->when($visibleTypes, fn ($query) => $query->whereIn('type', $visibleTypes), fn ($query) => $query->whereRaw('1 = 0'))->with('contact')->latest()->limit(6)->get(),
-            'low_stock_products' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values(),
+            'low_stock_products' => $lowStockProducts,
             'monthly_totals' => $monthlyTotals->values(),
             'highest_selling_products' => $highestSellingProducts,
             'lowest_selling_products' => $lowestSellingProducts,

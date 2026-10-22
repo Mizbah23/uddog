@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use App\Models\Contact;
+use App\Models\Document;
 use App\Models\Organization;
+use App\Models\Product;
 use App\Models\User;
 use App\Permission;
 use App\SubscriptionStatus;
@@ -22,6 +25,58 @@ class RoleAccessTest extends TestCase
         $this->actingAs($manager)->getJson('/api/users')->assertForbidden();
         $this->actingAs($manager)->getJson('/api/clients')->assertForbidden();
         $this->actingAs($manager)->getJson('/api/overview')->assertOk();
+    }
+
+    public function test_dashboard_financial_figures_are_visible_only_to_the_company_owner(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $manager = User::factory()->for($owner->organization)->create();
+        $staff = User::factory()->staff()->for($owner->organization)->create();
+        $branch = Branch::query()->where('organization_id', $owner->organization_id)->where('is_default', true)->firstOrFail();
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Customer', 'type' => 'customer']);
+        Product::create([
+            'organization_id' => $owner->organization_id,
+            'name' => 'Low stock product',
+            'unit' => 'pc',
+            'cost_price' => 10,
+            'sale_price' => 20,
+            'quantity_on_hand' => 5,
+            'reorder_level' => 5,
+        ]);
+        Document::create([
+            'organization_id' => $owner->organization_id,
+            'branch_id' => $branch->id,
+            'number' => 'SAL-DASHBOARD-1',
+            'type' => 'sale',
+            'contact_id' => $customer->id,
+            'document_date' => today(),
+            'subtotal' => 20,
+            'total' => 20,
+            'amount_paid' => 0,
+            'created_by' => $owner->id,
+        ]);
+
+        $this->actingAs($owner)->getJson('/api/overview')
+            ->assertOk()
+            ->assertJsonPath('sales_total', 20)
+            ->assertJsonPath('stock_value', 50)
+            ->assertJsonPath('recent_documents.0.total', '20.00');
+
+        foreach ([$manager, $staff] as $employee) {
+            $overview = $this->actingAs($employee)->getJson('/api/overview')
+                ->assertOk()
+                ->assertJsonPath('products', 1)
+                ->assertJsonPath('low_stock', 1)
+                ->assertJsonPath('recent_documents.0.number', 'SAL-DASHBOARD-1')
+                ->json();
+
+            foreach (['stock_value', 'sales_total', 'purchase_total', 'monthly_totals', 'collection_alerts', 'supplier_due_list', 'customer_due_list', 'overdue_customers'] as $field) {
+                $this->assertArrayNotHasKey($field, $overview);
+            }
+            $this->assertArrayNotHasKey('total', $overview['recent_documents'][0]);
+            $this->assertArrayNotHasKey('cost_price', $overview['low_stock_products'][0]);
+            $this->assertArrayNotHasKey('sale_price', $overview['low_stock_products'][0]);
+        }
     }
 
     public function test_admin_manages_only_non_superadmin_users_in_their_client(): void

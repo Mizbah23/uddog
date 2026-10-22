@@ -15,9 +15,9 @@ class InventoryWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function setupRecords(): array
+    private function setupRecords(bool $asOwner = false): array
     {
-        $user = User::factory()->create();
+        $user = $asOwner ? User::factory()->admin()->create() : User::factory()->create();
         $supplier = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Main supplier', 'type' => 'supplier']);
         $customer = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Retail customer', 'type' => 'customer']);
         $product = Product::create([
@@ -181,7 +181,7 @@ class InventoryWorkflowTest extends TestCase
 
     public function test_dashboard_customer_due_list_groups_customers_and_sorts_highest_balance_first(): void
     {
-        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        [$user, $supplier, $customer, $product] = $this->setupRecords(asOwner: true);
         $secondCustomer = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Second customer', 'type' => 'customer']);
         $this->actingAs($user);
         $this->postJson('/api/documents', $this->payload('purchase', $supplier, $product, '20', '10.00'))->assertCreated();
@@ -205,7 +205,7 @@ class InventoryWorkflowTest extends TestCase
     public function test_dashboard_chart_uses_calendar_months_and_nets_returns_in_their_document_month(): void
     {
         $this->travelTo(now()->setDate(2026, 10, 31));
-        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        [$user, $supplier, $customer, $product] = $this->setupRecords(asOwner: true);
         $this->actingAs($user);
 
         $purchasePayload = $this->payload('purchase', $supplier, $product, '10', '10.00');
@@ -300,7 +300,7 @@ class InventoryWorkflowTest extends TestCase
 
     public function test_sales_return_restores_stock_and_cannot_exceed_the_remaining_sale_quantity(): void
     {
-        [$user, $supplier, $customer, $product] = $this->setupRecords();
+        [$user, $supplier, $customer, $product] = $this->setupRecords(asOwner: true);
         $this->actingAs($user);
         $this->postJson('/api/documents', $this->payload('purchase', $supplier, $product, '5', '10.00'))->assertCreated();
         $sale = $this->postJson('/api/documents', $this->payload('sale', $customer, $product, '3', '15.00'))
