@@ -43,6 +43,69 @@ class ClientManagementTest extends TestCase
         $this->assertSame(1, Contact::query()->where('organization_id', $companyId)->count());
     }
 
+    public function test_company_owner_can_be_created_with_phone_only_and_sign_in(): void
+    {
+        $superadmin = User::factory()->superadmin()->create();
+
+        $response = $this->actingAs($superadmin)->postJson('/api/clients', [
+            'name' => 'Phone Owner Store',
+            'subscription_status' => SubscriptionStatus::Trial->value,
+            'owner_name' => 'Phone Owner',
+            'owner_email' => '',
+            'owner_mobile' => '01712345678',
+            'owner_password' => 'Password123',
+        ])->assertCreated()
+            ->assertJsonPath('admins.0.email', null)
+            ->assertJsonPath('admins.0.mobile', '01712345678');
+
+        $owner = User::query()->where('organization_id', $response->json('id'))->firstOrFail();
+        $this->assertNull($owner->email);
+
+        $this->postJson('/api/logout');
+        $this->postJson('/api/login', ['email' => '01712345678', 'password' => 'Password123'])
+            ->assertOk()->assertJsonPath('user.id', $owner->id);
+    }
+
+    public function test_company_owner_requires_email_or_phone_and_unique_phone(): void
+    {
+        $superadmin = User::factory()->superadmin()->create();
+        User::factory()->create(['mobile' => '01712345678']);
+        $payload = [
+            'name' => 'Another Store',
+            'subscription_status' => SubscriptionStatus::Trial->value,
+            'owner_name' => 'Another Owner',
+            'owner_password' => 'Password123',
+        ];
+
+        $this->actingAs($superadmin)->postJson('/api/clients', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors(['owner_email', 'owner_mobile']);
+        $this->postJson('/api/clients', [...$payload, 'owner_mobile' => '01712345678'])
+            ->assertUnprocessable()->assertJsonValidationErrors('owner_mobile');
+        $this->assertDatabaseMissing('organizations', ['name' => 'Another Store']);
+    }
+
+    public function test_company_owner_can_switch_from_email_to_phone(): void
+    {
+        $company = Organization::factory()->create();
+        $owner = User::factory()->admin()->for($company)->create();
+        $superadmin = User::factory()->superadmin()->create();
+
+        $this->actingAs($superadmin)->putJson("/api/clients/{$company->id}", [
+            'name' => $company->name,
+            'subscription_status' => SubscriptionStatus::Active->value,
+            'owner_name' => $owner->name,
+            'owner_email' => '',
+            'owner_mobile' => '01812345678',
+            'owner_active' => true,
+        ])->assertOk()
+            ->assertJsonPath('admins.0.email', null)
+            ->assertJsonPath('admins.0.mobile', '01812345678');
+
+        $owner->refresh();
+        $this->assertNull($owner->email);
+        $this->assertSame('01812345678', $owner->mobile);
+    }
+
     public function test_client_list_excludes_organizations_assigned_to_a_superadmin(): void
     {
         $systemOrganization = Organization::factory()->create(['name' => 'Primary Client']);

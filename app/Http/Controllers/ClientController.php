@@ -44,7 +44,7 @@ class ClientController extends Controller
     {
         $organization = $this->companyQuery()
             ->with([
-                'users:id,organization_id,name,email,role,active,access_paused,created_at',
+                'users:id,organization_id,name,email,mobile,role,active,access_paused,created_at',
                 'supportImpersonations' => fn ($query) => $query->with('impersonator:id,name')->latest()->limit(20),
             ])
             ->findOrFail($client);
@@ -76,11 +76,12 @@ class ClientController extends Controller
     {
         $data = $request->validated();
         $organization = DB::transaction(function () use ($data) {
-            $organization = Organization::create(collect($data)->except(['owner_name', 'owner_email', 'owner_password'])->all());
+            $organization = Organization::create(collect($data)->except(['owner_name', 'owner_email', 'owner_mobile', 'owner_password'])->all());
             User::create([
                 'organization_id' => $organization->id,
                 'name' => $data['owner_name'],
-                'email' => $data['owner_email'],
+                'email' => $data['owner_email'] ?? null,
+                'mobile' => $data['owner_mobile'] ?? null,
                 'password' => $data['owner_password'],
                 'role' => UserRole::Admin,
                 'active' => true,
@@ -128,13 +129,14 @@ class ClientController extends Controller
         $organization = DB::transaction(function () use ($client, $data) {
             $organization = Organization::query()->findOrFail($client);
             $organization->update(collect($data)->except([
-                'owner_name', 'owner_email', 'owner_password', 'owner_active',
+                'owner_name', 'owner_email', 'owner_mobile', 'owner_password', 'owner_active',
             ])->all());
 
             $owner = $organization->admins()->oldest()->first();
             $ownerData = [
                 'name' => $data['owner_name'],
-                'email' => $data['owner_email'],
+                'email' => $data['owner_email'] ?? null,
+                'mobile' => $data['owner_mobile'] ?? null,
                 'active' => $data['owner_active'],
             ];
             if (! empty($data['owner_password'])) {
@@ -196,7 +198,7 @@ class ClientController extends Controller
     private function companyQuery(): Builder
     {
         $query = Organization::query()
-            ->with('admins:id,organization_id,name,email,active,created_at')
+            ->with('admins:id,organization_id,name,email,mobile,active,created_at')
             ->withCount('users')
             ->withMax('supportImpersonations', 'created_at');
 

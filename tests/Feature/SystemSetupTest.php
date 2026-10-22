@@ -37,6 +37,44 @@ class SystemSetupTest extends TestCase
         $this->assertFalse($owner->organization->fresh()->setup()['sales']['allow_due_sales']);
     }
 
+    public function test_owner_can_edit_company_name_phone_and_address(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $company = ['name' => 'হাবিবুর রহমান ডিম আড়ৎ', 'phone' => '01700000000', 'address' => 'ঢাকা, বাংলাদেশ'];
+
+        $this->actingAs($owner)->putJson('/api/system-setup', [...$this->settings(), 'company' => $company])
+            ->assertOk()
+            ->assertJsonPath('company.name', $company['name'])
+            ->assertJsonPath('company.phone', $company['phone'])
+            ->assertJsonPath('company.address', $company['address']);
+
+        $this->getJson('/api/system-setup')
+            ->assertOk()
+            ->assertJsonPath('company.name', $company['name'])
+            ->assertJsonPath('company.phone', $company['phone'])
+            ->assertJsonPath('company.address', $company['address']);
+
+        $this->assertDatabaseHas('organizations', [
+            'id' => $owner->organization_id,
+            ...$company,
+        ]);
+    }
+
+    public function test_duplicate_company_name_and_invalid_contact_details_are_rejected(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $otherCompany = Organization::factory()->create(['name' => 'Existing Store']);
+
+        $this->actingAs($owner)->putJson('/api/system-setup', [
+            ...$this->settings(),
+            'company' => ['name' => $otherCompany->name, 'phone' => str_repeat('1', 51), 'address' => str_repeat('A', 1001)],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['company.name', 'company.phone', 'company.address']);
+
+        $this->assertSame($owner->organization->name, $owner->organization->fresh()->name);
+        $this->assertNull($owner->organization->fresh()->phone);
+        $this->assertNull($owner->organization->fresh()->address);
+    }
+
     public function test_owner_can_configure_product_units_and_create_products_with_them(): void
     {
         $owner = User::factory()->admin()->create();

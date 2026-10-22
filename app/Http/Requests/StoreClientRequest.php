@@ -34,7 +34,8 @@ class StoreClientRequest extends FormRequest
             'gold_store' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'owner_name' => ['required', 'string', 'max:100'],
-            'owner_email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'owner_email' => ['nullable', 'required_without:owner_mobile', 'email', 'max:255', 'unique:users,email'],
+            'owner_mobile' => ['nullable', 'required_without:owner_email', 'string', 'max:30', 'regex:/\A\+?[0-9]{7,15}\z/D', 'unique:users,mobile'],
             'owner_password' => ['required', 'string', Password::min(8)],
         ];
     }
@@ -43,6 +44,11 @@ class StoreClientRequest extends FormRequest
     {
         if (is_string($this->input('subdomain'))) {
             $this->merge(['subdomain' => strtolower(trim($this->input('subdomain'))) ?: null]);
+        }
+        foreach (['owner_email', 'owner_mobile'] as $field) {
+            if (is_string($this->input($field))) {
+                $this->merge([$field => trim($this->input($field)) ?: null]);
+            }
         }
     }
 }

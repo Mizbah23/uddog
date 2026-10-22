@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Models\SupportImpersonation;
+use App\Services\TenantProvisioner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,13 +13,19 @@ class SystemSetupController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        return response()->json($this->organization($request)->setup());
+        $organization = $this->organization($request);
+
+        return response()->json([...$organization->setup(), 'company' => $organization->only(['name', 'phone', 'address'])]);
     }
 
-    public function update(Request $request): JsonResponse
+    public function update(Request $request, TenantProvisioner $provisioner): JsonResponse
     {
         $organization = $this->organization($request);
         $data = $request->validate([
+            'company' => ['sometimes', 'array:name,phone,address'],
+            'company.name' => ['required_with:company', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($organization)],
+            'company.phone' => ['nullable', 'string', 'max:50'],
+            'company.address' => ['nullable', 'string', 'max:1000'],
             'sales' => ['required', 'array:allow_due_sales,allow_installment_sales,allow_sales_returns,allow_resales,default_payment_method'],
             'sales.allow_due_sales' => ['required', 'boolean'],
             'sales.allow_installment_sales' => ['required', 'boolean'],
@@ -44,9 +51,13 @@ class SystemSetupController extends Controller
         foreach (array_unique([...array_keys(Organization::defaultUnitConversions()), ...$data['store']['units']]) as $unit) {
             $data['store']['unit_conversions'][$unit] = $unit === 'pc' ? 1 : (int) ($submittedConversions[$unit] ?? $existingConversions[$unit] ?? 1);
         }
-        $organization->update(['system_settings' => $data]);
+        $organization->update([
+            ...($data['company'] ?? []),
+            'system_settings' => collect($data)->only(['sales', 'purchases', 'store'])->all(),
+        ]);
+        $provisioner->syncOrganizationShadow($organization);
 
-        return response()->json($organization->fresh()->setup());
+        return response()->json([...$organization->fresh()->setup(), 'company' => $organization->only(['name', 'phone', 'address'])]);
     }
 
     private function organization(Request $request): Organization
