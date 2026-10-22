@@ -62,7 +62,7 @@ class User extends Authenticatable
 
     public function hasPermission(Permission $permission): bool
     {
-        if ($this->hasRole(UserRole::Superadmin, UserRole::Admin)) {
+        if ($this->isSuperadmin() || ($this->hasRole(UserRole::Admin) && $this->permissions === null)) {
             return true;
         }
 

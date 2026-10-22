@@ -64,9 +64,11 @@ class UserManagementController extends Controller
             throw ValidationException::withMessages(['organization_id' => 'Select a client account for this user.']);
         }
 
-        if (in_array($data['role'], [UserRole::Superadmin->value, UserRole::Admin->value], true)) {
+        if ($data['role'] === UserRole::Superadmin->value) {
             $data['permissions'] = null;
             $data['report_permissions'] = null;
+            $branchIds = [];
+        } elseif ($data['role'] === UserRole::Admin->value) {
             $branchIds = [];
         }
 
@@ -134,9 +136,11 @@ class UserManagementController extends Controller
         if (empty($data['password'])) {
             unset($data['password']);
         }
-        if (in_array($data['role'], [UserRole::Superadmin->value, UserRole::Admin->value], true)) {
+        if ($data['role'] === UserRole::Superadmin->value) {
             $data['permissions'] = null;
             $data['report_permissions'] = null;
+            $branchIds = [];
+        } elseif ($data['role'] === UserRole::Admin->value) {
             $branchIds = [];
         }
 

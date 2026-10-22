@@ -29,7 +29,8 @@ class UpdateUserRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:100'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('managedUser'))],
+            'email' => ['nullable', 'required_if:role,superadmin', 'required_without:mobile', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('managedUser'))],
+            'mobile' => ['nullable', 'required_without:email', 'string', 'max:30', 'regex:/\A\+?[0-9]{7,15}\z/D', Rule::unique('users', 'mobile')->ignore($this->route('managedUser'))],
             'password' => ['nullable', 'string', Password::min(8)],
             'role' => ['required', Rule::enum(UserRole::class)],
             'organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
@@ -41,5 +42,14 @@ class UpdateUserRequest extends FormRequest
             'branch_ids' => ['nullable', 'array'],
             'branch_ids.*' => ['integer', 'distinct'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        foreach (['email', 'mobile'] as $field) {
+            if (is_string($this->input($field))) {
+                $this->merge([$field => trim($this->input($field)) ?: null]);
+            }
+        }
     }
 }

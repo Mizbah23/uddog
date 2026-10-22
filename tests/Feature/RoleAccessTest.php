@@ -2,9 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\Organization;
 use App\Models\Branch;
+use App\Models\Organization;
 use App\Models\User;
+use App\Permission;
 use App\SubscriptionStatus;
 use App\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -83,6 +84,76 @@ class RoleAccessTest extends TestCase
             'organization_id' => $client['id'],
             'active' => true,
         ])->assertCreated()->assertJsonPath('organization_id', $client['id']);
+    }
+
+    public function test_superadmin_can_limit_owner_modules_and_reports(): void
+    {
+        $superadmin = User::factory()->superadmin()->create();
+        $organization = Organization::factory()->create();
+
+        $ownerId = $this->actingAs($superadmin)->postJson('/api/users', [
+            'name' => 'Limited Owner',
+            'email' => 'limited-owner@example.test',
+            'mobile' => '01712345678',
+            'password' => 'Password123',
+            'role' => UserRole::Admin->value,
+            'organization_id' => $organization->id,
+            'active' => true,
+            'permissions' => [Permission::Sales->value, Permission::Products->value],
+            'report_permissions' => ['sales'],
+        ])->assertCreated()
+            ->assertJsonPath('mobile', '01712345678')
+            ->assertJsonPath('permissions', [Permission::Sales->value, Permission::Products->value])
+            ->assertJsonPath('report_permissions', ['sales'])
+            ->json('id');
+
+        $owner = User::query()->findOrFail($ownerId);
+        $this->actingAs($owner)->getJson('/api/session')
+            ->assertOk()
+            ->assertJsonPath('permissions.reports', ['sales']);
+        $this->getJson('/api/reports?report=sales')->assertOk();
+        $this->getJson('/api/reports?report=stock')->assertForbidden();
+        $this->getJson('/api/expenses')->assertForbidden();
+
+        $this->actingAs($superadmin)->putJson("/api/users/{$ownerId}", [
+            'name' => 'Limited Owner',
+            'email' => 'limited-owner@example.test',
+            'mobile' => '01712345678',
+            'role' => UserRole::Admin->value,
+            'organization_id' => $organization->id,
+            'active' => true,
+            'permissions' => [Permission::Sales->value, Permission::Products->value],
+            'report_permissions' => [],
+        ])->assertOk()->assertJsonPath('report_permissions', []);
+        $this->actingAs($owner->fresh())->getJson('/api/reports?report=sales')->assertForbidden();
+    }
+
+    public function test_user_accounts_accept_phone_without_email_but_superadmin_requires_email(): void
+    {
+        $superadmin = User::factory()->superadmin()->create();
+        $organization = Organization::factory()->create();
+        $payload = [
+            'name' => 'Phone User',
+            'email' => '',
+            'mobile' => '01812345678',
+            'password' => 'Password123',
+            'role' => UserRole::Admin->value,
+            'organization_id' => $organization->id,
+            'active' => true,
+        ];
+
+        $ownerId = $this->actingAs($superadmin)->postJson('/api/users', $payload)
+            ->assertCreated()->assertJsonPath('email', null)->json('id');
+        $this->postJson('/api/users', [...$payload, 'name' => 'Duplicate Phone'])
+            ->assertUnprocessable()->assertJsonValidationErrors('mobile');
+        $this->postJson('/api/users', [...$payload, 'name' => 'No Contact', 'mobile' => ''])
+            ->assertUnprocessable()->assertJsonValidationErrors(['email', 'mobile']);
+        $this->postJson('/api/users', [...$payload, 'role' => UserRole::Superadmin->value, 'mobile' => '01912345678'])
+            ->assertUnprocessable()->assertJsonValidationErrors('email');
+
+        $this->postJson('/api/logout');
+        $this->postJson('/api/login', ['email' => '01812345678', 'password' => 'Password123'])
+            ->assertOk()->assertJsonPath('user.id', $ownerId);
     }
 
     public function test_inactive_subscription_blocks_client_workspace_but_not_superadmin_support(): void
