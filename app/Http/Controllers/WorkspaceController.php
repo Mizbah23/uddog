@@ -414,8 +414,16 @@ class WorkspaceController extends Controller
             if ($savedProduct && ((float) $savedProduct->quantity_on_hand !== 0.0 || $savedProduct->stocks()->where('quantity_on_hand', '!=', 0)->exists() || (! $savedProduct->stock_source_product_id && (DocumentItem::query()->where('product_id', $savedProduct->id)->exists() || StockMovement::query()->where('product_id', $savedProduct->id)->exists())))) {
                 throw ValidationException::withMessages(['stock_source_product_id' => 'A product with its own stock or transaction history cannot be linked to another stock product.']);
             }
-            if ($savedProduct && $savedProduct->stock_source_product_id && ((int) $savedProduct->stock_source_product_id !== (int) $sourceId || (float) $savedProduct->stock_source_quantity !== (float) ($data['stock_source_quantity'] ?? 1)) && DocumentItem::query()->where('product_id', $savedProduct->id)->exists()) {
-                throw ValidationException::withMessages(['stock_source_product_id' => 'A sales product with transaction history cannot change its stock source or quantity.']);
+            if ($savedProduct && $savedProduct->stock_source_product_id && DocumentItem::query()->where('product_id', $savedProduct->id)->exists()) {
+                if ((int) $savedProduct->stock_source_product_id !== (int) $sourceId) {
+                    throw ValidationException::withMessages(['stock_source_product_id' => 'A sales product with transaction history cannot change its stock source.']);
+                }
+                if ((float) $savedProduct->stock_source_quantity !== (float) ($data['stock_source_quantity'] ?? 1)
+                    && DocumentItem::query()->where('product_id', $savedProduct->id)
+                        ->where(fn ($query) => $query->whereNull('stock_product_id')->orWhereNull('stock_quantity')->orWhere('stock_product_id', '!=', $sourceId))
+                        ->exists()) {
+                    throw ValidationException::withMessages(['stock_source_quantity' => 'This product has transactions without a saved stock deduction. Its stock quantity cannot be changed safely.']);
+                }
             }
             if ($savedProduct && $savedProduct->salesProducts()->exists()) {
                 throw ValidationException::withMessages(['stock_source_product_id' => 'A stock source with linked sales products cannot become a sales product.']);

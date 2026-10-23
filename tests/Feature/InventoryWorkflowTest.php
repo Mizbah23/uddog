@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
+use App\Models\DocumentItem;
 use App\Models\Product;
 use App\Models\PurchasePayment;
 use App\Models\StockMovement;
@@ -120,6 +121,51 @@ class InventoryWorkflowTest extends TestCase
             'stock_source_product_id' => $variant['id'], 'stock_source_quantity' => '1.000',
         ])->assertUnprocessable()->assertJsonValidationErrors('stock_source_product_id');
         $this->deleteJson('/api/products/'.$eggs->id)->assertUnprocessable()->assertJsonValidationErrors('product');
+    }
+
+    public function test_sales_product_ratio_can_be_corrected_without_repricing_past_stock_or_returns(): void
+    {
+        [$user, $supplier, $customer, $eggs] = $this->setupRecords(asOwner: true);
+        $user->organization->update(['shared_stock_sales' => true]);
+        $eggs->update(['unit' => 'pc']);
+        $variant = Product::create([
+            'organization_id' => $user->organization_id, 'name' => 'Retail egg', 'unit' => 'pc',
+            'cost_price' => '0.00', 'sale_price' => '16.25', 'reorder_level' => '0',
+            'stock_source_product_id' => $eggs->id, 'stock_source_quantity' => '2.000',
+        ]);
+        $this->actingAs($user);
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $eggs, '10', '10.00'))->assertCreated();
+        $oldSale = $this->postJson('/api/documents', $this->payload('sale', $customer, $variant, '1', '16.25'))
+            ->assertCreated()->assertJsonPath('items.0.stock_quantity', '2.000')->json();
+        $this->assertSame('8.000', $eggs->fresh()->quantity_on_hand);
+
+        $update = [
+            'name' => $variant->name, 'unit' => 'pc', 'cost_price' => '0.00',
+            'sale_price' => '16.25', 'reorder_level' => '0', 'active' => true,
+            'stock_source_product_id' => $eggs->id, 'stock_source_quantity' => '1.000',
+        ];
+        $this->putJson('/api/products/'.$variant->id, $update)->assertOk()->assertJsonPath('stock_source_quantity', '1.000');
+        $this->assertSame('8.000', $eggs->fresh()->quantity_on_hand);
+        $this->assertSame('2.000', DocumentItem::query()->where('document_id', $oldSale['id'])->firstOrFail()->stock_quantity);
+
+        $return = $this->payload('sale_return', $customer, $variant, '1', '16.25');
+        $return['sale_id'] = $oldSale['id'];
+        $this->postJson('/api/documents', $return)->assertCreated()->assertJsonPath('items.0.stock_quantity', '2.000');
+        $this->assertSame('10.000', $eggs->fresh()->quantity_on_hand);
+        $this->postJson('/api/documents', $this->payload('sale', $customer, $variant, '1', '16.25'))
+            ->assertCreated()->assertJsonPath('items.0.stock_quantity', '1.000');
+        $this->assertSame('9.000', $eggs->fresh()->quantity_on_hand);
+
+        $otherSource = Product::create([
+            'organization_id' => $user->organization_id, 'name' => 'Other eggs', 'unit' => 'pc',
+            'cost_price' => '10.00', 'sale_price' => '15.00', 'reorder_level' => '0',
+        ]);
+        $this->putJson('/api/products/'.$variant->id, [...$update, 'stock_source_product_id' => $otherSource->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('stock_source_product_id');
+
+        DocumentItem::query()->where('document_id', $oldSale['id'])->update(['stock_quantity' => null]);
+        $this->putJson('/api/products/'.$variant->id, [...$update, 'stock_source_quantity' => '2.000'])
+            ->assertUnprocessable()->assertJsonValidationErrors('stock_source_quantity');
     }
 
     public function test_partial_returns_of_a_converted_sales_product_reconcile_to_the_original_stock_quantity(): void
