@@ -216,10 +216,21 @@ class WorkspaceController extends Controller
             }
             $monthlyTotals->put($month, $monthTotal);
         }
-        $rankedProducts = collect($productSales)
-            ->map(fn (array $product) => ['id' => $product['id'], 'name' => $product['name'], 'unit' => $product['unit'], 'quantity' => $product['quantity_mills'] / 1000]);
-        $highestSellingProducts = $rankedProducts->sort(fn (array $first, array $second) => ($second['quantity'] <=> $first['quantity']) ?: strcmp($first['name'], $second['name']))->take(3)->values();
-        $lowestSellingProducts = $rankedProducts->sort(fn (array $first, array $second) => ($first['quantity'] <=> $second['quantity']) ?: strcmp($first['name'], $second['name']))->take(3)->values();
+        $rankedProducts = $products->map(fn (Product $product) => [
+            'id' => $product->id,
+            'name' => $product->name,
+            'unit' => $product->unit,
+            'quantity' => max(0, ($productSales[$product->id]['quantity_mills'] ?? 0) / 1000),
+        ]);
+        $highestSellingProducts = $rankedProducts
+            ->filter(fn (array $product) => $product['quantity'] > 0)
+            ->sort(fn (array $first, array $second) => ($second['quantity'] <=> $first['quantity']) ?: strcmp($first['name'], $second['name']))
+            ->take(3)->values();
+        $highestSellingIds = $highestSellingProducts->pluck('id')->all();
+        $lowestSellingProducts = $rankedProducts
+            ->reject(fn (array $product) => in_array($product['id'], $highestSellingIds, true))
+            ->sort(fn (array $first, array $second) => ($first['quantity'] <=> $second['quantity']) ?: strcmp($first['name'], $second['name']))
+            ->take(3)->values();
         $lowStockProducts = $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values();
 
         if (! $user->hasRole(UserRole::Admin)) {
@@ -723,7 +734,7 @@ class WorkspaceController extends Controller
         $stockByProduct = ProductStock::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->pluck('quantity_on_hand', 'product_id');
 
         return Product::query()->where('organization_id', $organizationId)
-            ->with('category:id,name,active', 'stockSource:id,name,active')
+            ->with('category:id,name,active', 'stockSource:id,name,unit,active')
             ->with(['stocks' => fn ($query) => $query->where('branch_id', $branchId)])
             ->when($search, fn ($query, $value) => $query->where(fn ($q) => $q->where('name', 'like', "%{$value}%")->orWhere('sku', 'like', "%{$value}%")->orWhere('barcode', 'like', "%{$value}%")->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$value}%"))))
             ->orderBy('name')->get()
@@ -731,6 +742,7 @@ class WorkspaceController extends Controller
                 $product->setAttribute('quantity_on_hand', $product->stocks->first()?->quantity_on_hand ?? '0.000');
                 if ($product->stock_source_product_id) {
                     $sourceStock = $stockByProduct[$product->stock_source_product_id] ?? 0;
+                    $product->setAttribute('source_quantity_on_hand', number_format((float) $sourceStock, 3, '.', ''));
                     $product->setAttribute('available_quantity', number_format(floor((float) $sourceStock * 1000 / (float) $product->stock_source_quantity) / 1000, 3, '.', ''));
                 } else {
                     $product->setAttribute('available_quantity', $product->quantity_on_hand);

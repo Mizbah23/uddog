@@ -108,7 +108,11 @@ class InventoryWorkflowTest extends TestCase
         $variant = $this->postJson('/api/products', $payload)->assertCreated()->assertJsonPath('stock_source_product_id', $eggs->id)->json();
 
         $this->getJson('/api/products')->assertOk()
-            ->assertJsonFragment(['id' => $variant['id'], 'available_quantity' => '12.000', 'quantity_on_hand' => '0.000']);
+            ->assertJsonFragment(['id' => $variant['id'], 'available_quantity' => '12.000', 'source_quantity_on_hand' => '12.000', 'quantity_on_hand' => '0.000']);
+        $this->putJson('/api/products/'.$variant['id'], [...$payload, 'stock_source_quantity' => '2.000'])
+            ->assertOk();
+        $this->getJson('/api/products')->assertOk()
+            ->assertJsonFragment(['id' => $variant['id'], 'available_quantity' => '6.000', 'source_quantity_on_hand' => '12.000', 'quantity_on_hand' => '0.000']);
         $this->putJson('/api/products/'.$eggs->id, [
             'name' => $eggs->name, 'unit' => 'pc', 'cost_price' => '10.00',
             'sale_price' => '15.00', 'reorder_level' => '0',
@@ -372,6 +376,35 @@ class InventoryWorkflowTest extends TestCase
             ->assertJsonPath('lowest_selling_products.0.quantity', 2)
             ->assertJsonPath('lowest_selling_products.1.name', 'Echo')
             ->assertJsonPath('lowest_selling_products.2.name', 'Delta');
+    }
+
+    public function test_dashboard_ranking_shows_unsold_products_without_repeating_top_sellers(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 22));
+        $user = User::factory()->admin()->create();
+        $branch = Branch::query()->where('organization_id', $user->organization_id)->where('is_default', true)->firstOrFail();
+        $customer = Contact::create(['organization_id' => $user->organization_id, 'name' => 'Buyer', 'type' => 'customer']);
+        $products = [];
+
+        foreach (['Alpha', 'Bravo', 'Charlie', 'Delta'] as $name) {
+            $products[$name] = Product::create(['organization_id' => $user->organization_id, 'name' => $name, 'unit' => 'pc', 'cost_price' => 1, 'sale_price' => 2]);
+        }
+
+        foreach (['Alpha' => 8, 'Bravo' => 2] as $name => $quantity) {
+            $document = Document::create(['organization_id' => $user->organization_id, 'branch_id' => $branch->id, 'number' => 'SAL-'.$name, 'type' => 'sale', 'contact_id' => $customer->id, 'document_date' => '2026-10-22', 'subtotal' => $quantity * 2, 'total' => $quantity * 2, 'created_by' => $user->id]);
+            $document->items()->create(['product_id' => $products[$name]->id, 'quantity' => $quantity, 'unit_price' => 2, 'line_total' => $quantity * 2]);
+        }
+
+        $this->actingAs($user)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()
+            ->assertJsonCount(2, 'highest_selling_products')
+            ->assertJsonCount(2, 'lowest_selling_products')
+            ->assertJsonPath('highest_selling_products.0.name', 'Alpha')
+            ->assertJsonPath('highest_selling_products.1.name', 'Bravo')
+            ->assertJsonPath('lowest_selling_products.0.name', 'Charlie')
+            ->assertJsonPath('lowest_selling_products.0.quantity', 0)
+            ->assertJsonPath('lowest_selling_products.1.name', 'Delta')
+            ->assertJsonPath('lowest_selling_products.1.quantity', 0);
     }
 
     public function test_product_cannot_be_created_without_purchase_cost_and_sale_price(): void
