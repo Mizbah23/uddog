@@ -315,7 +315,7 @@ class ReportController extends Controller
 
     private function stock(int $organizationId, int $branchId, string $search): array
     {
-        $rows = Product::query()->where('organization_id', $organizationId)->with('category:id,name')->with(['stocks' => fn ($query) => $query->where('branch_id', $branchId)])
+        $rows = Product::query()->where('organization_id', $organizationId)->whereNull('stock_source_product_id')->with('category:id,name')->with(['stocks' => fn ($query) => $query->where('branch_id', $branchId)])
             ->when($search, fn ($query) => $query->where(fn ($builder) => $builder->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%")->orWhere('barcode', 'like', "%{$search}%")))
             ->orderBy('name')->get()->map(function (Product $product) {
                 $quantity = (float) ($product->stocks->first()?->quantity_on_hand ?? 0);

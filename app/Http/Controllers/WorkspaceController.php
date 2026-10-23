@@ -10,6 +10,7 @@ use App\Models\GoldJob;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Models\ProductDamage;
+use App\Models\ProductStock;
 use App\Models\PurchaseInstallment;
 use App\Models\PurchasePayment;
 use App\Models\SaleInstallment;
@@ -58,6 +59,7 @@ class WorkspaceController extends Controller
         return response()->json([
             'user' => $user,
             'gold_store' => (bool) ($organization?->gold_store ?? false),
+            'shared_stock_sales' => (bool) ($organization?->shared_stock_sales ?? false),
             'setup_required' => ! User::query()->exists(),
             'permissions' => $user ? [
                 'manage_clients' => $user->isSuperadmin(),
@@ -218,12 +220,12 @@ class WorkspaceController extends Controller
             ->map(fn (array $product) => ['id' => $product['id'], 'name' => $product['name'], 'unit' => $product['unit'], 'quantity' => $product['quantity_mills'] / 1000]);
         $highestSellingProducts = $rankedProducts->sort(fn (array $first, array $second) => ($second['quantity'] <=> $first['quantity']) ?: strcmp($first['name'], $second['name']))->take(3)->values();
         $lowestSellingProducts = $rankedProducts->sort(fn (array $first, array $second) => ($first['quantity'] <=> $second['quantity']) ?: strcmp($first['name'], $second['name']))->take(3)->values();
-        $lowStockProducts = $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values();
+        $lowStockProducts = $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->sortBy('quantity_on_hand')->take(6)->values();
 
         if (! $user->hasRole(UserRole::Admin)) {
             return response()->json([
                 'products' => $products->count(),
-                'low_stock' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
+                'low_stock' => $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
                 'recent_documents' => (clone $documents)
                     ->when($visibleTypes, fn ($query) => $query->whereIn('type', $visibleTypes), fn ($query) => $query->whereRaw('1 = 0'))
                     ->with('contact:id,name')
@@ -278,7 +280,7 @@ class WorkspaceController extends Controller
         return response()->json([
             'products' => $products->count(),
             'stock_value' => $products->sum(fn (Product $product) => (float) $product->quantity_on_hand * (float) $product->cost_price),
-            'low_stock' => $products->filter(fn (Product $product) => (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
+            'low_stock' => $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
             'sales_total' => $canViewSales ? (clone $documents)->whereIn('type', ['sale', 'resale'])->sum('total') - (clone $documents)->where('type', 'sale_return')->sum('total') : 0,
             'purchase_total' => $canViewPurchases ? (clone $documents)->where('type', 'purchase')->sum('total') : 0,
             'recent_documents' => (clone $documents)->when($visibleTypes, fn ($query) => $query->whereIn('type', $visibleTypes), fn ($query) => $query->whereRaw('1 = 0'))->with('contact')->latest()->limit(6)->get(),
@@ -384,7 +386,31 @@ class WorkspaceController extends Controller
             'tag_number' => ['nullable', 'string', 'max:80', Rule::unique(app(TenantContext::class)->validationTable('products'))->where('organization_id', $organizationId)->ignore($savedProduct?->id)],
             'hallmark_code' => ['nullable', 'string', 'max:80'],
             'active' => ['boolean'],
+            'stock_source_product_id' => ['nullable', Rule::exists(app(TenantContext::class)->validationTable('products'), 'id')->where('organization_id', $organizationId)],
+            'stock_source_quantity' => ['required_with:stock_source_product_id', 'numeric', 'gt:0', 'decimal:0,3'],
         ]);
+        $sourceId = $data['stock_source_product_id'] ?? null;
+        $sharedStockEnabled = (bool) Auth::user()->organization()->firstOrFail()->shared_stock_sales;
+        if ($sourceId && ! $sharedStockEnabled && (! $savedProduct || (int) $savedProduct->stock_source_product_id !== (int) $sourceId || (float) $savedProduct->stock_source_quantity !== (float) ($data['stock_source_quantity'] ?? 1))) {
+            throw ValidationException::withMessages(['stock_source_product_id' => 'Shared stock sales are not enabled for this company.']);
+        }
+        if ($sourceId) {
+            $source = Product::query()->where('organization_id', $organizationId)->findOrFail($sourceId);
+            if (($savedProduct && $savedProduct->id === $source->id) || $source->stock_source_product_id || $source->is_gold_item || ($data['is_gold_item'] ?? false)) {
+                throw ValidationException::withMessages(['stock_source_product_id' => 'Choose a non-gold stock product that is not itself linked to another product.']);
+            }
+            if ($savedProduct && ((float) $savedProduct->quantity_on_hand !== 0.0 || $savedProduct->stocks()->where('quantity_on_hand', '!=', 0)->exists() || (! $savedProduct->stock_source_product_id && (DocumentItem::query()->where('product_id', $savedProduct->id)->exists() || StockMovement::query()->where('product_id', $savedProduct->id)->exists())))) {
+                throw ValidationException::withMessages(['stock_source_product_id' => 'A product with its own stock or transaction history cannot be linked to another stock product.']);
+            }
+            if ($savedProduct && $savedProduct->stock_source_product_id && ((int) $savedProduct->stock_source_product_id !== (int) $sourceId || (float) $savedProduct->stock_source_quantity !== (float) ($data['stock_source_quantity'] ?? 1)) && DocumentItem::query()->where('product_id', $savedProduct->id)->exists()) {
+                throw ValidationException::withMessages(['stock_source_product_id' => 'A sales product with transaction history cannot change its stock source or quantity.']);
+            }
+            if ($savedProduct && $savedProduct->salesProducts()->exists()) {
+                throw ValidationException::withMessages(['stock_source_product_id' => 'A stock source with linked sales products cannot become a sales product.']);
+            }
+        } elseif ($savedProduct && $savedProduct->stock_source_product_id && DocumentItem::query()->where('product_id', $savedProduct->id)->exists()) {
+            throw ValidationException::withMessages(['stock_source_product_id' => 'A sales product with transaction history cannot remove its stock source.']);
+        }
         if (! Auth::user()->organization()->firstOrFail()->gold_store || ! ($data['is_gold_item'] ?? false)) {
             $data['is_gold_item'] = false;
             foreach (['gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code'] as $goldField) {
@@ -410,7 +436,7 @@ class WorkspaceController extends Controller
                 || ProductDamage::query()->where('product_id', $product)->exists()
                 || GoldJob::query()->where('product_id', $product)->exists();
 
-            if ($hasHistory || (float) $saved->quantity_on_hand !== 0.0 || $saved->stocks()->where('quantity_on_hand', '!=', 0)->exists()) {
+            if ($hasHistory || $saved->salesProducts()->exists() || DocumentItem::query()->where('stock_product_id', $product)->exists() || (float) $saved->quantity_on_hand !== 0.0 || $saved->stocks()->where('quantity_on_hand', '!=', 0)->exists()) {
                 throw ValidationException::withMessages(['product' => 'This product has stock or transaction history and cannot be deleted.']);
             }
 
@@ -694,13 +720,21 @@ class WorkspaceController extends Controller
 
     private function productsForBranch(int $organizationId, int $branchId, ?string $search = null)
     {
+        $stockByProduct = ProductStock::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->pluck('quantity_on_hand', 'product_id');
+
         return Product::query()->where('organization_id', $organizationId)
-            ->with('category:id,name,active')
+            ->with('category:id,name,active', 'stockSource:id,name,active')
             ->with(['stocks' => fn ($query) => $query->where('branch_id', $branchId)])
             ->when($search, fn ($query, $value) => $query->where(fn ($q) => $q->where('name', 'like', "%{$value}%")->orWhere('sku', 'like', "%{$value}%")->orWhere('barcode', 'like', "%{$value}%")->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$value}%"))))
             ->orderBy('name')->get()
-            ->each(function (Product $product) {
+            ->each(function (Product $product) use ($stockByProduct) {
                 $product->setAttribute('quantity_on_hand', $product->stocks->first()?->quantity_on_hand ?? '0.000');
+                if ($product->stock_source_product_id) {
+                    $sourceStock = $stockByProduct[$product->stock_source_product_id] ?? 0;
+                    $product->setAttribute('available_quantity', number_format(floor((float) $sourceStock * 1000 / (float) $product->stock_source_quantity) / 1000, 3, '.', ''));
+                } else {
+                    $product->setAttribute('available_quantity', $product->quantity_on_hand);
+                }
                 $product->unsetRelation('stocks');
             });
     }

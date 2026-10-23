@@ -65,6 +65,24 @@ class InventoryService
                 $enteredPriceCents = self::scaled($item['unit_price'], 2);
                 $unitCents = intdiv($enteredPriceCents + intdiv($conversion, 2), $conversion);
                 $sourceCostCents = null;
+                if ($product->stock_source_product_id && in_array($type, ['purchase', 'purchase_return'], true)) {
+                    throw ValidationException::withMessages(['items' => "{$product->name} is a sales product. Purchase its linked stock product instead."]);
+                }
+                if ($product->stock_source_product_id && in_array($type, ['sale', 'resale'], true) && ! $organization->shared_stock_sales) {
+                    throw ValidationException::withMessages(['items' => 'Shared stock sales are not enabled for this company.']);
+                }
+                $stockProductId = $product->stock_source_product_id ?: $product->id;
+                $stockQuantity = $quantity;
+                if ($product->stock_source_product_id) {
+                    $sourceRatio = self::scaled($product->stock_source_quantity, 3);
+                    if ($quantity > intdiv(PHP_INT_MAX - 500, $sourceRatio)) {
+                        throw ValidationException::withMessages(['items' => 'The linked stock quantity is outside the supported range.']);
+                    }
+                    $stockQuantity = intdiv($quantity * $sourceRatio + 500, 1000);
+                    if ($stockQuantity < 1 || $stockQuantity > 99999999999999) {
+                        throw ValidationException::withMessages(['items' => 'The linked stock quantity is outside the supported range.']);
+                    }
+                }
                 $goldSnapshot = $this->goldSnapshot($product, $organization->gold_store && in_array($type, ['sale', 'resale'], true) ? $branchId : null, $data['document_date']);
                 if ($sale) {
                     $soldItem = $sale->items()->where('product_id', $product->id)->first();
@@ -73,6 +91,18 @@ class InventoryService
                     }
                     $unitCents = self::scaled($soldItem->unit_price, 2);
                     $sourceCostCents = self::scaled($soldItem->cost_price, 2);
+                    $stockProductId = $soldItem->stock_product_id ?: $soldItem->product_id;
+                    $soldQuantity = self::scaled($soldItem->quantity, 3);
+                    $soldStockQuantity = self::scaled($soldItem->stock_quantity ?? $soldItem->quantity, 3);
+                    $priorReturns = DB::connection(app(TenantContext::class)->connectionName())->table('document_items')
+                        ->join('documents', 'documents.id', '=', 'document_items.document_id')
+                        ->where('documents.sale_id', $sale->id)
+                        ->where('document_items.product_id', $product->id);
+                    $returnedQuantity = self::scaled((clone $priorReturns)->sum('document_items.quantity'), 3);
+                    $returnedStockQuantity = self::scaled((clone $priorReturns)->sum(DB::raw('COALESCE(document_items.stock_quantity, document_items.quantity)')), 3);
+                    $cumulativeReturn = min($soldQuantity, $returnedQuantity + $quantity);
+                    $targetStockReturned = intdiv($cumulativeReturn * $soldStockQuantity + intdiv($soldQuantity, 2), $soldQuantity);
+                    $stockQuantity = max(0, $targetStockReturned - $returnedStockQuantity);
                     $goldSnapshot = collect($soldItem->only(['gold_gross_weight', 'gold_net_weight', 'gold_purity', 'gold_rate', 'making_charge', 'wastage_weight', 'stone_value', 'tag_number', 'hallmark_code']))->all();
                 } elseif ($organization->gold_store && in_array($type, ['sale', 'resale'], true) && $product->is_gold_item) {
                     if (! $goldSnapshot['gold_rate']) {
@@ -85,7 +115,7 @@ class InventoryService
                 }
                 $lineCents = intdiv($enteredQuantity * $enteredPriceCents + 500, 1000);
                 $subtotalCents += $lineCents;
-                $items[] = [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot, $enteredUnit, $conversion, $enteredQuantity, $enteredPriceCents];
+                $items[] = [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot, $enteredUnit, $conversion, $enteredQuantity, $enteredPriceCents, $stockProductId, $stockQuantity];
             }
 
             $discountCents = $type === 'sale_return' ? 0 : self::scaled($data['discount'] ?? 0, 2);
@@ -172,7 +202,7 @@ class InventoryService
                 }
             }
 
-            foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot, $enteredUnit, $conversion, $enteredQuantity, $enteredPriceCents]) {
+            foreach ($items as [$product, $quantity, $unitCents, $lineCents, $sourceCostCents, $goldSnapshot, $enteredUnit, $conversion, $enteredQuantity, $enteredPriceCents, $stockProductId, $stockQuantity]) {
                 if ($purchase) {
                     $purchased = self::scaled($purchase->items()->where('product_id', $product->id)->sum('quantity'), 3);
                     $returned = self::scaled(DB::connection(app(TenantContext::class)->connectionName())->table('document_items')
@@ -197,22 +227,24 @@ class InventoryService
                     }
                 }
 
+                $stockProduct = $stockProductId === $product->id ? $product : Product::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($stockProductId);
                 ProductStock::query()->firstOrCreate([
                     'organization_id' => $organizationId,
                     'branch_id' => $branchId,
-                    'product_id' => $product->id,
+                    'product_id' => $stockProductId,
                 ], ['quantity_on_hand' => 0]);
-                $branchStock = ProductStock::query()->where('branch_id', $branchId)->where('product_id', $product->id)->lockForUpdate()->firstOrFail();
+                $branchStock = ProductStock::query()->where('branch_id', $branchId)->where('product_id', $stockProductId)->lockForUpdate()->firstOrFail();
                 $branchQuantity = self::scaled($branchStock->quantity_on_hand, 3);
-                $aggregateQuantity = self::scaled($product->quantity_on_hand, 3);
-                $currentCostCents = self::scaled($product->cost_price, 2);
-                $capturedCostCents = $sourceCostCents ?? $currentCostCents;
+                $aggregateQuantity = self::scaled($stockProduct->quantity_on_hand, 3);
+                $currentCostCents = self::scaled($stockProduct->cost_price, 2);
+                $capturedCostCents = $sourceCostCents ?? intdiv($currentCostCents * $stockQuantity + intdiv($quantity, 2), $quantity);
+                $capturedStockCostCents = $sourceCostCents === null ? $currentCostCents : ($stockQuantity > 0 ? intdiv($sourceCostCents * $quantity + intdiv($stockQuantity, 2), $stockQuantity) : 0);
                 $capturedCost = self::money($capturedCostCents);
-                $change = in_array($type, ['purchase', 'sale_return'], true) ? $quantity : -$quantity;
+                $change = in_array($type, ['purchase', 'sale_return'], true) ? $stockQuantity : -$stockQuantity;
                 $branchBalance = $branchQuantity + $change;
                 $aggregateBalance = $aggregateQuantity + $change;
                 if ($branchBalance < 0) {
-                    throw ValidationException::withMessages(['items' => "Insufficient stock for {$product->name}."]);
+                    throw ValidationException::withMessages(['items' => "Insufficient stock for {$product->name} ({$stockProduct->name})."]);
                 }
                 $productUpdate = ['quantity_on_hand' => self::quantity($aggregateBalance)];
                 if ($type === 'purchase') {
@@ -223,13 +255,15 @@ class InventoryService
                     $averageCostCents = $aggregateBalance > 0 ? max(0, intdiv($remainingValue + intdiv($aggregateBalance, 2), $aggregateBalance)) : 0;
                     $productUpdate['cost_price'] = self::money($averageCostCents);
                 } elseif ($type === 'sale_return') {
-                    $averageCostCents = intdiv(($aggregateQuantity * $currentCostCents) + ($quantity * $capturedCostCents) + intdiv($aggregateBalance, 2), $aggregateBalance);
+                    $averageCostCents = $aggregateBalance > 0 ? intdiv(($aggregateQuantity * $currentCostCents) + ($stockQuantity * $capturedStockCostCents) + intdiv($aggregateBalance, 2), $aggregateBalance) : $currentCostCents;
                     $productUpdate['cost_price'] = self::money($averageCostCents);
                 }
-                $product->update($productUpdate);
+                $stockProduct->update($productUpdate);
                 $branchStock->update(['quantity_on_hand' => self::quantity($branchBalance)]);
                 $document->items()->create([
                     'product_id' => $product->id,
+                    'stock_product_id' => $stockProductId,
+                    'stock_quantity' => self::quantity($stockQuantity),
                     'quantity' => self::quantity($quantity),
                     'unit_price' => self::money($unitCents),
                     'entered_unit' => $enteredUnit,
@@ -252,11 +286,12 @@ class InventoryService
                 StockMovement::create([
                     'organization_id' => $organizationId,
                     'branch_id' => $branchId,
-                    'product_id' => $product->id,
+                    'product_id' => $stockProductId,
                     'document_id' => $document->id,
                     'type' => $type,
                     'quantity_change' => self::quantity($change),
                     'balance_after' => self::quantity($branchBalance),
+                    'notes' => $stockProductId !== $product->id ? ($type === 'sale_return' ? 'Returned as ' : 'Sold as ').$product->name : null,
                     'created_by' => $userId,
                 ]);
             }
@@ -319,6 +354,9 @@ class InventoryService
     {
         return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($product, $change, $notes, $userId, $organizationId, $branchId) {
             $locked = Product::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($product->id);
+            if ($locked->stock_source_product_id) {
+                throw ValidationException::withMessages(['product_id' => 'Adjust the linked stock product instead of this sales product.']);
+            }
             ProductStock::query()->firstOrCreate([
                 'organization_id' => $organizationId,
                 'branch_id' => $branchId,
