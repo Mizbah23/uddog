@@ -657,6 +657,11 @@ body {
 .installment-plan-table td strong { color: #4f43c4; }
 .installment-plan-footnote { display: block; margin-top: 8px; }
 .invoice-installment-plan { margin-top: 22px; background: #fff; break-inside: avoid; }
+.invoice-payment-management { margin-top: 20px; padding: 14px; border: 1px solid #e3ddff; border-radius: 10px; background: #faf9ff; }
+.invoice-payment-management > p { margin: 4px 0 10px; color: #73748b; font-size: 12px; }
+.invoice-payment-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid #e8e5f8; }
+.invoice-payment-row > span { flex: 1; }
+.invoice-payment-row > strong { color: #5549bc; }
 .invoice-plan-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 11px; color: #777987; font-size: 10px; }
 .invoice-plan-summary strong { color: #3c3f50; }
 .pos-thermal-receipt { display: none; }
@@ -671,6 +676,7 @@ body {
   .app-shell:has(.invoice-sheet) .modal-head, .app-shell:has(.invoice-sheet) .modal-actions { display: none !important; }
   .invoice-sheet { position: static !important; inset: auto !important; overflow: visible !important; }
   .invoice-installment-plan { break-inside: auto; }
+  .invoice-payment-management { display: none !important; }
   .invoice-installment-plan .installment-plan-table { min-width: 0; font-size: 8px; }
   .invoice-installment-plan .installment-plan-table th, .invoice-installment-plan .installment-plan-table td { padding: 5px 3px; }
   .invoice-installment-plan .installment-plan-table thead { display: table-header-group; }

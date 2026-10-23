@@ -38,6 +38,9 @@ class ProductDamageService
             $alreadyDamaged = self::scaled(ProductDamage::query()
                 ->where('purchase_id', $purchase->id)->where('product_id', $product->id)->sum('quantity'));
             $quantity = self::scaled($data['quantity']);
+            if ($product->usesWholePieces() && $quantity % 1000 !== 0) {
+                throw ValidationException::withMessages(['quantity' => 'Enter a whole-piece damaged quantity for this product.']);
+            }
             if ($quantity > $purchased - $returned - $alreadyDamaged) {
                 throw ValidationException::withMessages(['quantity' => 'Damage exceeds the remaining quantity from this purchase.']);
             }

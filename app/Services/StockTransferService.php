@@ -44,6 +44,9 @@ class StockTransferService
                     throw ValidationException::withMessages(['items' => "Transfer the linked stock product instead of {$product->name}."]);
                 }
                 $quantity = $this->scaled($item['quantity']);
+                if ($product->usesWholePieces() && $quantity % 1000 !== 0) {
+                    throw ValidationException::withMessages(['items' => "Enter a whole-piece transfer quantity for {$product->name}."]);
+                }
 
                 foreach ([$data['from_branch_id'], $data['to_branch_id']] as $branchId) {
                     ProductStock::query()->firstOrCreate([

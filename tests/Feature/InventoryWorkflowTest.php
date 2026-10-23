@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Product;
+use App\Models\PurchasePayment;
 use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -125,9 +126,9 @@ class InventoryWorkflowTest extends TestCase
     {
         [$user, $supplier, $customer, $source] = $this->setupRecords();
         $user->organization->update(['shared_stock_sales' => true]);
-        $source->update(['unit' => 'pc']);
+        $source->update(['unit' => 'g']);
         $variant = Product::create([
-            'organization_id' => $user->organization_id, 'name' => 'Half-source item', 'unit' => 'pc',
+            'organization_id' => $user->organization_id, 'name' => 'Half-source item', 'unit' => 'g',
             'cost_price' => '0.00', 'sale_price' => '10.00', 'reorder_level' => '0',
             'stock_source_product_id' => $source->id, 'stock_source_quantity' => '0.500',
         ]);
@@ -143,6 +144,130 @@ class InventoryWorkflowTest extends TestCase
 
         $this->assertSame('1.000', $source->fresh()->quantity_on_hand);
         $this->assertSame('0.001', $sale['items'][0]['stock_quantity']);
+    }
+
+    public function test_piece_products_reject_fractional_purchases_sales_and_adjustments(): void
+    {
+        [$user, $supplier, $customer, $eggs] = $this->setupRecords(asOwner: true);
+        $eggs->update(['unit' => 'pc']);
+        $user->organization->update(['shared_stock_sales' => true]);
+        $variant = Product::create([
+            'organization_id' => $user->organization_id, 'name' => 'Boiled egg', 'unit' => 'pc',
+            'cost_price' => '0.00', 'sale_price' => '15.00', 'reorder_level' => '0',
+            'stock_source_product_id' => $eggs->id, 'stock_source_quantity' => '11.250',
+        ]);
+        $this->actingAs($user);
+
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $eggs, '0.5', '10.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $eggs, '20', '10.00'))->assertCreated();
+        $this->postJson('/api/documents', $this->payload('sale', $customer, $eggs, '0.5', '15.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
+        $this->postJson('/api/documents', $this->payload('sale', $customer, $variant, '1', '15.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
+        $this->postJson('/api/products/'.$eggs->id.'/adjust', ['quantity_change' => '-0.5', 'notes' => 'Count correction'])
+            ->assertUnprocessable()->assertJsonValidationErrors('quantity_change');
+        $this->assertSame('20.000', $eggs->fresh()->quantity_on_hand);
+    }
+
+    public function test_owner_can_delete_clean_sale_and_purchase_and_restore_stock_and_cost(): void
+    {
+        [$owner, $supplier, $customer, $product] = $this->setupRecords(asOwner: true);
+        $this->actingAs($owner);
+        $purchase = $this->postJson('/api/documents', [
+            ...$this->payload('purchase', $supplier, $product, '10', '20.00'),
+            'payment_type' => 'due',
+        ])->assertCreated()->json();
+        $sale = $this->postJson('/api/documents', [
+            ...$this->payload('sale', $customer, $product, '2', '30.00'),
+            'payment_type' => 'due',
+        ])->assertCreated()->json();
+        $this->assertSame('8.000', $product->fresh()->quantity_on_hand);
+
+        $this->deleteJson('/api/documents/'.$sale['id'])->assertOk();
+        $this->assertSame('10.000', $product->fresh()->quantity_on_hand);
+        $this->assertDatabaseMissing('documents', ['id' => $sale['id']]);
+        $this->assertDatabaseMissing('sale_payments', ['document_id' => $sale['id']]);
+
+        $this->deleteJson('/api/documents/'.$purchase['id'])->assertOk();
+        $this->assertSame('0.000', $product->fresh()->quantity_on_hand);
+        $this->assertSame('10.00', $product->fresh()->cost_price);
+        $this->assertDatabaseMissing('documents', ['id' => $purchase['id']]);
+        $this->assertDatabaseMissing('purchase_payments', ['document_id' => $purchase['id']]);
+        $this->assertDatabaseCount('stock_movements', 0);
+    }
+
+    public function test_paid_invoices_require_explicit_payment_deletion_before_owner_can_delete_them(): void
+    {
+        [$owner, $supplier, $customer, $product] = $this->setupRecords(asOwner: true);
+        $this->actingAs($owner);
+        $purchase = $this->postJson('/api/documents', [
+            ...$this->payload('purchase', $supplier, $product, '10', '20.00'),
+            'payment_type' => 'full', 'payment_method' => 'cash',
+        ])->assertCreated()->json();
+        $sale = $this->postJson('/api/documents', [
+            ...$this->payload('sale', $customer, $product, '2', '30.00'),
+            'payment_type' => 'full', 'payment_method' => 'cash',
+        ])->assertCreated()->json();
+
+        $this->deleteJson('/api/documents/'.$sale['id'])->assertUnprocessable()->assertJsonValidationErrors('document');
+        $this->deleteJson('/api/documents/'.$purchase['id'])->assertUnprocessable()->assertJsonValidationErrors('document');
+        $salePaymentId = $sale['payments'][0]['id'];
+        $purchasePaymentId = PurchasePayment::query()->where('document_id', $purchase['id'])->firstOrFail()->id;
+        $staff = User::factory()->create(['organization_id' => $owner->organization_id]);
+        $this->actingAs($staff)->deleteJson('/api/documents/'.$sale['id'].'/payments/'.$salePaymentId)->assertForbidden();
+        $this->actingAs($owner)->deleteJson('/api/documents/'.$sale['id'].'/payments/'.$salePaymentId)
+            ->assertOk()->assertJsonPath('amount_paid', '0.00');
+        $this->deleteJson('/api/documents/'.$sale['id'])->assertOk();
+        $this->deleteJson('/api/documents/'.$purchase['id'].'/payments/'.$purchasePaymentId)
+            ->assertOk()->assertJsonPath('amount_paid', '0.00');
+        $this->deleteJson('/api/documents/'.$purchase['id'])->assertOk();
+        $this->assertDatabaseCount('stock_movements', 0);
+    }
+
+    public function test_owner_removes_installment_payments_newest_first_and_reconciles_schedule(): void
+    {
+        [$owner, $supplier, , $product] = $this->setupRecords(asOwner: true);
+        $this->actingAs($owner);
+        $purchase = $this->postJson('/api/documents', [
+            ...$this->payload('purchase', $supplier, $product, '1', '100.00'),
+            'payment_type' => 'installment', 'payment_method' => 'cash', 'down_payment' => 20,
+            'installment_count' => 2, 'installment_frequency' => 'monthly', 'first_installment_date' => '2026-10-21',
+        ])->assertCreated()->json();
+        $first = $purchase['purchase_installments'][0];
+        $initialId = PurchasePayment::query()->where('document_id', $purchase['id'])->firstOrFail()->id;
+        $later = $this->postJson('/api/purchases/'.$purchase['id'].'/payments', [
+            'purchase_installment_id' => $first['id'], 'amount' => '10.00',
+            'payment_method' => 'cash', 'payment_date' => '2026-10-21',
+        ])->assertCreated()->json('payment');
+
+        $this->deleteJson('/api/documents/'.$purchase['id'].'/payments/'.$initialId)
+            ->assertUnprocessable()->assertJsonValidationErrors('payment');
+        $this->deleteJson('/api/documents/'.$purchase['id'].'/payments/'.$later['id'])
+            ->assertOk()->assertJsonPath('amount_paid', '20.00');
+        $this->assertDatabaseHas('purchase_installments', ['id' => $first['id'], 'amount_paid' => 0]);
+        $this->deleteJson('/api/documents/'.$purchase['id'].'/payments/'.$initialId)
+            ->assertOk()->assertJsonPath('amount_paid', '0.00')->assertJsonPath('down_payment', '0.00');
+        $this->assertDatabaseHas('purchase_installments', ['id' => $first['id'], 'amount' => 60]);
+        $this->deleteJson('/api/documents/'.$purchase['id'])->assertOk();
+    }
+
+    public function test_document_deletion_rejects_staff_related_returns_and_later_stock_movements(): void
+    {
+        [$owner, $supplier, $customer, $product] = $this->setupRecords(asOwner: true);
+        $this->actingAs($owner);
+        $purchase = $this->postJson('/api/documents', $this->payload('purchase', $supplier, $product, '10', '10.00'))->assertCreated()->json();
+        $sale = $this->postJson('/api/documents', $this->payload('sale', $customer, $product, '2', '15.00'))->assertCreated()->json();
+        $this->deleteJson('/api/documents/'.$purchase['id'])->assertUnprocessable()->assertJsonValidationErrors('document');
+        $return = $this->payload('sale_return', $customer, $product, '1', '15.00');
+        $return['sale_id'] = $sale['id'];
+        $this->postJson('/api/documents', $return)->assertCreated();
+        $this->deleteJson('/api/documents/'.$sale['id'])->assertUnprocessable()->assertJsonValidationErrors('document');
+
+        $staff = User::factory()->create(['organization_id' => $owner->organization_id]);
+        $this->actingAs($staff)->deleteJson('/api/documents/'.$sale['id'])->assertForbidden();
+        $this->assertSame('9.000', $product->fresh()->quantity_on_hand);
+        $this->assertDatabaseHas('documents', ['id' => $sale['id']]);
     }
 
     public function test_purchase_sale_resale_and_return_update_stock_and_ledger(): void

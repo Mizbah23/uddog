@@ -59,6 +59,9 @@ class InventoryService
                 $conversion = $enteredUnit === $product->unit ? 1 : (int) ($storeSetup['unit_conversions'][$enteredUnit] ?? 1);
                 $enteredQuantity = self::scaled($item['quantity'], 3);
                 $quantity = $enteredQuantity * $conversion;
+                if ($product->usesWholePieces() && $quantity % 1000 !== 0) {
+                    throw ValidationException::withMessages(['items' => "{$product->name} is counted in whole pieces. Enter a whole-piece quantity."]);
+                }
                 if ($conversion < 1 || $quantity > 99999999999999) {
                     throw ValidationException::withMessages(['items' => 'Converted quantity exceeds the supported stock range.']);
                 }
@@ -228,6 +231,9 @@ class InventoryService
                 }
 
                 $stockProduct = $stockProductId === $product->id ? $product : Product::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($stockProductId);
+                if ($stockProduct->usesWholePieces() && $stockQuantity % 1000 !== 0) {
+                    throw ValidationException::withMessages(['items' => "{$stockProduct->name} is counted in whole pieces. The selected quantity would use a fraction of a piece."]);
+                }
                 ProductStock::query()->firstOrCreate([
                     'organization_id' => $organizationId,
                     'branch_id' => $branchId,
@@ -364,6 +370,9 @@ class InventoryService
             ], ['quantity_on_hand' => 0]);
             $branchStock = ProductStock::query()->where('branch_id', $branchId)->where('product_id', $locked->id)->lockForUpdate()->firstOrFail();
             $delta = self::scaled($change, 3);
+            if ($locked->usesWholePieces() && $delta % 1000 !== 0) {
+                throw ValidationException::withMessages(['quantity_change' => 'Enter a whole-piece adjustment for this product.']);
+            }
             $balance = self::scaled($branchStock->quantity_on_hand, 3) + $delta;
             $aggregateBalance = self::scaled($locked->quantity_on_hand, 3) + $delta;
             if ($delta === 0 || $balance < 0) {

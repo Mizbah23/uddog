@@ -34,7 +34,7 @@ class ProductDamageWorkflowTest extends TestCase
         ])->assertCreated()->json();
     }
 
-    private function damagePayload(array $purchase, Product $product, int $branchId, string $quantity = '2.5'): array
+    private function damagePayload(array $purchase, Product $product, int $branchId, string $quantity = '2'): array
     {
         return [
             'branch_id' => $branchId, 'purchase_id' => $purchase['id'], 'product_id' => $product->id,
@@ -52,12 +52,12 @@ class ProductDamageWorkflowTest extends TestCase
 
         $this->postJson('/api/product-damages', $this->damagePayload($purchase, $product, $branch->id))
             ->assertCreated()->assertJsonPath('purchase.number', $purchase['number'])
-            ->assertJsonPath('quantity', '2.500')->assertJsonPath('reason', 'Broken in storage');
+            ->assertJsonPath('quantity', '2.000')->assertJsonPath('reason', 'Broken in storage');
 
-        $this->assertDatabaseHas('product_damages', ['purchase_id' => $purchase['id'], 'product_id' => $product->id, 'quantity' => 2.5, 'created_by' => $owner->id]);
-        $this->assertDatabaseHas('product_stocks', ['branch_id' => $branch->id, 'product_id' => $product->id, 'quantity_on_hand' => 7.5]);
-        $this->assertSame('7.500', $product->fresh()->quantity_on_hand);
-        $this->assertDatabaseHas('stock_movements', ['product_id' => $product->id, 'type' => 'damage', 'quantity_change' => -2.5, 'balance_after' => 7.5]);
+        $this->assertDatabaseHas('product_damages', ['purchase_id' => $purchase['id'], 'product_id' => $product->id, 'quantity' => 2, 'created_by' => $owner->id]);
+        $this->assertDatabaseHas('product_stocks', ['branch_id' => $branch->id, 'product_id' => $product->id, 'quantity_on_hand' => 8]);
+        $this->assertSame('8.000', $product->fresh()->quantity_on_hand);
+        $this->assertDatabaseHas('stock_movements', ['product_id' => $product->id, 'type' => 'damage', 'quantity_change' => -2, 'balance_after' => 8]);
 
         $this->getJson('/api/product-damages?branch_id='.$branch->id)->assertOk()
             ->assertJsonPath('data.0.purchase.number', $purchase['number'])
