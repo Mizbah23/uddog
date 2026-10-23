@@ -331,6 +331,12 @@ body {
 .month-chart-labels small { min-width: 0; color: #9896a7; font-size: 10px; text-align: center; }
 .month-chart-labels small.active { color: #454359; font-weight: 750; }
 .chart-empty-note { margin: -90px 0 65px; color: #9a98a8; font-size: 11px; text-align: center; }
+.chart-monthly-values { display: grid; gap: 6px; max-height: 130px; margin-top: 16px; overflow-y: auto; }
+.chart-monthly-value-row { display: grid; grid-template-columns: 42px repeat(2, minmax(0, 1fr)); gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid #efedf5; border-radius: 8px; background: #faf9fd; color: #77768b; font-size: 11px; }
+.chart-monthly-value-row > strong { color: #454359; }
+.chart-monthly-value-row span { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.chart-monthly-value-row i { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
+.chart-monthly-value-row b { margin-left: auto; color: #343749; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sales-dot { background: #8062df; }
 .purchase-dot { background: #42bd8e; }
 .product-rankings { display: grid; gap: 17px; }
@@ -338,12 +344,16 @@ body {
 .product-ranking-group + .product-ranking-group { padding-top: 14px; border-top: 1px solid #efedf5; }
 .product-ranking-group h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 3px; color: #5d50b4; font-size: 12px; font-weight: 750; }
 .product-ranking-group + .product-ranking-group h3 { color: #76728d; }
+.product-ranking-group h3 small { font-size: 11px; font-weight: 500; }
+.product-ranking-empty { margin: 0; color: #9896a7; font-size: 11px; }
 .product-ranking-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 29px; font-size: 12px; }
 .product-ranking-row strong { overflow: hidden; color: #343749; text-overflow: ellipsis; white-space: nowrap; }
 .product-ranking-row > span:last-child { color: #77768b; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .product-ranking-position { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 8px; font-size: 11px; font-weight: 800; }
 .product-ranking-position.highest { background: #eeeafd; color: #6653c9; }
 .product-ranking-position.lowest { background: #f1f0f6; color: #76728d; }
+.product-stock-balance { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.product-stock-balance > small { color: #77768b; font-size: 10px; white-space: nowrap; }
 @media (max-width: 1000px) {
   .report-filter-grid, .report-filter-grid.ledger-filter-grid, .report-filter-grid.product-ledger-filter-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
   .report-run-button { grid-column: 1 / -1; }
@@ -353,6 +363,8 @@ body {
   .report-filter-grid, .report-filter-grid.ledger-filter-grid, .report-filter-grid.product-ledger-filter-grid { grid-template-columns: 1fr; }
   .monthly-chart-plot, .month-chart-labels { gap: 3px; }
   .month-chart-labels small { font-size: 9px; }
+  .chart-monthly-value-row { grid-template-columns: 1fr; gap: 5px; }
+  .chart-monthly-value-row span { justify-content: space-between; }
   .month-bar { width: min(10px, 37%); }
 }
 
