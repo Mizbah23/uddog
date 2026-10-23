@@ -29,6 +29,11 @@ class Product extends TenantModel
         ];
     }
 
+    public function usesWholePieces(): bool
+    {
+        return ! $this->is_gold_item && in_array($this->unit, ['pc', 'pcs'], true);
+    }
+
     protected static function booted(): void
     {
         static::created(function (Product $product) {

@@ -85,9 +85,15 @@ class StockCheckController extends Controller
             'items.*.id' => ['required', 'integer', 'distinct'],
             'items.*.counted_quantity' => ['nullable', 'numeric', 'min:0', 'decimal:0,3'],
         ]);
-        $existingItems = $saved->items()->get()->keyBy('id');
+        $existingItems = $saved->items()->with('product')->get()->keyBy('id');
         if (count($data['items']) !== $existingItems->count() || collect($data['items'])->contains(fn ($item) => ! $existingItems->has($item['id']))) {
             throw ValidationException::withMessages(['items' => 'The stock check items do not match this count session.']);
+        }
+        foreach ($data['items'] as $item) {
+            $product = $existingItems[$item['id']]->product;
+            if ($item['counted_quantity'] !== null && $product->usesWholePieces() && (float) $item['counted_quantity'] != floor((float) $item['counted_quantity'])) {
+                throw ValidationException::withMessages(['items' => "Enter a whole-piece count for {$product->name}."]);
+            }
         }
         DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($saved, $data, $existingItems) {
             $saved->update(['check_date' => $data['check_date'], 'notes' => $data['notes'] ?? null]);

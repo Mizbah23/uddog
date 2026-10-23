@@ -21,6 +21,7 @@ use App\Models\SupportImpersonation;
 use App\Models\User;
 use App\Permission;
 use App\ReportType;
+use App\Services\DocumentDeletionService;
 use App\Services\InventoryService;
 use App\SubscriptionStatus;
 use App\TenantContext;
@@ -609,6 +610,29 @@ class WorkspaceController extends Controller
         }
 
         return response()->json($inventory->createDocument($data, Auth::id(), $organizationId, $branchId), 201);
+    }
+
+    public function deleteDocument(Request $request, int $document, DocumentDeletionService $deletion): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $branchId = $this->branchId($request, $organizationId);
+        $saved = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->findOrFail($document);
+        $permission = $this->permissionForDocumentType($saved->type);
+        abort_unless(in_array($saved->type, ['purchase', 'sale', 'resale'], true) && Auth::user()->hasPermission($permission), 403);
+        $deletion->delete($document, $organizationId, $branchId);
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function deleteDocumentPayment(Request $request, int $document, int $payment, DocumentDeletionService $deletion): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $branchId = $this->branchId($request, $organizationId);
+        $saved = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->findOrFail($document);
+        abort_unless(in_array($saved->type, ['purchase', 'sale', 'resale'], true)
+            && Auth::user()->hasPermission($this->permissionForDocumentType($saved->type)), 403);
+
+        return response()->json($deletion->deletePayment($document, $payment, $organizationId, $branchId));
     }
 
     public function recordSalePayment(Request $request, int $document, InventoryService $inventory): JsonResponse
