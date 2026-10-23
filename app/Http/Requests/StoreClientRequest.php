@@ -32,6 +32,7 @@ class StoreClientRequest extends FormRequest
             'subscription_status' => ['required', Rule::enum(SubscriptionStatus::class)],
             'subscription_ends_at' => ['nullable', 'date'],
             'gold_store' => ['sometimes', 'boolean'],
+            'shared_stock_sales' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'owner_name' => ['required', 'string', 'max:100'],
             'owner_email' => ['nullable', 'required_without:owner_mobile', 'email', 'max:255', 'unique:users,email'],

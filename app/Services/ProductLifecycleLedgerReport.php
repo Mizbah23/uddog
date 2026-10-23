@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\StockMovement;
+use Illuminate\Validation\ValidationException;
 
 class ProductLifecycleLedgerReport
 {
@@ -18,6 +19,9 @@ class ProductLifecycleLedgerReport
         }
 
         $product = Product::query()->where('organization_id', $organizationId)->findOrFail($productId);
+        if ($product->stock_source_product_id) {
+            throw ValidationException::withMessages(['product_id' => 'Choose the linked stock product to see the complete purchase and sales lifecycle.']);
+        }
         $allBranchIds = Branch::query()->where('organization_id', $organizationId)->pluck('id')->all();
         $movements = StockMovement::query()->where('organization_id', $organizationId)
             ->where('product_id', $productId)->whereIn('branch_id', $allBranchIds)
@@ -31,7 +35,7 @@ class ProductLifecycleLedgerReport
             $subtotal = max(1, $document->items->sum(fn ($item) => self::cents($item->line_total)));
             $remainingDiscount = self::cents($document->discount);
             foreach ($document->items->values() as $index => $item) {
-                $itemQueues[$document->id.':'.$item->product_id][] = $item;
+                $itemQueues[$document->id.':'.($item->stock_product_id ?: $item->product_id)][] = $item;
                 $discount = $index === $document->items->count() - 1
                     ? $remainingDiscount
                     : min($remainingDiscount, (int) round(self::cents($document->discount) * self::cents($item->line_total) / $subtotal));
@@ -114,7 +118,7 @@ class ProductLifecycleLedgerReport
                 $eventCogs = array_sum(array_column($allocations, 'cost'));
                 $eventRevenue = $item ? ($lineCosts[$item->id] ?? $amount) : $amount;
                 foreach ($allocations as $allocation) {
-                    $saleSlices[$document?->id][] = [
+                    $saleSlices[$document?->id.':'.$item?->product_id][] = [
                         'lot' => $allocation['lot'], 'reference' => $allocation['reference'],
                         'quantity' => self::mills($allocation['quantity']), 'cost' => $allocation['cost'],
                     ];
@@ -125,8 +129,9 @@ class ProductLifecycleLedgerReport
                 }
             } elseif ($type === 'sale_return') {
                 $remaining = $quantity;
-                $saleSlices[$document?->sale_id] ??= [];
-                foreach ($saleSlices[$document?->sale_id] as &$slice) {
+                $saleKey = $document?->sale_id.':'.$item?->product_id;
+                $saleSlices[$saleKey] ??= [];
+                foreach ($saleSlices[$saleKey] as &$slice) {
                     if ($remaining <= 0 || $slice['quantity'] <= 0) {
                         continue;
                     }

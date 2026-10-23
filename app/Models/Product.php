@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends TenantModel
 {
-    protected $fillable = ['organization_id', 'sku', 'barcode', 'category_id', 'name', 'unit', 'cost_price', 'sale_price', 'quantity_on_hand', 'reorder_level', 'warranty_months', 'active', 'is_gold_item', 'gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code'];
+    protected $fillable = ['organization_id', 'sku', 'barcode', 'category_id', 'name', 'unit', 'cost_price', 'sale_price', 'quantity_on_hand', 'reorder_level', 'warranty_months', 'active', 'is_gold_item', 'gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code', 'stock_source_product_id', 'stock_source_quantity'];
 
     protected function casts(): array
     {
@@ -25,6 +25,7 @@ class Product extends TenantModel
             'stone_value' => 'decimal:2',
             'making_charge' => 'decimal:2',
             'wastage_percent' => 'decimal:3',
+            'stock_source_quantity' => 'decimal:3',
         ];
     }
 
@@ -50,5 +51,15 @@ class Product extends TenantModel
     public function stocks(): HasMany
     {
         return $this->hasMany(ProductStock::class);
+    }
+
+    public function stockSource(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'stock_source_product_id');
+    }
+
+    public function salesProducts(): HasMany
+    {
+        return $this->hasMany(self::class, 'stock_source_product_id');
     }
 }

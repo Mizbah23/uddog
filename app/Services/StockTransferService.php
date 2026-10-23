@@ -40,6 +40,9 @@ class StockTransferService
                 if (! $product) {
                     throw ValidationException::withMessages(['items' => 'Every transferred product must be active and belong to this company.']);
                 }
+                if ($product->stock_source_product_id) {
+                    throw ValidationException::withMessages(['items' => "Transfer the linked stock product instead of {$product->name}."]);
+                }
                 $quantity = $this->scaled($item['quantity']);
 
                 foreach ([$data['from_branch_id'], $data['to_branch_id']] as $branchId) {

@@ -38,6 +38,109 @@ class InventoryWorkflowTest extends TestCase
         ];
     }
 
+    public function test_three_sales_products_share_one_egg_stock_and_returns_restore_the_original_source(): void
+    {
+        [$user, $supplier, $customer, $eggs] = $this->setupRecords(true);
+        $user->organization->update(['shared_stock_sales' => true]);
+        $eggs->update(['name' => 'লেয়ার মুরগির ডিম', 'unit' => 'pc']);
+        $variants = collect(['লেয়ার মুরগি সিদ্ধ', 'লেয়ার মুরগি ডিম', 'লেয়ার খুচরা'])
+            ->map(fn (string $name) => Product::create([
+                'organization_id' => $user->organization_id, 'name' => $name, 'unit' => 'pc',
+                'cost_price' => '0.00', 'sale_price' => '15.00', 'reorder_level' => '0',
+                'stock_source_product_id' => $eggs->id, 'stock_source_quantity' => '1.000',
+            ]));
+        $this->actingAs($user);
+
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $eggs, '5000', '10.00'))->assertCreated();
+        $sale = $this->payload('sale', $customer, $variants[0], '1000', '14.00');
+        $sale['items'][] = ['product_id' => $variants[1]->id, 'quantity' => '2000', 'unit_price' => '15.00'];
+        $sale['items'][] = ['product_id' => $variants[2]->id, 'quantity' => '500', 'unit_price' => '16.00'];
+        $result = $this->postJson('/api/documents', $sale)->assertCreated()
+            ->assertJsonPath('items.0.stock_product_id', $eggs->id)
+            ->assertJsonPath('items.0.stock_quantity', '1000.000')
+            ->assertJsonPath('items.0.cost_price', '10.00')->json();
+
+        $this->assertSame('1500.000', $eggs->fresh()->quantity_on_hand);
+        $this->assertSame('0.000', $variants[0]->fresh()->quantity_on_hand);
+        $this->assertSame('17000.00', $result['stock_profit']);
+        $this->assertSame([$eggs->id, $eggs->id, $eggs->id], StockMovement::query()->where('type', 'sale')->pluck('product_id')->all());
+
+        $oversell = $this->payload('sale', $customer, $variants[0], '1000', '14.00');
+        $oversell['items'][] = ['product_id' => $variants[1]->id, 'quantity' => '600', 'unit_price' => '15.00'];
+        $this->postJson('/api/documents', $oversell)->assertUnprocessable()->assertJsonValidationErrors('items');
+        $this->assertSame('1500.000', $eggs->fresh()->quantity_on_hand);
+
+        $user->organization->update(['shared_stock_sales' => false]);
+        $this->postJson('/api/documents', $this->payload('sale', $customer, $variants[0], '1', '14.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
+
+        $return = $this->payload('sale_return', $customer, $variants[0], '250', '14.00');
+        $return['sale_id'] = $result['id'];
+        $this->postJson('/api/documents', $return)->assertCreated()->assertJsonPath('items.0.stock_quantity', '250.000');
+        $this->assertSame('1750.000', $eggs->fresh()->quantity_on_hand);
+
+        $branchId = $user->organization->branches()->firstOrFail()->id;
+        $this->getJson('/api/reports?report=product_lifecycle_ledger&product_id='.$eggs->id.'&branch_id='.$branchId)
+            ->assertOk()
+            ->assertJsonPath('summary.closing_stock', 1750)
+            ->assertJsonPath('summary.sales', 48500)
+            ->assertJsonPath('summary.cogs', 32500)
+            ->assertJsonPath('summary.realized_profit', 16000);
+
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $variants[0], '1', '10.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
+    }
+
+    public function test_product_api_exposes_shared_availability_and_rejects_invalid_stock_links(): void
+    {
+        [$user, $supplier, , $eggs] = $this->setupRecords(true);
+        $eggs->update(['unit' => 'pc']);
+        $this->actingAs($user);
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $eggs, '12', '10.00'))->assertCreated();
+
+        $payload = [
+            'name' => 'লেয়ার মুরগি সিদ্ধ', 'unit' => 'pc', 'cost_price' => '0.00',
+            'sale_price' => '15.00', 'reorder_level' => '0', 'active' => true,
+            'stock_source_product_id' => $eggs->id, 'stock_source_quantity' => '1.000',
+        ];
+        $this->postJson('/api/products', $payload)->assertUnprocessable()->assertJsonValidationErrors('stock_source_product_id');
+        $user->organization->update(['shared_stock_sales' => true]);
+        $variant = $this->postJson('/api/products', $payload)->assertCreated()->assertJsonPath('stock_source_product_id', $eggs->id)->json();
+
+        $this->getJson('/api/products')->assertOk()
+            ->assertJsonFragment(['id' => $variant['id'], 'available_quantity' => '12.000', 'quantity_on_hand' => '0.000']);
+        $this->putJson('/api/products/'.$eggs->id, [
+            'name' => $eggs->name, 'unit' => 'pc', 'cost_price' => '10.00',
+            'sale_price' => '15.00', 'reorder_level' => '0',
+            'stock_source_product_id' => $variant['id'], 'stock_source_quantity' => '1.000',
+        ])->assertUnprocessable()->assertJsonValidationErrors('stock_source_product_id');
+        $this->deleteJson('/api/products/'.$eggs->id)->assertUnprocessable()->assertJsonValidationErrors('product');
+    }
+
+    public function test_partial_returns_of_a_converted_sales_product_reconcile_to_the_original_stock_quantity(): void
+    {
+        [$user, $supplier, $customer, $source] = $this->setupRecords();
+        $user->organization->update(['shared_stock_sales' => true]);
+        $source->update(['unit' => 'pc']);
+        $variant = Product::create([
+            'organization_id' => $user->organization_id, 'name' => 'Half-source item', 'unit' => 'pc',
+            'cost_price' => '0.00', 'sale_price' => '10.00', 'reorder_level' => '0',
+            'stock_source_product_id' => $source->id, 'stock_source_quantity' => '0.500',
+        ]);
+        $this->actingAs($user);
+        $this->postJson('/api/documents', $this->payload('purchase', $supplier, $source, '1', '10.00'))->assertCreated();
+        $sale = $this->postJson('/api/documents', $this->payload('sale', $customer, $variant, '0.002', '10.00'))
+            ->assertCreated()->assertJsonPath('items.0.stock_quantity', '0.001')->json();
+
+        $return = $this->payload('sale_return', $customer, $variant, '0.001', '10.00');
+        $return['sale_id'] = $sale['id'];
+        $this->postJson('/api/documents', $return)->assertCreated()->assertJsonPath('items.0.stock_quantity', '0.001');
+        $this->postJson('/api/documents', $return)->assertCreated()->assertJsonPath('items.0.stock_quantity', '0.000');
+
+        $this->assertSame('1.000', $source->fresh()->quantity_on_hand);
+        $this->assertSame('0.001', $sale['items'][0]['stock_quantity']);
+    }
+
     public function test_purchase_sale_resale_and_return_update_stock_and_ledger(): void
     {
         [$user, $supplier, $customer, $product] = $this->setupRecords();

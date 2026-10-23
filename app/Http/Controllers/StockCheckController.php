@@ -41,7 +41,7 @@ class StockCheckController extends Controller
             throw ValidationException::withMessages(['status' => 'Complete the existing draft stock check for this branch first.']);
         }
 
-        $products = Product::query()->where('organization_id', $organizationId)->where('active', true)->orderBy('name')->get();
+        $products = Product::query()->where('organization_id', $organizationId)->where('active', true)->whereNull('stock_source_product_id')->orderBy('name')->get();
         if ($products->isEmpty()) {
             throw ValidationException::withMessages(['items' => 'Add at least one active product before starting a stock check.']);
         }

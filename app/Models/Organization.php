@@ -14,7 +14,7 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'notes', 'system_settings', 'tenant_database'];
+    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'shared_stock_sales', 'notes', 'system_settings', 'tenant_database'];
 
     protected $appends = ['subscription_active'];
 
@@ -25,6 +25,7 @@ class Organization extends Model
             'subscription_ends_at' => 'date',
             'access_paused' => 'boolean',
             'gold_store' => 'boolean',
+            'shared_stock_sales' => 'boolean',
             'system_settings' => 'array',
         ];
     }

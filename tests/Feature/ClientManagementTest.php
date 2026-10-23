@@ -163,6 +163,7 @@ class ClientManagementTest extends TestCase
             'subscription_status' => SubscriptionStatus::Active->value,
             'subscription_ends_at' => '2027-09-27',
             'gold_store' => true,
+            'shared_stock_sales' => true,
             'notes' => 'Priority support',
             'owner_name' => 'Updated Owner',
             'owner_email' => 'updated-owner@example.test',
@@ -171,6 +172,7 @@ class ClientManagementTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('name', 'Updated Company')
             ->assertJsonPath('gold_store', true)
+            ->assertJsonPath('shared_stock_sales', true)
             ->assertJsonPath('admins.0.name', 'Updated Owner')
             ->assertJsonPath('admins.0.active', false);
 

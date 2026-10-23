@@ -26,6 +26,9 @@ class StockCheckService
 
             foreach ($items as $item) {
                 $product = Product::query()->where('organization_id', $lockedCheck->organization_id)->lockForUpdate()->findOrFail($item->product_id);
+                if ($product->stock_source_product_id) {
+                    throw ValidationException::withMessages(['items' => 'Stock checks must count stock products, not linked sales products.']);
+                }
                 $stock = ProductStock::query()->firstOrCreate([
                     'organization_id' => $lockedCheck->organization_id,
                     'branch_id' => $lockedCheck->branch_id,
