@@ -298,3 +298,26 @@
     flex-wrap: wrap;
   }
 }
+
+.item-row .field-action {
+  align-items: flex-end;
+}
+
+.document-product-picker {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.document-lines-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+@media (max-width: 560px) {
+  .document-product-picker,
+  .document-lines-footer > button {
+    width: 100%;
+  }
+}

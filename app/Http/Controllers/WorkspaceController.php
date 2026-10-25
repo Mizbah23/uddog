@@ -21,6 +21,7 @@ use App\Models\SupportImpersonation;
 use App\Models\User;
 use App\Permission;
 use App\ReportType;
+use App\Services\CashBalanceService;
 use App\Services\DocumentDeletionService;
 use App\Services\InventoryService;
 use App\SubscriptionStatus;
@@ -189,6 +190,8 @@ class WorkspaceController extends Controller
         $branchId = $this->branchId($request, $organizationId);
         $products = $this->productsForBranch($organizationId, $branchId)->where('active', true);
         $user = Auth::user();
+        $cash = $user->organization?->setup()['store']['allow_cash_handover']
+            ? app(CashBalanceService::class)->overview($organizationId, $branchId, $user) : null;
         $canViewSales = $user->hasPermission(Permission::Sales) || $user->hasPermission(Permission::Resales) || $user->hasPermission(Permission::SalesReturns);
         $canViewPurchases = $user->hasPermission(Permission::Purchases) || $user->hasPermission(Permission::PurchaseReturns);
         $visibleSaleTypes = $canViewSales ? ['sale', 'resale', 'sale_return'] : [];
@@ -236,6 +239,7 @@ class WorkspaceController extends Controller
 
         if (! $user->hasRole(UserRole::Admin)) {
             return response()->json([
+                'cash' => $cash,
                 'products' => $products->count(),
                 'low_stock' => $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
                 'recent_documents' => (clone $documents)
@@ -290,6 +294,7 @@ class WorkspaceController extends Controller
             : collect();
 
         return response()->json([
+            'cash' => $cash,
             'products' => $products->count(),
             'stock_value' => $products->sum(fn (Product $product) => (float) $product->quantity_on_hand * (float) $product->cost_price),
             'low_stock' => $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
@@ -587,6 +592,10 @@ class WorkspaceController extends Controller
             'items.*.unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
         ]);
         $setup = Auth::user()->organization()->firstOrFail()->setup();
+        if ($setup['store']['allow_cash_handover'] && in_array($data['type'], ['sale_return', 'purchase_return'], true)
+            && ! in_array($data['payment_method'] ?? null, ['cash', 'card', 'mobile_banking', 'bank_transfer', 'credit'], true)) {
+            throw ValidationException::withMessages(['payment_method' => 'Choose how the return was refunded or settled.']);
+        }
         $feature = match ($data['type']) {
             'resale' => ['sales', 'allow_resales'],
             'sale_return' => ['sales', 'allow_sales_returns'],

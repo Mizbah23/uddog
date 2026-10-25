@@ -23,7 +23,7 @@ class TenantProvisioner
         'documents', 'expenses', 'gold_jobs', 'gold_rates',
         'purchase_installments', 'purchase_payments', 'sale_installments',
         'sale_payments', 'sales_targets', 'stock_checks', 'stock_movements',
-        'stock_transfers',
+        'stock_transfers', 'cash_movements',
     ];
 
     /** @var array<string, array{0: string, 1: string}> */
@@ -254,7 +254,7 @@ class TenantProvisioner
         $ids = DB::connection(config('tenancy.central_connection'))->table('users')
             ->where('organization_id', $organization->id)->pluck('id');
 
-        foreach (['documents' => ['created_by'], 'expenses' => ['created_by'], 'gold_jobs' => ['created_by'], 'gold_rates' => ['created_by'], 'purchase_payments' => ['created_by'], 'sale_payments' => ['created_by'], 'sales_targets' => ['created_by', 'user_id'], 'stock_checks' => ['created_by', 'completed_by'], 'stock_movements' => ['created_by'], 'stock_transfers' => ['created_by'], 'branch_user_access' => ['user_id']] as $table => $columns) {
+        foreach (['documents' => ['created_by'], 'expenses' => ['created_by'], 'gold_jobs' => ['created_by'], 'gold_rates' => ['created_by'], 'purchase_payments' => ['created_by'], 'sale_payments' => ['created_by'], 'sales_targets' => ['created_by', 'user_id'], 'stock_checks' => ['created_by', 'completed_by'], 'stock_movements' => ['created_by'], 'stock_transfers' => ['created_by'], 'cash_movements' => ['from_user_id', 'to_user_id'], 'branch_user_access' => ['user_id']] as $table => $columns) {
             foreach ($columns as $column) {
                 $ids = $ids->concat($tenant->table($table)->whereNotNull($column)->pluck($column));
             }

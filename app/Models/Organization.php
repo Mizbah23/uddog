@@ -36,6 +36,7 @@ class Organization extends Model
         $store = array_replace([
             'allow_stock_adjustments' => true,
             'allow_stock_transfers' => true,
+            'allow_cash_handover' => false,
             'default_reorder_level' => 0,
             'units' => ['pc', 'hali', '8 pcs', 'dozen', 'items', 'units', 'packs', 'boxes', 'cartons', 'sets', 'kg', 'g', 'L', 'oz', 'ounce', 'ভরি', 'রতি'],
         ], $saved['store'] ?? []);

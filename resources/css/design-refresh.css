@@ -738,3 +738,22 @@ body {
 .brand-light .brand-mark {
   background: #fff url('/uddog-soft-logo.png') -21px -16px / 78px 69px no-repeat;
 }
+.dashboard-cash-panel { margin-top: 20px; padding: 24px; }
+.mobile-cash-summary { display: none; }
+.dashboard-cash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 20px; }
+.dashboard-cash-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid #e9e7f7; border-radius: 12px; background: #f9f8ff; }
+.dashboard-cash-card.primary { background: linear-gradient(135deg, #6254ce, #8c7df5); border-color: transparent; color: white; }
+.dashboard-cash-card span { font-size: 12px; color: #767491; font-weight: 700; }
+.dashboard-cash-card.primary span { color: #eeeaff; }
+.dashboard-cash-card strong { color: #423a8c; font-size: clamp(18px, 2vw, 25px); }
+.dashboard-cash-card.primary strong { color: white; }
+.dashboard-cash-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.dashboard-cash-form { margin-top: 16px; padding: 18px; border: 1px solid #ddd9fa; border-radius: 12px; background: #fbfaff; display: grid; gap: 12px; }
+.dashboard-cash-form p { margin: 0; color: #514d69; font-size: 13px; }
+.dashboard-cash-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dashboard-cash-staff, .dashboard-cash-history { margin-top: 22px; border-top: 1px solid #eeeaf7; padding-top: 16px; }
+.dashboard-cash-staff h3, .dashboard-cash-history h3 { margin: 0 0 10px; font-size: 14px; color: #49435f; }
+.dashboard-cash-staff > div, .dashboard-cash-history > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid #f1eff8; font-size: 13px; color: #555166; }
+.dashboard-cash-history small { display: block; margin-top: 3px; color: #9290a4; }
+.dashboard-cash-staff strong, .dashboard-cash-history strong { color: #4b428b; white-space: nowrap; }
+@media (max-width: 560px) { .dashboard-cash-panel { padding: 18px; } .dashboard-cash-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-cash-card strong { font-size: 17px; } .dashboard-cash-actions .btn-primary-app { width: 100%; } .mobile-cash-summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-radius: 14px; padding: 16px; margin: 12px 0; background: linear-gradient(135deg, #6558d7, #9181f7); color: white; font-weight: 700; } .mobile-cash-summary strong { font-size: 20px; white-space: nowrap; } }

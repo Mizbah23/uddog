@@ -155,7 +155,8 @@ class InventoryService
                 'gold_exchange_purity' => $exchange['purity'],
                 'gold_exchange_rate' => self::money($exchange['rate']),
                 'gold_exchange_value' => self::money($exchange['value']),
-                'payment_method' => $paymentTerms['payment_method'],
+                'payment_method' => in_array($type, ['sale_return', 'purchase_return'], true)
+                    ? ($data['payment_method'] ?? null) : $paymentTerms['payment_method'],
                 'payment_type' => $paymentTerms['payment_type'],
                 'amount_paid' => self::money($paymentTerms['initial_payment']),
                 'down_payment' => self::money($paymentTerms['down_payment']),
