@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\CashMovementController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ContactDirectoryController;
@@ -41,6 +42,8 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::get('branches', [BranchController::class, 'index']);
             Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('permission:branches');
             Route::get('overview', [WorkspaceController::class, 'overview'])->middleware('permission:dashboard');
+            Route::post('cash/transfer', [CashMovementController::class, 'transfer']);
+            Route::post('cash/withdraw', [CashMovementController::class, 'withdraw'])->middleware('role:admin');
             Route::get('expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses');
             Route::post('expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses');
             Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->middleware('permission:expenses');

@@ -33,6 +33,7 @@ class UserManagementController extends Controller
         'stock_checks' => ['created_by', 'completed_by'],
         'stock_movements' => ['created_by'],
         'stock_transfers' => ['created_by'],
+        'cash_movements' => ['from_user_id', 'to_user_id'],
     ];
 
     public function index(): JsonResponse

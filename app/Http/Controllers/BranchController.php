@@ -82,7 +82,7 @@ class BranchController extends Controller
                 throw ValidationException::withMessages(['branch' => 'Default branches and branches with transactions or stock cannot be deleted.']);
             }
             $connection = DB::connection(app(TenantContext::class)->connectionName());
-            foreach (['stock_movements', 'stock_checks', 'sales_targets', 'sale_installments', 'sale_payments', 'purchase_installments', 'purchase_payments', 'expenses', 'gold_rates', 'gold_jobs'] as $table) {
+            foreach (['stock_movements', 'stock_checks', 'sales_targets', 'sale_installments', 'sale_payments', 'purchase_installments', 'purchase_payments', 'expenses', 'gold_rates', 'gold_jobs', 'cash_movements'] as $table) {
                 if ($connection->table($table)->where('branch_id', $saved->id)->exists()) {
                     throw ValidationException::withMessages(['branch' => 'Branches with recorded activity cannot be deleted.']);
                 }

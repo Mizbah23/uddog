@@ -60,6 +60,20 @@ class SystemSetupTest extends TestCase
         ]);
     }
 
+    public function test_owner_can_enable_cash_handover_without_enabling_it_for_other_companies(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $other = Organization::factory()->create();
+        $settings = $owner->organization->setup();
+        $this->assertFalse($settings['store']['allow_cash_handover']);
+        $settings['store']['allow_cash_handover'] = true;
+
+        $this->actingAs($owner)->putJson('/api/system-setup', $settings)
+            ->assertOk()->assertJsonPath('store.allow_cash_handover', true);
+        $this->getJson('/api/system-setup')->assertOk()->assertJsonPath('store.allow_cash_handover', true);
+        $this->assertFalse($other->fresh()->setup()['store']['allow_cash_handover']);
+    }
+
     public function test_duplicate_company_name_and_invalid_contact_details_are_rejected(): void
     {
         $owner = User::factory()->admin()->create();
