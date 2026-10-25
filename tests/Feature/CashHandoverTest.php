@@ -55,7 +55,7 @@ class CashHandoverTest extends TestCase
         $this->actingAs($owner)->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 10])->assertForbidden();
     }
 
-    public function test_full_handover_moves_only_recorded_physical_cash_and_owner_can_withdraw(): void
+    public function test_full_handover_moves_customer_payments_even_when_cash_collections_are_lower(): void
     {
         [$owner, $staff, $branch] = $this->users();
         $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
@@ -69,21 +69,22 @@ class CashHandoverTest extends TestCase
         ]);
 
         $this->actingAs($staff)->getJson('/api/overview?branch_id='.$branch->id)
-            ->assertOk()->assertJsonPath('cash.on_hand', '70.00')
+            ->assertOk()->assertJsonPath('cash.on_hand', '150.00')
+            ->assertJsonPath('cash.physical_cash', '70.00')
             ->assertJsonPath('cash.cash_received', '100.00')
             ->assertJsonPath('cash.cash_paid', '30.00');
         $this->postJson('/api/cash/transfer', ['branch_id' => $branch->id, 'notes' => 'End of shift'])
-            ->assertCreated()->assertJsonPath('movement.amount', '70.00')->assertJsonPath('cash.on_hand', '0.00');
+            ->assertCreated()->assertJsonPath('movement.amount', '150.00')->assertJsonPath('cash.on_hand', '0.00');
         $this->postJson('/api/cash/transfer', ['branch_id' => $branch->id])->assertUnprocessable();
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 1])->assertForbidden();
 
         $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
-            ->assertOk()->assertJsonPath('cash.on_hand', '70.00')
-            ->assertJsonPath('cash.received_transfers', '70.00')
+            ->assertOk()->assertJsonPath('cash.on_hand', '150.00')
+            ->assertJsonPath('cash.received_transfers', '150.00')
             ->assertJsonPath('cash.staff_balances.0.on_hand', '0.00');
-        $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 71])->assertUnprocessable();
+        $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 151])->assertUnprocessable();
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 25, 'notes' => 'Bank deposit'])
-            ->assertCreated()->assertJsonPath('cash.on_hand', '45.00')
+            ->assertCreated()->assertJsonPath('cash.on_hand', '125.00')
             ->assertJsonPath('cash.withdrawn', '25.00');
     }
 
@@ -100,7 +101,7 @@ class CashHandoverTest extends TestCase
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 1])->assertForbidden();
     }
 
-    public function test_cash_returns_adjust_the_handler_balance_but_credit_returns_do_not(): void
+    public function test_refunded_returns_reduce_paid_balance_but_credit_returns_do_not(): void
     {
         [$owner, $staff, $branch] = $this->users();
         $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
@@ -116,8 +117,76 @@ class CashHandoverTest extends TestCase
         }
 
         $this->actingAs($staff)->getJson('/api/overview?branch_id='.$branch->id)
-            ->assertOk()->assertJsonPath('cash.on_hand', '92.00')
+            ->assertOk()->assertJsonPath('cash.on_hand', '85.00')
+            ->assertJsonPath('cash.physical_cash', '92.00')
             ->assertJsonPath('cash.cash_received', '107.00')
             ->assertJsonPath('cash.cash_paid', '15.00');
+    }
+
+    public function test_owner_can_withdraw_all_customer_payments_despite_negative_physical_cash(): void
+    {
+        [$owner, , $branch] = $this->users();
+        $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
+        $this->payment($owner, $branch->id, '94744.25', 'card');
+        Expense::create([
+            'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+            'category' => 'Other', 'description' => 'Cash expense', 'amount' => '14893.30',
+            'expense_date' => today()->toDateString(), 'payment_method' => 'cash', 'created_by' => $owner->id,
+        ]);
+
+        $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('sales_total', 94744.25)
+            ->assertJsonPath('cash.on_hand', '94744.25')
+            ->assertJsonPath('cash.physical_cash', '-14893.30');
+        $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => '94744.25'])
+            ->assertCreated()->assertJsonPath('cash.on_hand', '0.00');
+        $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => '0.01'])->assertUnprocessable();
+    }
+
+    public function test_return_reduces_original_sellers_balance_even_when_another_user_processes_it(): void
+    {
+        [$owner, $staff, $branch] = $this->users();
+        $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
+        $this->payment($staff, $branch->id, '100.00', 'card');
+        $sale = Document::query()->where('created_by', $staff->id)->firstOrFail();
+        Document::create([
+            'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+            'number' => 'RETURN-STAFF', 'type' => 'sale_return', 'contact_id' => $sale->contact_id,
+            'sale_id' => $sale->id, 'document_date' => today()->toDateString(),
+            'subtotal' => '30.00', 'total' => '30.00', 'payment_method' => 'cash',
+            'created_by' => $owner->id,
+        ]);
+
+        $this->actingAs($staff)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('cash.on_hand', '70.00');
+        $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('cash.on_hand', '0.00');
+    }
+
+    public function test_unpaid_invoice_does_not_become_withdrawable_until_customer_pays(): void
+    {
+        [$owner, , $branch] = $this->users();
+        $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Due customer', 'type' => 'customer']);
+        $sale = Document::create([
+            'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+            'number' => 'DUE-1', 'type' => 'sale', 'contact_id' => $customer->id,
+            'document_date' => today()->toDateString(), 'subtotal' => '100.00',
+            'total' => '100.00', 'amount_paid' => '0.00', 'created_by' => $owner->id,
+        ]);
+
+        $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('sales_total', 100)->assertJsonPath('cash.on_hand', '0.00');
+        $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 100])->assertUnprocessable();
+
+        $sale->payments()->create([
+            'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+            'amount' => '40.00', 'payment_method' => 'bank_transfer', 'kind' => 'payment',
+            'payment_date' => today()->toDateString(), 'created_by' => $owner->id,
+        ]);
+        $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('cash.on_hand', '40.00');
+        $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 40])
+            ->assertCreated()->assertJsonPath('cash.on_hand', '0.00');
     }
 }

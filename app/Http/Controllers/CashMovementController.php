@@ -50,7 +50,7 @@ class CashMovementController extends Controller
             $available = CashBalanceService::cents($balances->overview($organization->id, $branch->id, $user)['on_hand']);
             $amount = $type === 'transfer' ? $available : CashBalanceService::cents($data['amount']);
             if ($amount <= 0 || $amount > $available) {
-                throw ValidationException::withMessages(['amount' => 'The amount must be positive and cannot exceed your recorded on-hand cash.']);
+                throw ValidationException::withMessages(['amount' => 'The amount must be positive and cannot exceed your available sales balance.']);
             }
 
             return CashMovement::create([
