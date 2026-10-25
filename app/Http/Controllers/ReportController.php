@@ -7,11 +7,13 @@ use App\Models\Category;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Expense;
+use App\Models\Organization;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
 use App\Permission;
 use App\ReportType;
+use App\Services\CashMovementReport;
 use App\Services\GeneralLedgerReport;
 use App\Services\ProductLifecycleLedgerReport;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,7 +24,7 @@ use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
-    public function index(Request $request, GeneralLedgerReport $generalLedger, ProductLifecycleLedgerReport $productLifecycleLedger): JsonResponse
+    public function index(Request $request, GeneralLedgerReport $generalLedger, ProductLifecycleLedgerReport $productLifecycleLedger, CashMovementReport $cashMovement): JsonResponse
     {
         $data = $request->validate([
             'report' => ['required', Rule::enum(ReportType::class)],
@@ -43,6 +45,9 @@ class ReportController extends Controller
 
         $report = $data['report'];
         abort_unless(Auth::user()->hasReportAccess(ReportType::from($report)), 403, 'Your owner has not granted access to this report.');
+        if ($report === 'cash_movement') {
+            abort_unless(Organization::query()->findOrFail($organizationId)->setup()['store']['allow_cash_handover'], 403, 'Cash movement is disabled in System Setup.');
+        }
 
         $branchAccess = app(BranchAccess::class);
         $allBranches = in_array($report, ['profit_loss', 'product_ledger', 'product_lifecycle_ledger'], true) && ($data['branch_id'] ?? null) === 'all';
@@ -107,6 +112,7 @@ class ReportController extends Controller
             'supplier_ledger' => $this->supplierLedger($documents, $data['contact_id'] ?? null),
             'supplier_due' => $this->supplierDue($documents),
             'general_ledger' => $generalLedger->build($organizationId, $branchId, $dateFrom, $dateTo, $data['account'] ?? null),
+            'cash_movement' => $cashMovement->build($organizationId, $branchId, $dateFrom, $dateTo),
         };
 
         return response()->json(['report' => $report, ...$result]);

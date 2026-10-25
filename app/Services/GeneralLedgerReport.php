@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CashMovement;
 use App\Models\Document;
 use App\Models\Expense;
 
@@ -17,6 +18,7 @@ class GeneralLedgerReport
             'receivables' => '1100 · Accounts receivable',
             'inventory' => '1200 · Inventory',
             'payables' => '2000 · Accounts payable',
+            'owner_drawings' => '3000 · Owner drawings',
             'sales' => '4000 · Sales revenue',
             'sales_returns' => '4010 · Sales returns',
             'cost_of_goods' => '5000 · Cost of goods sold',
@@ -72,6 +74,18 @@ class GeneralLedgerReport
                         $postDocument($date, $reference, $details, 'inventory', 0, $total);
                     }
 
+                    if (in_array($document->type, ['sale_return', 'purchase_return'], true)
+                        && in_array($document->payment_method, ['cash', 'card', 'mobile_banking', 'bank_transfer'], true)) {
+                        $moneyAccount = self::moneyAccount($document->payment_method);
+                        if ($document->type === 'sale_return') {
+                            $postDocument($date, $reference, 'Customer refund settled', 'receivables', $total, 0);
+                            $postDocument($date, $reference, 'Customer refund settled', $moneyAccount, 0, $total);
+                        } else {
+                            $postDocument($date, $reference, 'Supplier refund received', $moneyAccount, $total, 0);
+                            $postDocument($date, $reference, 'Supplier refund received', 'payables', 0, $total);
+                        }
+                    }
+
                     $payments = $document->type === 'purchase' ? $document->purchasePayments : $document->payments;
                     foreach ($payments as $payment) {
                         $amount = self::cents($payment->amount);
@@ -114,6 +128,29 @@ class GeneralLedgerReport
                     $sourceRecord = $expense->only(['category', 'description', 'amount', 'expense_date', 'payment_method', 'notes']);
                     $post($date, 'EXP-'.$expense->id, $details, 'expenses', $amount, 0, null, 'expense', $expense->id, $sourceRecord);
                     $post($date, 'EXP-'.$expense->id, $details, self::moneyAccount($expense->payment_method), 0, $amount, null, 'expense', $expense->id, $sourceRecord);
+                }
+            });
+
+        CashMovement::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
+            ->with('sender:id,name', 'recipient:id,name')
+            ->orderBy('id')->chunkById(200, function ($movements) use ($post): void {
+                foreach ($movements as $movement) {
+                    $date = $movement->created_at->toDateString();
+                    $reference = 'CASH-'.$movement->id;
+                    $amount = self::cents($movement->amount);
+                    $record = [
+                        'type' => $movement->type, 'amount' => $movement->amount,
+                        'from' => $movement->sender?->name, 'to' => $movement->recipient?->name,
+                        'notes' => $movement->notes, 'created_at' => $movement->created_at,
+                    ];
+                    if ($movement->type === 'transfer') {
+                        $post($date, $reference, 'Cash handed over by '.$movement->sender?->name, 'cash', 0, $amount, $movement->sender?->name, 'cash_movement', $movement->id, $record);
+                        $post($date, $reference, 'Cash received by '.$movement->recipient?->name, 'cash', $amount, 0, $movement->recipient?->name, 'cash_movement', $movement->id, $record);
+                    } else {
+                        $post($date, $reference, 'Owner cash withdrawal', 'owner_drawings', $amount, 0, $movement->sender?->name, 'cash_movement', $movement->id, $record);
+                        $post($date, $reference, 'Owner cash withdrawal', 'cash', 0, $amount, $movement->sender?->name, 'cash_movement', $movement->id, $record);
+                    }
                 }
             });
 
@@ -174,7 +211,7 @@ class GeneralLedgerReport
             'rows' => $rows,
             'summary' => $summary,
             'accounts' => $accounts,
-            'note' => 'Derived from recorded sales, purchases, returns, payments and expenses. Opening balances, manual stock adjustments and unrecorded refunds are not included. Unknown payment methods appear under Unclassified payments. A negative balance is a credit balance.',
+            'note' => 'Derived from recorded sales, purchases, returns, payments, expenses and cash movements. Staff cash handovers have equal debit and credit postings in Cash, so they do not change store cash or sales. Owner withdrawals reduce Cash and increase Owner drawings. Opening balances, manual stock adjustments and historical returns without a recorded settlement are not included. Unknown payment methods appear under Unclassified payments. A negative balance is a credit balance.',
         ];
     }
 

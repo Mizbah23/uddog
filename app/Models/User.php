@@ -71,7 +71,11 @@ class User extends Authenticatable
 
     public function hasReportAccess(ReportType $report): bool
     {
-        if ($report === ReportType::GeneralLedger && ! collect($report->workspacePermissions())->every(fn (Permission $permission) => $this->hasPermission($permission))) {
+        if ($report === ReportType::CashMovement && (! ($this->isSuperadmin() || $this->hasRole(UserRole::Admin)) || ! ($this->organization?->setup()['store']['allow_cash_handover'] ?? false))) {
+            return false;
+        }
+
+        if (in_array($report, [ReportType::GeneralLedger, ReportType::CashMovement], true) && ! collect($report->workspacePermissions())->every(fn (Permission $permission) => $this->hasPermission($permission))) {
             return false;
         }
 

@@ -22,6 +22,7 @@ enum ReportType: string
     case SupplierLedger = 'supplier_ledger';
     case SupplierDue = 'supplier_due';
     case GeneralLedger = 'general_ledger';
+    case CashMovement = 'cash_movement';
 
     /** @return list<Permission> */
     public function workspacePermissions(): array
@@ -38,7 +39,7 @@ enum ReportType: string
             self::BarcodeProducts => [Permission::Products],
             self::Categories => [Permission::Categories, Permission::Products],
             self::Customers, self::CustomerLedger, self::Suppliers, self::SupplierLedger => [Permission::Contacts],
-            self::GeneralLedger => [Permission::Sales, Permission::Resales, Permission::SalesReturns, Permission::Purchases, Permission::PurchaseReturns, Permission::Expenses],
+            self::GeneralLedger, self::CashMovement => [Permission::Sales, Permission::Resales, Permission::SalesReturns, Permission::Purchases, Permission::PurchaseReturns, Permission::Expenses],
         };
     }
 }
