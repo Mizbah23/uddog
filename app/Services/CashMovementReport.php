@@ -14,27 +14,41 @@ class CashMovementReport
     public function build(int $organizationId, int $branchId, ?string $dateFrom, ?string $dateTo): array
     {
         $events = [];
-        $add = function (string $date, string $reference, string $type, ?string $fromName, ?string $toName, int $cashIn, int $cashOut, int $transfer, ?string $recordedAt, ?string $notes, int $salesChange = 0) use (&$events): void {
-            $events[] = compact('date', 'reference', 'type', 'fromName', 'toName', 'cashIn', 'cashOut', 'transfer', 'recordedAt', 'notes', 'salesChange');
+        $add = function (string $date, string $reference, string $type, ?string $fromName, ?string $toName, int $cashIn, int $cashOut, int $transfer, ?string $recordedAt, ?string $notes, int $paidChange = 0) use (&$events): void {
+            $events[] = compact('date', 'reference', 'type', 'fromName', 'toName', 'cashIn', 'cashOut', 'transfer', 'recordedAt', 'notes', 'paidChange');
         };
 
         Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
-            ->whereIn('type', ['sale', 'resale', 'sale_return'])
+            ->where('type', 'sale_return')
+            ->whereIn('payment_method', ['cash', 'card', 'mobile_banking', 'bank_transfer'])
             ->when($dateTo, fn ($query) => $query->whereDate('document_date', '<=', $dateTo))
             ->with('creator:id,name')->get()->each(function (Document $document) use ($add): void {
-                $return = $document->type === 'sale_return';
-                $cashRefund = $return && $document->payment_method === 'cash';
-                $add($document->document_date->toDateString(), $document->number, $return ? 'Sale return' : 'Sale recorded',
-                    $return ? $document->creator?->name : null, $return ? null : $document->creator?->name,
-                    0, $cashRefund ? self::cents($document->total) : 0, 0,
-                    $document->created_at?->toDateTimeString(), $document->notes,
-                    ($return ? -1 : 1) * self::cents($document->total));
+                $add($document->document_date->toDateString(), $document->number, 'Customer refund',
+                    $document->creator?->name, null, 0,
+                    $document->payment_method === 'cash' ? self::cents($document->total) : 0, 0,
+                    $document->created_at?->toDateTimeString(), $document->notes, -self::cents($document->total));
             });
 
-        SalePayment::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('payment_method', 'cash')
+        SalePayment::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('payment_method', ['cash', 'card', 'mobile_banking', 'bank_transfer'])
             ->when($dateTo, fn ($query) => $query->whereDate('payment_date', '<=', $dateTo))
             ->with('document:id,number', 'receiver:id,name')->get()->each(function (SalePayment $payment) use ($add): void {
-                $add($payment->payment_date->toDateString(), $payment->document?->number ?? 'SAL-'.$payment->document_id, 'Sale collection', null, $payment->receiver?->name, self::cents($payment->amount), 0, 0, $payment->created_at?->toDateTimeString(), $payment->notes);
+                $amount = self::cents($payment->amount);
+                $add($payment->payment_date->toDateString(), $payment->document?->number ?? 'SAL-'.$payment->document_id, 'Customer payment', null, $payment->receiver?->name,
+                    $payment->payment_method === 'cash' ? $amount : 0, 0, 0,
+                    $payment->created_at?->toDateTimeString(), $payment->notes ?: ucfirst(str_replace('_', ' ', $payment->payment_method)), $amount);
+            });
+        Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('type', ['sale', 'resale'])->where('amount_paid', '>', 0)
+            ->whereDoesntHave('payments')
+            ->when($dateTo, fn ($query) => $query->whereDate('document_date', '<=', $dateTo))
+            ->with('creator:id,name')->get()->each(function (Document $document) use ($add): void {
+                $paid = max(0, self::cents($document->amount_paid) - self::cents($document->gold_exchange_value ?? 0));
+                if ($paid > 0) {
+                    $add($document->document_date->toDateString(), $document->number, 'Legacy customer payment', null,
+                        $document->creator?->name, 0, 0, 0, $document->created_at?->toDateTimeString(),
+                        'Paid amount on invoice without a payment record', $paid);
+                }
             });
         PurchasePayment::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('payment_method', 'cash')
             ->when($dateTo, fn ($query) => $query->whereDate('payment_date', '<=', $dateTo))
@@ -65,26 +79,25 @@ class CashMovementReport
             <=> [$right['date'], $right['recordedAt'] ?? '', $right['reference'], $right['type']]);
 
         $opening = 0;
-        $salesOpening = 0;
+        $paidOpening = 0;
         $balance = 0;
-        $salesBalance = 0;
-        $totals = ['sales_recorded' => 0, 'sales_returns' => 0, 'cash_collected' => 0, 'supplier_refunds' => 0, 'supplier_payments' => 0, 'cash_expenses' => 0, 'customer_refunds' => 0, 'staff_transfers' => 0, 'owner_withdrawals' => 0];
+        $paidBalance = 0;
+        $totals = ['customer_payments' => 0, 'cash_collected' => 0, 'supplier_refunds' => 0, 'supplier_payments' => 0, 'cash_expenses' => 0, 'customer_refunds' => 0, 'staff_transfers' => 0, 'owner_withdrawals' => 0];
         $rows = [];
         foreach ($events as $event) {
             $change = $event['cashIn'] - $event['cashOut'];
             $balance += $change;
-            $salesChange = $event['salesChange'] - ($event['type'] === 'Owner withdrawal' ? $event['cashOut'] : 0);
-            $salesBalance += $salesChange;
+            $paidChange = $event['paidChange'] - ($event['type'] === 'Owner withdrawal' ? $event['cashOut'] : 0);
+            $paidBalance += $paidChange;
             if ($dateFrom && $event['date'] < $dateFrom) {
                 $opening += $change;
-                $salesOpening += $salesChange;
+                $paidOpening += $paidChange;
 
                 continue;
             }
             $key = match ($event['type']) {
-                'Sale recorded' => 'sales_recorded',
-                'Sale return' => 'sales_returns',
-                'Sale collection' => 'cash_collected',
+                'Customer payment' => 'customer_payments',
+                'Legacy customer payment' => 'customer_payments',
                 'Supplier refund' => 'supplier_refunds',
                 'Supplier payment' => 'supplier_payments',
                 'Cash expense' => 'cash_expenses',
@@ -92,9 +105,9 @@ class CashMovementReport
                 'Staff transfer' => 'staff_transfers',
                 default => 'owner_withdrawals',
             };
-            $totals[$key] += $event['salesChange'] ? abs($event['salesChange']) : ($event['transfer'] ?: ($event['cashIn'] ?: $event['cashOut']));
-            if ($event['type'] === 'Sale return' && $event['cashOut']) {
-                $totals['customer_refunds'] += $event['cashOut'];
+            $totals[$key] += $event['paidChange'] ? abs($event['paidChange']) : ($event['transfer'] ?: ($event['cashIn'] ?: $event['cashOut']));
+            if ($event['type'] === 'Customer payment') {
+                $totals['cash_collected'] += $event['cashIn'];
             }
             $rows[] = [
                 'date' => $event['date'], 'recorded_at' => $event['recordedAt'] ?? '—',
@@ -102,15 +115,15 @@ class CashMovementReport
                 'from' => $event['fromName'] ?? '—', 'to' => $event['toName'] ?? '—',
                 'cash_in' => $event['cashIn'] / 100, 'cash_out' => $event['cashOut'] / 100,
                 'transfer' => $event['transfer'] / 100, 'store_balance' => $balance / 100,
-                'sales_change' => $salesChange / 100, 'sales_balance' => $salesBalance / 100,
+                'paid_change' => $paidChange / 100, 'paid_balance' => $paidBalance / 100,
             ];
         }
 
         return [
-            'columns' => ['Date', 'Recorded at', 'Reference', 'Movement', 'Notes', 'From', 'To', 'Cash in', 'Cash out', 'Transfer', 'Physical cash balance', 'Sales change', 'Withdrawable sales balance'],
+            'columns' => ['Date', 'Recorded at', 'Reference', 'Movement', 'Notes', 'From', 'To', 'Cash in', 'Cash out', 'Transfer', 'Physical cash balance', 'Paid change', 'Withdrawable paid balance'],
             'rows' => $rows,
-            'summary' => ['opening_balance' => $opening / 100, 'opening_sales_balance' => $salesOpening / 100, ...array_map(fn (int $amount) => $amount / 100, $totals), 'closing_balance' => $balance / 100, 'closing_sales_balance' => $salesBalance / 100],
-            'note' => 'Withdrawable sales balance follows full recorded sales less sale returns and owner withdrawals, regardless of payment method or collection status. Staff transfers only move that balance between users. Physical cash balance separately follows recorded cash receipts and payments and may differ from the amount eligible for withdrawal.',
+            'summary' => ['opening_balance' => $opening / 100, 'opening_paid_balance' => $paidOpening / 100, ...array_map(fn (int $amount) => $amount / 100, $totals), 'closing_balance' => $balance / 100, 'closing_paid_balance' => $paidBalance / 100],
+            'note' => 'Withdrawable balance includes recorded customer payments by cash, card, mobile banking and bank transfer, less refunded returns and owner withdrawals. Unpaid sales and gold exchanges are excluded. Staff transfers move the balance between users without changing the store total. Physical cash is shown separately.',
         ];
     }
 

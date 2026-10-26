@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\Document;
+use App\Models\Product;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Permission;
 use App\UserRole;
@@ -14,6 +16,54 @@ use Tests\TestCase;
 class ReportPermissionTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_stock_report_shows_purchases_sales_damage_good_stock_and_column_totals(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $eggs = Product::create([
+            'organization_id' => $owner->organization_id, 'name' => 'Eggs', 'unit' => 'pc',
+            'cost_price' => '2.50', 'sale_price' => '3.00', 'quantity_on_hand' => '6.000',
+            'reorder_level' => '0', 'active' => true,
+        ]);
+        $salt = Product::create([
+            'organization_id' => $owner->organization_id, 'name' => 'Salt', 'unit' => 'pc',
+            'cost_price' => '4.00', 'sale_price' => '5.00', 'quantity_on_hand' => '5.000',
+            'reorder_level' => '0', 'active' => true,
+        ]);
+        Product::create([
+            'organization_id' => $owner->organization_id, 'name' => 'Eggs retail', 'unit' => 'pc',
+            'cost_price' => '2.50', 'sale_price' => '3.50', 'quantity_on_hand' => '0',
+            'stock_source_product_id' => $eggs->id, 'stock_source_quantity' => '1.000',
+            'reorder_level' => '0', 'active' => true,
+        ]);
+        foreach ([[$eggs, 'purchase', '10.000'], [$eggs, 'sale', '-4.000'], [$eggs, 'sale_return', '1.000'], [$eggs, 'damage', '-1.000'], [$salt, 'purchase', '5.000']] as [$product, $type, $quantity]) {
+            StockMovement::create([
+                'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+                'product_id' => $product->id, 'type' => $type,
+                'quantity_change' => $quantity, 'balance_after' => '0.000',
+                'created_by' => $owner->id,
+            ]);
+        }
+
+        $response = $this->actingAs($owner)->getJson('/api/reports?report=stock&branch_id='.$branch->id)
+            ->assertOk()->assertJsonCount(2, 'rows')
+            ->assertJsonPath('rows.0.product', 'Eggs')
+            ->assertJsonPath('rows.0.purchases', 10)
+            ->assertJsonPath('rows.0.sales', 3)
+            ->assertJsonPath('rows.0.actual_stock', 7)
+            ->assertJsonPath('rows.0.damaged_stock', 1)
+            ->assertJsonPath('rows.0.good_stock', 6)
+            ->assertJsonPath('rows.0.rate', 2.5)
+            ->assertJsonPath('rows.0.total_value', 15)
+            ->assertJsonPath('totals.purchases', 15)
+            ->assertJsonPath('totals.sales', 3)
+            ->assertJsonPath('totals.actual_stock', 12)
+            ->assertJsonPath('totals.damaged_stock', 1)
+            ->assertJsonPath('totals.good_stock', 11)
+            ->assertJsonPath('totals.total_value', 35);
+        $this->assertSame('Rate', $response->json('columns.8'));
+    }
 
     public function test_customer_ledger_reference_opens_its_invoice_for_a_user_with_report_access(): void
     {

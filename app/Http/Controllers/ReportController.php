@@ -321,15 +321,42 @@ class ReportController extends Controller
 
     private function stock(int $organizationId, int $branchId, string $search): array
     {
+        $movements = StockMovement::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('type', ['purchase', 'purchase_return', 'sale', 'resale', 'sale_return', 'damage'])
+            ->selectRaw('product_id, type, SUM(quantity_change) as quantity_total')
+            ->groupBy('product_id', 'type')->get()->groupBy('product_id');
         $rows = Product::query()->where('organization_id', $organizationId)->whereNull('stock_source_product_id')->with('category:id,name')->with(['stocks' => fn ($query) => $query->where('branch_id', $branchId)])
             ->when($search, fn ($query) => $query->where(fn ($builder) => $builder->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%")->orWhere('barcode', 'like', "%{$search}%")))
-            ->orderBy('name')->get()->map(function (Product $product) {
-                $quantity = (float) ($product->stocks->first()?->quantity_on_hand ?? 0);
+            ->orderBy('name')->get()->values()->map(function (Product $product, int $index) use ($movements) {
+                $byType = $movements->get($product->id, collect())->pluck('quantity_total', 'type');
+                $purchases = (float) ($byType->get('purchase') ?? 0) + (float) ($byType->get('purchase_return') ?? 0);
+                $sales = -((float) ($byType->get('sale') ?? 0) + (float) ($byType->get('resale') ?? 0) + (float) ($byType->get('sale_return') ?? 0));
+                $damaged = -(float) ($byType->get('damage') ?? 0);
+                $good = (float) ($product->stocks->first()?->quantity_on_hand ?? 0);
+                $rate = (float) $product->cost_price;
 
-                return ['product' => $product->name, 'sku' => $product->sku ?? '—', 'barcode' => $product->barcode ?? '—', 'category' => $product->category?->name ?? 'Uncategorized', 'quantity' => $quantity, 'unit' => $product->unit, 'cost_value' => $quantity * (float) $product->cost_price, 'sale_value' => $quantity * (float) $product->sale_price, 'reorder_level' => (float) $product->reorder_level, 'status' => $quantity <= (float) $product->reorder_level ? 'Low stock' : 'In stock'];
+                return [
+                    'serial' => $index + 1, 'product' => $product->name, 'unit' => $product->unit,
+                    'purchases' => round($purchases, 3), 'sales' => round($sales, 3),
+                    'actual_stock' => round($good + $damaged, 3), 'damaged_stock' => round($damaged, 3),
+                    'good_stock' => round($good, 3), 'rate' => $rate,
+                    'total_value' => round($good * $rate, 2),
+                ];
             });
 
-        return $this->table(['Product', 'SKU', 'Barcode', 'Category', 'On hand', 'Unit', 'Cost value', 'Sale value', 'Reorder at', 'Status'], $rows, ['products' => $rows->count(), 'stock_value' => $rows->sum('cost_value'), 'low_stock' => $rows->where('status', 'Low stock')->count()]);
+        $totals = [
+            'purchases' => round($rows->sum('purchases'), 3), 'sales' => round($rows->sum('sales'), 3),
+            'actual_stock' => round($rows->sum('actual_stock'), 3),
+            'damaged_stock' => round($rows->sum('damaged_stock'), 3),
+            'good_stock' => round($rows->sum('good_stock'), 3),
+            'total_value' => round($rows->sum('total_value'), 2),
+        ];
+
+        return [
+            ...$this->table(['SL', 'Product', 'Unit', 'Total purchases', 'Total sales', 'Actual stock', 'Damaged stock', 'Good stock', 'Rate', 'Total value'], $rows, ['products' => $rows->count(), 'stock_value' => $totals['total_value']]),
+            'totals' => $totals,
+            'note' => 'Lifetime net purchases and sales are shown in base stock units. Actual stock includes recorded damage; good stock is the current branch quantity available for sale. Adjustments and branch transfers also affect current stock. Rate is the current average purchase cost. Quantity totals across unlike units are arithmetic totals.',
+        ];
     }
 
     private function adjustments(int $organizationId, int $branchId, ?string $dateFrom, ?string $dateTo): array

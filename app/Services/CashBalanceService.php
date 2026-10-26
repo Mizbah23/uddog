@@ -93,11 +93,25 @@ class CashBalanceService
     /** @return array<int, int> */
     private function customerPayments(int $organizationId, int $branchId, ?int $userId): array
     {
-        return SalePayment::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+        $totals = SalePayment::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
             ->whereIn('payment_method', ['cash', 'card', 'mobile_banking', 'bank_transfer'])
             ->when($userId, fn ($query) => $query->where('created_by', $userId))
             ->selectRaw('created_by, SUM(amount) as total')->groupBy('created_by')->get()
             ->mapWithKeys(fn ($item) => [(int) $item->created_by => self::cents($item->total)])->all();
+
+        // Imported invoices can carry amount_paid without a payment row. Count those
+        // only when no detailed payments exist, so current invoices are never counted twice.
+        Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('type', ['sale', 'resale'])->where('amount_paid', '>', 0)
+            ->whereDoesntHave('payments')
+            ->when($userId, fn ($query) => $query->where('created_by', $userId))
+            ->cursor()->each(function (Document $document) use (&$totals): void {
+                $id = (int) $document->created_by;
+                $paid = max(0, self::cents($document->amount_paid) - self::cents($document->gold_exchange_value ?? 0));
+                $totals[$id] = ($totals[$id] ?? 0) + $paid;
+            });
+
+        return $totals;
     }
 
     /** @return array<int, int> */
