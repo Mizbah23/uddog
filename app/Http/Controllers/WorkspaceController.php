@@ -29,6 +29,7 @@ use App\TenantContext;
 use App\UserRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -520,7 +521,8 @@ class WorkspaceController extends Controller
             }
 
             $hasHistory = Document::query()->where('contact_id', $contact)->exists()
-                || GoldJob::query()->where('contact_id', $contact)->exists();
+                || GoldJob::query()->where('contact_id', $contact)->exists()
+                || \App\Models\SupplierAdvance::query()->where('contact_id', $contact)->exists();
 
             if ($hasHistory || (float) $saved->opening_due !== 0.0 || (float) $saved->opening_payable !== 0.0) {
                 throw ValidationException::withMessages(['contact' => 'This customer or supplier has transactions or an opening balance and cannot be deleted.']);
@@ -592,6 +594,11 @@ class WorkspaceController extends Controller
             'items.*.unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
         ]);
         $setup = Auth::user()->organization()->firstOrFail()->setup();
+        if (Auth::user()->hasRole(UserRole::Manager, UserRole::Staff)
+            && in_array($data['type'], ['purchase', 'sale', 'resale'], true)
+            && Carbon::parse($data['document_date'])->toDateString() !== now('Asia/Dhaka')->toDateString()) {
+            throw ValidationException::withMessages(['document_date' => 'Managers and staff can record sales and purchases only for today.']);
+        }
         if ($setup['store']['allow_cash_handover'] && in_array($data['type'], ['sale_return', 'purchase_return'], true)
             && ! in_array($data['payment_method'] ?? null, ['cash', 'card', 'mobile_banking', 'bank_transfer', 'credit'], true)) {
             throw ValidationException::withMessages(['payment_method' => 'Choose how the return was refunded or settled.']);
@@ -624,6 +631,9 @@ class WorkspaceController extends Controller
         $expected = in_array($data['type'], ['purchase', 'purchase_return'], true) ? 'supplier' : 'customer';
         if (! in_array($contact->type, [$expected, 'both'], true)) {
             throw ValidationException::withMessages(['contact_id' => "Select a {$expected} contact."]);
+        }
+        if ($data['type'] === 'purchase_return' && \App\Models\SupplierAdvanceDelivery::query()->where('document_id', $data['purchase_id'])->exists()) {
+            throw ValidationException::withMessages(['purchase_id' => 'Reverse its supplier advance delivery before returning this purchase.']);
         }
 
         return response()->json($inventory->createDocument($data, Auth::id(), $organizationId, $branchId), 201);

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { installLocalization, translate } from './localization';
 import PosReceipt from './PosReceipt.vue';
 import StaffModule from './StaffModule.vue';
+import SupplierAdvances from './SupplierAdvances.vue';
 import ProductDamages from './ProductDamages.vue';
 import ProductPicker from './ProductPicker.vue';
 import ContactPicker from './ContactPicker.vue';
@@ -27,6 +28,7 @@ const workspaceNav = [
   { id: 'customers', label: 'Customers', icon: Users, abilities: ['contacts'] },
   { id: 'suppliers', label: 'Suppliers', icon: ShoppingBag, abilities: ['contacts'] },
   { id: 'purchase', label: 'Purchases', icon: ShoppingBag, abilities: ['purchases'] },
+  { id: 'supplier_advances', label: 'Supplier Advances', icon: Banknote, abilities: ['purchases'] },
   { id: 'pos', label: 'POS Sale', icon: ScanLine, abilities: ['pos_sale'] },
   { id: 'sale', label: 'Sales', icon: ShoppingCart, abilities: ['sales'] },
   { id: 'sale_return', label: 'Sales returns', icon: Undo2, abilities: ['sales_returns'] },
@@ -151,6 +153,7 @@ const reportKinds = [
   { id: 'suppliers', label: 'Suppliers', abilities: ['contacts'], description: 'Supplier purchases, returns, payments and payable balances.' },
   { id: 'supplier_ledger', label: 'Supplier ledger', abilities: ['contacts'], description: 'Supplier purchase, return and payment history.' },
   { id: 'supplier_due', label: 'Supplier due', abilities: ['purchases', 'purchase_returns'], description: 'Unpaid and partially paid supplier invoices.' },
+  { id: 'supplier_tt', label: 'TT Report', abilities: ['purchases'], description: 'Supplier advances, coded product deliveries and remaining balances.' },
 ];
 const reportVisuals = {
   sales: { icon: ReceiptText, tone: 'violet' },
@@ -172,6 +175,7 @@ const reportVisuals = {
   suppliers: { icon: ShoppingBag, tone: 'orange' },
   supplier_ledger: { icon: ClipboardList, tone: 'slate' },
   supplier_due: { icon: Banknote, tone: 'orange' },
+  supplier_tt: { icon: Banknote, tone: 'green' },
 };
 const reportKind = ref(isReportView.value && reportKinds.some(report => report.id === reportViewParams.get('report')) ? reportViewParams.get('report') : 'sales');
 const reportDetailOpen = ref(false);
@@ -392,7 +396,7 @@ const subscriptionDisplayStatus = computed(() => {
   if (!subscription.active && ['trial', 'active'].includes(subscription.status) && subscription.days_remaining < 0) return 'Expired';
   return statusLabel(subscription.status) || 'Not assigned';
 });
-function paymentLabel(method) { return translate(({ cash: 'Cash', card: 'Card', mobile_banking: 'Mobile banking', bank_transfer: 'Bank transfer', credit: 'Credit' })[method] || '—', language.value); }
+function paymentLabel(method) { return translate(({ cash: 'Cash', card: 'Card', mobile_banking: 'Mobile banking', bank_transfer: 'Bank transfer', credit: 'Credit', supplier_advance: 'Supplier advance' })[method] || '—', language.value); }
 function salePaymentTypeLabel(type) { return translate(({ full: 'Full payment', due: 'Due sale', installment: 'Installment sale' })[type] || '—', language.value); }
 function saleStatusLabel(document) {
   if (document.payment_type === 'due') return salePaymentTypeLabel('due');
@@ -423,7 +427,7 @@ const upcomingInstallments = computed(() => (overview.value.collection_alerts ||
 function hasAbility(...abilities) { return abilities.some(ability => session.value?.permissions?.abilities?.includes(ability)); }
 const canDeleteCatalogRecords = computed(() => ['superadmin', 'admin'].includes(session.value?.user?.role));
 const nav = computed(() => [
-  ...(session.value?.permissions?.use_workspace ? workspaceNav.filter(item => item.id.startsWith('gold_') ? session.value?.gold_store && item.abilities.some(ability => hasAbility(ability)) : item.id === 'reports' ? !!session.value?.permissions?.reports?.length : item.abilities.some(ability => hasAbility(ability))) : []),
+  ...(session.value?.permissions?.use_workspace ? workspaceNav.filter(item => item.id.startsWith('gold_') ? session.value?.gold_store && item.abilities.some(ability => hasAbility(ability)) : item.id === 'supplier_advances' ? session.value?.operational_setup?.purchases?.allow_supplier_advances && ['admin', 'superadmin'].includes(session.value?.user?.role) && hasAbility('purchases') : item.id === 'reports' ? !!session.value?.permissions?.reports?.length : item.abilities.some(ability => hasAbility(ability))) : []),
   ...managementNav.filter(item => session.value?.permissions?.[item.permission] && (session.value?.permissions?.use_workspace || session.value?.permissions?.manage_clients)),
 ]);
 const mobileTabs = computed(() => [
@@ -574,7 +578,7 @@ function selectReport(id) {
   nextTick(() => window.scrollTo(0, 0));
 }
 function canOpenReport(report) {
-  return session.value?.permissions?.reports?.includes(report.id);
+  return session.value?.permissions?.reports?.includes(report.id) && (report.id !== 'supplier_tt' || (session.value?.operational_setup?.purchases?.allow_supplier_advances && ['admin', 'superadmin'].includes(session.value?.user?.role)));
 }
 const availableReportKinds = computed(() => reportKinds.filter(canOpenReport));
 const filteredReportKinds = computed(() => {
@@ -594,7 +598,7 @@ function userReportCount(user) {
   return reportKinds.filter(report => (user.report_permissions === null || user.report_permissions?.includes(report.id)) && reportAllowedByPermissions(report, permissions)).length;
 }
 function canGrantReport(report) {
-  if (report.id === 'cash_movement' && !['admin', 'superadmin'].includes(userForm.value.role)) return false;
+  if (['cash_movement', 'supplier_tt'].includes(report.id) && !['admin', 'superadmin'].includes(userForm.value.role)) return false;
   return userForm.value.role === 'superadmin' || reportAllowedByPermissions(report, userForm.value.permissions);
 }
 const userAccessibleReports = computed(() => {
@@ -761,14 +765,14 @@ async function saveReportFile(format) {
   finally { reportSaveBusy.value = false; }
 }
 function reportSummaryLabel(key) { return key.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
-function reportSummaryValue(key, value) { return /sales|^purchases$|paid|payments|due|returns|refunds|expenses|transfers|withdrawals|profit|value|collected|debit|credit|balance|payable/i.test(key) ? money(value) : qty(value); }
+function reportSummaryValue(key, value) { return /sales|^purchases$|paid|payments|due|returns|refunds|expenses|transfers|withdrawals|profit|value|collected|debit|credit|balance|payable|advance|received/i.test(key) ? money(value) : qty(value); }
 function reportCell(column, value) {
   if (value === null || value === undefined || value === '') return '—';
   if (/^date$/i.test(column)) return date(String(value).slice(0, 10));
   if (column === 'Recorded at') return value === '—' ? value : `${date(String(value).slice(0, 10))} · ${time(String(value).replace(' ', 'T'))}`;
   if (column === 'Recorded time') return time(value);
   if (/count|units sold|^products$|^invoices$|^entries$|^total purchases$|^total sales$|^actual stock$|^damaged stock$|^good stock$/i.test(column)) return qty(value);
-  if (/total|paid|due|price|value|sales|purchases|returns|returned|payable|collected|debit|credit|balance|cash in|cash out|transfer|^rate$/i.test(column) && !/count/i.test(column)) return money(value);
+  if (/total|paid|due|price|value|sales|purchases|returns|returned|payable|collected|debit|credit|balance|cash in|cash out|transfer|advance sent|products received|^rate$/i.test(column) && !/count/i.test(column)) return money(value);
   if (/quantity|stock|change|reorder|units|on hand/i.test(column) && !/status/i.test(column)) return qty(value);
   return value;
 }
@@ -1853,6 +1857,7 @@ async function saveSystemSetup() {
   try {
     if (!systemSetup.value.store.units.length) throw new Error('Add at least one product unit.');
     systemSetup.value = await api('system-setup', { method: 'PUT', body: systemSetup.value });
+    session.value = await api('session');
     session.value.operational_setup = { sales: systemSetup.value.sales, purchases: systemSetup.value.purchases, store: systemSetup.value.store };
     if (session.value.user.organization) Object.assign(session.value.user.organization, systemSetup.value.company);
     if (session.value.impersonation?.organization) session.value.impersonation.organization.name = systemSetup.value.company.name;
@@ -2018,8 +2023,8 @@ async function stopSupportSession() {
               <label v-if="['stock', 'barcode_products', 'barcode_sales', 'product_ledger'].includes(reportKind)" class="field"><span>Product or barcode</span><input v-model="reportFilters.search" placeholder="Enter a name or barcode"></label>
               <label v-if="reportKind === 'product_lifecycle_ledger'" class="field"><span>{{ translate('Product', language) }}</span><select v-model="reportFilters.product_id" aria-label="Product"><option value="">{{ translate('Select a product', language) }}</option><option v-for="product in [...stockProducts].sort((a, b) => a.name.localeCompare(b.name))" :key="product.id" :value="product.id">{{ product.name }}{{ product.sku ? ` · ${product.sku}` : '' }}</option></select></label>
               <label v-if="reportKind === 'customer_ledger'" class="field"><span>Customer</span><select v-model="reportFilters.contact_id"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
-              <label v-if="reportKind === 'supplier_ledger'" class="field"><span>Supplier</span><select v-model="reportFilters.contact_id"><option value="">All suppliers</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select></label>
-              <label v-if="reportKind === 'general_ledger'" class="field"><span>Account</span><select v-model="reportFilters.account"><option value="">All accounts</option><option value="cash">1000 · Cash</option><option value="bank">1010 · Bank and digital payments</option><option value="unclassified">1090 · Unclassified payments</option><option value="receivables">1100 · Accounts receivable</option><option value="inventory">1200 · Inventory</option><option value="payables">2000 · Accounts payable</option><option value="owner_drawings">3000 · Owner drawings</option><option value="sales">4000 · Sales revenue</option><option value="sales_returns">4010 · Sales returns</option><option value="cost_of_goods">5000 · Cost of goods sold</option><option value="expenses">6000 · Operating expenses</option></select></label>
+              <label v-if="['supplier_ledger', 'supplier_tt'].includes(reportKind)" class="field"><span>Supplier</span><select v-model="reportFilters.contact_id"><option value="">All suppliers</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select></label>
+              <label v-if="reportKind === 'general_ledger'" class="field"><span>Account</span><select v-model="reportFilters.account"><option value="">All accounts</option><option value="cash">1000 · Cash</option><option value="bank">1010 · Bank and digital payments</option><option value="unclassified">1090 · Unclassified payments</option><option value="receivables">1100 · Accounts receivable</option><option value="inventory">1200 · Inventory</option><option value="supplier_advances">1300 · Supplier advances</option><option value="payables">2000 · Accounts payable</option><option value="owner_drawings">3000 · Owner drawings</option><option value="sales">4000 · Sales revenue</option><option value="sales_returns">4010 · Sales returns</option><option value="cost_of_goods">5000 · Cost of goods sold</option><option value="expenses">6000 · Operating expenses</option></select></label>
               <a class="btn-primary-app report-run-button" :class="{ 'report-run-disabled': reportKind === 'product_lifecycle_ledger' && !reportFilters.product_id }" :aria-disabled="reportKind === 'product_lifecycle_ledger' && !reportFilters.product_id" :href="reportKind === 'product_lifecycle_ledger' && !reportFilters.product_id ? undefined : reportViewUrl" target="_blank" rel="noopener"><Search :size="17" /> Run report</a>
             </div>
             <p class="report-description">{{ activeReport.description }} · {{ reportBranchName }}</p>
@@ -2322,6 +2327,7 @@ async function stopSupportSession() {
               <section class="panel setup-panel">
                 <div class="setup-panel-heading"><span class="setup-section-icon purchases"><ShoppingBag :size="20" /></span><div><h2>Purchases</h2><p>Supplier return preferences</p></div></div>
                 <label class="setup-option"><span><strong>Purchase returns</strong><small>Return purchased items to suppliers</small></span><input v-model="systemSetup.purchases.allow_purchase_returns" type="checkbox" role="switch"></label>
+                <label class="setup-option"><span><strong>Supplier Advances</strong><small>Track advance transfers and coded product deliveries with a TT Report.</small></span><input v-model="systemSetup.purchases.allow_supplier_advances" type="checkbox" role="switch"></label>
               </section>
               <section class="panel setup-panel">
                 <div class="setup-panel-heading"><span class="setup-section-icon store"><Boxes :size="20" /></span><div><h2>Store &amp; stock</h2><p>Inventory movement controls</p></div></div>
@@ -2405,6 +2411,7 @@ async function stopSupportSession() {
         </template>
         <section v-if="page === 'customers' && hasAbility('sales', 'resales') && customerDueContacts.length" class="panel collection-alert-panel customer-collection-panel"><div class="panel-heading"><div><h2>Collect customer dues</h2><p>Outstanding sales for the selected branch, highest balance first</p></div><span class="stock-pill pending">{{ customerDueContacts.length }} customers</span></div><div class="collection-alert-list"><article v-for="customer in customerDueContacts" :key="customer.id" class="collection-alert-row"><span class="collection-alert-icon overdue"><Users :size="17" /></span><div class="collection-alert-copy"><strong>{{ customer.name }}</strong><span>{{ customer.dueDocuments.length }} unpaid invoices · {{ customer.phone || 'No phone' }}</span></div><strong class="collection-alert-amount">{{ money(customer.branch_due) }}</strong><button class="btn-primary-app small" @click="openSalePayment(customer.dueDocuments[0])">Collect</button></article></div></section>
         <StaffModule v-if="page === 'staff'" :branch-id="activeBranchId" :request="api" :money="money" :date="date" :payment-label="paymentLabel" :language="language" @payroll-recorded="loadExpenses" />
+        <SupplierAdvances v-if="page === 'supplier_advances'" :branch-id="activeBranchId" :request="api" :money="money" :date="date" :language="language" :contacts="contacts" :documents="documents" @refresh="refresh" />
         <template v-if="page === 'expenses'">
           <div class="page-heading"><div><span class="eyebrow">CASH MANAGEMENT</span><h1>Expenses</h1><p>Record branch operating costs and include them in net profit reporting.</p></div><div class="company-toolbar-actions"><button class="btn-secondary-app" @click="selectReport('profit_loss')"><ChartNoAxesCombined :size="16" /> Net profit report</button><button class="btn-primary-app" @click="openExpense()"><Plus :size="18" /> Add expense</button></div></div>
           <form class="panel expense-filter-panel" @submit.prevent="applyExpenseFilters">
@@ -2494,7 +2501,7 @@ async function stopSupportSession() {
           <label v-if="documentForm.type === 'purchase_return'" class="field span-2"><span>Original purchase *</span><select v-model="documentForm.purchase_id" required @change="choosePurchase"><option value="" disabled>Select a purchase</option><option v-for="purchase in purchaseOptions" :key="purchase.id" :value="purchase.id">{{ purchase.number }} · {{ purchase.contact?.name }} · {{ date(purchase.document_date) }}</option></select></label>
           <label v-if="documentForm.type === 'sale_return'" class="field span-2"><span>Original sale *</span><select v-model="documentForm.sale_id" required @change="chooseSale"><option value="" disabled>Select a sale with returnable items</option><option v-for="sale in saleOptions" :key="sale.id" :value="sale.id">{{ sale.number }} · {{ sale.contact?.name }} · {{ date(sale.document_date) }}</option></select></label>
           <div class="field"><span>{{ relatedContactName === 'supplier' ? 'Supplier' : 'Customer' }} *</span><div class="field-action"><ContactPicker v-if="['purchase', 'sale'].includes(documentForm.type)" v-model="documentForm.contact_id" :contacts="availableContacts" :kind="relatedContactName" :language="language" /><select v-else v-model="documentForm.contact_id" required disabled :aria-label="relatedContactName"><option value="" disabled>Select a {{ relatedContactName }}</option><option v-for="contact in availableContacts" :key="contact.id" :value="contact.id">{{ contact.name }}</option></select><button v-if="!['purchase_return', 'sale_return'].includes(documentForm.type)" type="button" class="btn-secondary-app small create-inline" @click="createRelatedContact"><Plus :size="16" /> Create new {{ relatedContactName }}</button></div></div>
-          <label class="field"><span>Date *</span><input v-model="documentForm.document_date" type="date" required></label>
+          <label class="field"><span>Date *</span><input v-model="documentForm.document_date" type="date" :min="['manager', 'staff'].includes(session.user.role) && ['purchase', 'sale', 'resale'].includes(documentForm.type) ? today() : undefined" :max="['manager', 'staff'].includes(session.user.role) && ['purchase', 'sale', 'resale'].includes(documentForm.type) ? today() : undefined" required></label>
         </div>
         <div v-if="documentForm.type === 'purchase' && purchaseStep < 3" class="workflow-banner"><span class="workflow-step">{{ purchaseStep }}</span><div><strong>{{ purchaseStep === 1 ? 'Start with a supplier' : 'Next, choose a product' }}</strong><p>{{ purchaseStep === 1 ? 'Select a supplier or create a new one to continue.' : 'Select a product or create a new one. Your purchase draft will be kept.' }}</p></div></div>
         <div class="items-heading"><div><h3>Line items</h3><p>{{ documentForm.type === 'sale_return' ? 'Choose quantities to refund. Prices come from the original sale.' : 'Choose products and enter quantities.' }}</p></div></div>
