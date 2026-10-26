@@ -171,8 +171,16 @@ body {
 .topbar-date { font-size: 12px; }
 .topbar-new-sale { min-height: 36px; flex: none; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .topbar-pos-sale { min-height: 36px; flex: none; gap: 6px; padding: 0 12px; white-space: nowrap; }
-.install-app-button { min-height: 36px; flex: none; gap: 7px; padding: 0 12px; white-space: nowrap; border-color: #dcd5ff; color: #6556d8; }
+.install-app-button { min-height: 36px; flex: none; padding: 0 12px; white-space: nowrap; border-color: #dcd5ff; color: #6556d8; }
 .install-app-button:hover { background: #f3f0ff; border-color: #b7abff; }
+.install-app-floating { display: none; }
+@media (max-width: 800px) {
+  .install-app-button { display: none; }
+  .install-app-floating { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 19; display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; border: 0; border-radius: 999px; background: #bd1111; box-shadow: 0 10px 24px rgba(119, 15, 15, .27); color: #fff; font: inherit; font-size: 14px; font-weight: 750; white-space: nowrap; cursor: pointer; }
+  .install-app-floating:hover { background: #a70d0d; }
+  .install-app-floating:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .client-mobile-shell .install-app-floating { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
 @media (max-width: 1250px) { .topbar-new-sale, .topbar-pos-sale { width: 38px; justify-content: center; padding: 0; } .topbar-new-sale span, .topbar-pos-sale span { display: none; } }
 @media (max-width: 700px) { .topbar .company-chip { display: none; } }
 
