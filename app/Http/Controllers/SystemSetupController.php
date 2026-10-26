@@ -32,8 +32,9 @@ class SystemSetupController extends Controller
             'sales.allow_sales_returns' => ['required', 'boolean'],
             'sales.allow_resales' => ['required', 'boolean'],
             'sales.default_payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
-            'purchases' => ['required', 'array:allow_purchase_returns'],
+            'purchases' => ['required', 'array:allow_purchase_returns,allow_supplier_advances'],
             'purchases.allow_purchase_returns' => ['required', 'boolean'],
+            'purchases.allow_supplier_advances' => ['sometimes', 'boolean'],
             'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,allow_cash_handover,default_reorder_level,units,unit_conversions'],
             'store.allow_stock_adjustments' => ['required', 'boolean'],
             'store.allow_stock_transfers' => ['required', 'boolean'],
@@ -47,6 +48,7 @@ class SystemSetupController extends Controller
         ]);
         $data['store']['units'] = array_values(array_unique($data['store']['units'] ?? $organization->setup()['store']['units']));
         $data['store']['allow_cash_handover'] = (bool) ($data['store']['allow_cash_handover'] ?? $organization->setup()['store']['allow_cash_handover']);
+        $data['purchases']['allow_supplier_advances'] = (bool) ($data['purchases']['allow_supplier_advances'] ?? $organization->setup()['purchases']['allow_supplier_advances']);
         $existingConversions = $organization->setup()['store']['unit_conversions'];
         $submittedConversions = $data['store']['unit_conversions'] ?? $existingConversions;
         $data['store']['unit_conversions'] = [];

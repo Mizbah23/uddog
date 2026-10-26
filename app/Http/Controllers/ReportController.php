@@ -16,6 +16,7 @@ use App\ReportType;
 use App\Services\CashMovementReport;
 use App\Services\GeneralLedgerReport;
 use App\Services\ProductLifecycleLedgerReport;
+use App\Services\SupplierAdvanceReport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
-    public function index(Request $request, GeneralLedgerReport $generalLedger, ProductLifecycleLedgerReport $productLifecycleLedger, CashMovementReport $cashMovement): JsonResponse
+    public function index(Request $request, GeneralLedgerReport $generalLedger, ProductLifecycleLedgerReport $productLifecycleLedger, CashMovementReport $cashMovement, SupplierAdvanceReport $supplierAdvances): JsonResponse
     {
         $data = $request->validate([
             'report' => ['required', Rule::enum(ReportType::class)],
@@ -111,6 +112,7 @@ class ReportController extends Controller
             'suppliers' => $this->suppliers($organizationId, $branchId),
             'supplier_ledger' => $this->supplierLedger($documents, $data['contact_id'] ?? null),
             'supplier_due' => $this->supplierDue($documents),
+            'supplier_tt' => $supplierAdvances->build($organizationId, $branchId, $dateFrom, $dateTo, $data['contact_id'] ?? null),
             'general_ledger' => $generalLedger->build($organizationId, $branchId, $dateFrom, $dateTo, $data['account'] ?? null),
             'cash_movement' => $cashMovement->build($organizationId, $branchId, $dateFrom, $dateTo),
         };

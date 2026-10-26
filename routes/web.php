@@ -16,6 +16,7 @@ use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\SupplierAdvanceController;
 use App\Http\Controllers\SupportImpersonationController;
 use App\Http\Controllers\SystemSetupController;
 use App\Http\Controllers\SystemUpdateController;
@@ -81,6 +82,11 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::delete('documents/{document}/payments/{payment}', [WorkspaceController::class, 'deleteDocumentPayment'])->middleware('role:admin');
             Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,pos_sale,resales');
             Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');
+            Route::get('supplier-advances', [SupplierAdvanceController::class, 'index'])->middleware('permission:purchases');
+            Route::post('supplier-advances', [SupplierAdvanceController::class, 'store'])->middleware(['role:admin', 'permission:purchases']);
+            Route::post('supplier-advances/{advance}/deliveries', [SupplierAdvanceController::class, 'deliver'])->middleware(['role:admin', 'permission:purchases']);
+            Route::delete('supplier-advances/{advance}/deliveries/{delivery}', [SupplierAdvanceController::class, 'reverseDelivery'])->middleware(['role:admin', 'permission:purchases']);
+            Route::delete('supplier-advances/{advance}', [SupplierAdvanceController::class, 'destroy'])->middleware(['role:admin', 'permission:purchases']);
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');
             Route::middleware('permission:product_damages')->group(function () {
@@ -144,7 +150,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
 Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
 Route::view('/{workspacePage}', 'app')
-    ->where('workspacePage', 'dashboard|products|categories|branches|customers|suppliers|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
+    ->where('workspacePage', 'dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
     ->middleware(ResolveTenant::class);
 
 Route::get('/', function (Request $request) {
