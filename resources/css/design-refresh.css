@@ -176,8 +176,8 @@ body {
 .install-app-floating { display: none; }
 @media (max-width: 800px) {
   .install-app-button { display: none; }
-  .install-app-floating { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 19; display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; border: 0; border-radius: 999px; background: rgba(115, 103, 240, .84); box-shadow: 0 10px 24px rgba(87, 74, 194, .18); color: #fff; font: inherit; font-size: 14px; font-weight: 750; white-space: nowrap; cursor: pointer; }
-  .install-app-floating:hover { background: rgba(98, 85, 220, .94); }
+  .install-app-floating { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 19; display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; border: 0; border-radius: 999px; background: #766cde; box-shadow: 0 10px 24px #574ac240; color: #fff; font: inherit; font-size: 14px; font-weight: 750; white-space: nowrap; cursor: pointer; opacity: .85; }
+  .install-app-floating:hover { opacity: 1; }
   .install-app-floating:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
   .client-mobile-shell .install-app-floating { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
