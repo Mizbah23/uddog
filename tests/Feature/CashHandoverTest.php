@@ -189,4 +189,23 @@ class CashHandoverTest extends TestCase
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 40])
             ->assertCreated()->assertJsonPath('cash.on_hand', '0.00');
     }
+
+    public function test_legacy_invoice_paid_amount_is_counted_once_when_no_payment_rows_exist(): void
+    {
+        [$owner, , $branch] = $this->users();
+        $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Legacy customer', 'type' => 'customer']);
+        Document::create([
+            'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+            'number' => 'LEGACY-PAID', 'type' => 'sale', 'contact_id' => $customer->id,
+            'document_date' => today()->toDateString(), 'subtotal' => '100.00',
+            'total' => '100.00', 'amount_paid' => '60.00', 'created_by' => $owner->id,
+        ]);
+
+        $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('cash.on_hand', '60.00');
+        $this->getJson('/api/reports?report=cash_movement&branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('summary.customer_payments', 60)
+            ->assertJsonPath('summary.closing_paid_balance', 60);
+    }
 }

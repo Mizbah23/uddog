@@ -76,6 +76,12 @@
 .standard-report-table tbody tr:nth-child(even) { background: #fcfbff; }
 .standard-report-table tbody tr:hover { background: #f5f2ff; }
 .standard-report-table .standard-report-number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.standard-report-table .stock-report-total th, .standard-report-table .stock-report-total td { background: #eeebff; color: #292555; font-weight: 800; border-top: 2px solid #aaa0fa; }
+.stock-report-table th:nth-child(4), .stock-report-table td:nth-child(4), .stock-report-table th:nth-child(8), .stock-report-table td:nth-child(8) { background: #e7f7ef; }
+.stock-report-table th:nth-child(5), .stock-report-table td:nth-child(5), .stock-report-table th:nth-child(9), .stock-report-table td:nth-child(9) { background: #eaf5ff; }
+.stock-report-table th:nth-child(6), .stock-report-table td:nth-child(6), .stock-report-table th:nth-child(10), .stock-report-table td:nth-child(10) { background: #edf0ff; }
+.stock-report-table th:nth-child(7), .stock-report-table td:nth-child(7) { background: #fff0ed; }
+.stock-report-table .stock-report-total th, .stock-report-table .stock-report-total td { background: #e5e1ff; }
 .standard-report-table .ledger-source-action { white-space: nowrap; }
 .standard-report-table .report-reference-link { border: 0; padding: 0; background: transparent; color: #5a4fc2; font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .standard-report-table .report-reference-link:hover, .standard-report-table .report-reference-link:focus-visible { color: #382ca1; }
@@ -166,6 +172,6 @@
   .standard-report-table th, .standard-report-table td { padding: 7px 5px; }
   .standard-report-table thead { display: table-header-group; }
   .standard-report-table tr { break-inside: avoid; }
-  .standard-report-summary, .standard-report-table thead th { print-color-adjust: exact; }
+  .standard-report-summary, .standard-report-table thead th, .stock-report-table th, .stock-report-table td { print-color-adjust: exact; }
   .profit-loss-sheet-header, .profit-loss-table .profit-loss-groups th, .profit-loss-table .profit-loss-columns th, .profit-loss-total, .profit-loss-net { print-color-adjust: exact; }
 }

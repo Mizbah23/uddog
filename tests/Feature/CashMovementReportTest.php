@@ -39,20 +39,20 @@ class CashMovementReportTest extends TestCase
 
         $report = $this->actingAs($owner)->getJson('/api/reports?report=cash_movement&branch_id='.$branch->id.'&date_from=2026-10-02&date_to=2026-10-07')
             ->assertOk()->assertJsonPath('summary.opening_balance', 100)
-            ->assertJsonPath('summary.opening_sales_balance', 180)
+            ->assertJsonPath('summary.opening_paid_balance', 150)
             ->assertJsonPath('summary.cash_collected', 0)
-            ->assertJsonPath('summary.sales_returns', 15)
+            ->assertJsonPath('summary.customer_refunds', 15)
             ->assertJsonPath('summary.staff_transfers', 62)
             ->assertJsonPath('summary.owner_withdrawals', 25)
             ->assertJsonPath('summary.closing_balance', 37)
-            ->assertJsonPath('summary.closing_sales_balance', 140)
+            ->assertJsonPath('summary.closing_paid_balance', 110)
             ->assertJsonCount(6, 'rows');
         $transferRow = collect($report->json('rows'))->firstWhere('reference', 'CASH-'.$transfer->id);
         $this->assertSame(0, $transferRow['cash_in']);
         $this->assertSame(0, $transferRow['cash_out']);
         $this->assertSame(62, $transferRow['transfer']);
         $this->assertSame(62, $transferRow['store_balance']);
-        $this->assertSame(165, $transferRow['sales_balance']);
+        $this->assertSame(135, $transferRow['paid_balance']);
         $this->assertSame('End of shift', $transferRow['notes']);
 
         $ledger = $this->getJson('/api/reports?report=general_ledger&branch_id='.$branch->id.'&account=cash&date_from=2026-10-01&date_to=2026-10-07')
