@@ -16,7 +16,7 @@ import '../css/staff-module.css';
 import '../css/responsive.css';
 import '../css/client-mobile-dashboard.css';
 import '../css/profit-loss-report.css';
-import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowLeft, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, FileText, Image as ImageIcon, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2 } from '@lucide/vue';
+import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowLeft, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, FileText, Image as ImageIcon, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2, Download } from '@lucide/vue';
 
 const workspaceNav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, abilities: ['dashboard'] },
@@ -60,6 +60,29 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
+const installPrompt = ref(null);
+const isInstalledApp = ref(window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+const isIosBrowser = /iPad|iPhone|iPod/.test(window.navigator.userAgent);
+const canShowInstall = computed(() => !isInstalledApp.value && (Boolean(installPrompt.value) || isIosBrowser));
+function captureInstallPrompt(event) {
+  event.preventDefault();
+  installPrompt.value = event;
+}
+function handleAppInstalled() {
+  isInstalledApp.value = true;
+  installPrompt.value = null;
+}
+async function installApp() {
+  if (!installPrompt.value) {
+    notice.value = language.value === 'bn' ? 'ইনস্টল করতে ব্রাউজারের Share মেনু থেকে Add to Home Screen বেছে নিন।' : 'To install, choose Add to Home Screen from your browser’s Share menu.';
+    return;
+  }
+  const prompt = installPrompt.value;
+  installPrompt.value = null;
+  await prompt.prompt();
+  const choice = await prompt.userChoice;
+  if (choice.outcome !== 'accepted') notice.value = language.value === 'bn' ? 'অ্যাপ ইনস্টল বাতিল করা হয়েছে।' : 'App installation was cancelled.';
+}
 const initialPage = location.hash.slice(1) || location.pathname.split('/').filter(Boolean)[0];
 const page = ref(titles[initialPage] ? initialPage : 'dashboard');
 if (location.hash && titles[initialPage]) history.replaceState(null, '', `/${initialPage}${location.search}`);
@@ -522,9 +545,16 @@ async function applyLanguage() {
   localization?.apply();
 }
 onMounted(async () => {
+  window.addEventListener('beforeinstallprompt', captureInstallPrompt);
+  window.addEventListener('appinstalled', handleAppInstalled);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   await initialize();
   localization = installLocalization(() => language.value);
   await applyLanguage();
+});
+onUnmounted(() => {
+  window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
+  window.removeEventListener('appinstalled', handleAppInstalled);
 });
 watch(language, applyLanguage);
 window.addEventListener('popstate', () => {
@@ -939,6 +969,13 @@ const soleDefaultCustomerId = computed(() => {
   const [customer] = posCustomers.value;
   return posCustomers.value.length === 1 && customer.active && customer.is_default ? customer.id : '';
 });
+const soleSupplierId = computed(() => {
+  const activeSuppliers = contacts.value.filter(contact => contact.active && ['supplier', 'both'].includes(contact.type));
+  return activeSuppliers.length === 1 ? activeSuppliers[0].id : '';
+});
+watch([modal, soleSupplierId], ([currentModal, supplierId]) => {
+  if (currentModal === 'document' && documentForm.value.type === 'purchase' && !documentForm.value.contact_id && supplierId) documentForm.value.contact_id = supplierId;
+});
 watch([page, soleDefaultCustomerId], ([currentPage, customerId]) => {
   if (currentPage === 'pos' && customerId && !posForm.value.contact_id) posForm.value.contact_id = customerId;
 });
@@ -1169,7 +1206,7 @@ function openDocument(type = page.value) {
   if (!operationEnabled(type)) { error.value = 'This workflow is disabled in System Setup.'; return; }
   clearMessages();
   documentCreateContext.value = '';
-  documentForm.value = { type, contact_id: type === 'sale' ? soleDefaultCustomerId.value : '', purchase_id: '', sale_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: ['sale_return', 'purchase_return'].includes(type) ? 'credit' : (session.value?.operational_setup?.sales?.default_payment_method || 'cash'), down_payment: '0', interest_rate: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', gold_exchange_weight: '0', gold_exchange_purity: '22K', notes: '', items: [{ product_id: '', quantity: 1, unit_price: '0.00' }] };
+  documentForm.value = { type, contact_id: type === 'sale' ? soleDefaultCustomerId.value : type === 'purchase' ? soleSupplierId.value : '', purchase_id: '', sale_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: ['sale_return', 'purchase_return'].includes(type) ? 'credit' : (session.value?.operational_setup?.sales?.default_payment_method || 'cash'), down_payment: '0', interest_rate: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', gold_exchange_weight: '0', gold_exchange_purity: '22K', notes: '', items: [{ product_id: '', quantity: 1, unit_price: '0.00' }] };
   modal.value = 'document';
 }
 function openInvoice(document) {
@@ -1940,7 +1977,7 @@ async function stopSupportSession() {
     </aside>
     <div class="main-wrap">
       <div v-if="session.impersonation" class="support-mode-banner"><div><Eye :size="18" /><span><strong>{{ session.impersonation.impersonator.role === 'superadmin' ? 'Support mode' : 'View as user' }}</strong> — viewing {{ session.impersonation.organization.name }} as {{ session.impersonation.owner.name }}</span></div><button class="support-return-button" :disabled="busy" @click="stopSupportSession"><Undo2 :size="16" /> Return to {{ session.impersonation.impersonator.role === 'superadmin' ? 'superadmin' : 'owner' }}</button></div>
-<header class="topbar"><div class="topbar-left"><button class="icon-button mobile-menu" @click="mobileOpen = true"><Menu :size="22" /></button><span class="breadcrumb-home">{{ session.user.role === 'superadmin' && !session.impersonation ? 'Platform' : 'Workspace' }}</span><span class="breadcrumb-slash">/</span><strong>{{ titles[page] || 'Dashboard' }}</strong></div><div class="topbar-right"><button v-if="systemUpdateStatus?.total" type="button" class="btn-secondary-app" :disabled="busy" @click="modal = 'system_update'"><AlertTriangle :size="16" /> Update available</button><button v-if="session.permissions.use_workspace && hasAbility('sales')" type="button" class="btn-primary-app topbar-new-sale" :disabled="busy || !activeBranchId" aria-label="New Sale" title="New Sale" @click="openDocument('sale')"><Plus :size="17" /><span>New Sale</span></button><button v-if="session.permissions.use_workspace && hasAbility('pos_sale')" type="button" class="btn-secondary-app topbar-pos-sale" :disabled="busy || !activeBranchId" aria-label="POS Sale" title="POS Sale" @click="navigate('pos')"><ScanLine :size="17" /><span>POS Sale</span></button><span v-if="session.user.role !== 'superadmin' && session.user.organization?.name" class="company-chip" :title="`Company: ${session.user.organization.name}`"><Building2 :size="15" /><span>{{ session.user.organization.name }}</span></span><label class="language-switcher"><Languages :size="15" /><select v-model="language" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select></label><label v-if="session.permissions.use_workspace && branches.length" class="branch-switcher"><MapPin :size="15" /><select v-model="activeBranchId" :disabled="busy" aria-label="Active branch" @change="switchBranch"><option v-for="branch in branches.filter(item => item.active)" :key="branch.id" :value="branch.id">{{ branch.name }}</option></select></label><span class="topbar-date">{{ date(today()) }}</span><div class="profile-menu-wrap"><button class="avatar small profile-trigger" type="button" aria-label="Open profile menu" :aria-expanded="profileMenuOpen" @click="profileMenuOpen = !profileMenuOpen">{{ initial(session.user.name) }}</button><div v-if="profileMenuOpen" class="profile-menu"><button type="button" @click="openProfile"><UserCog :size="16" /> My profile</button><button type="button" @click="logout"><LogOut :size="16" /> Sign out</button></div></div></div></header>
+<header class="topbar"><div class="topbar-left"><button class="icon-button mobile-menu" @click="mobileOpen = true"><Menu :size="22" /></button><span class="breadcrumb-home">{{ session.user.role === 'superadmin' && !session.impersonation ? 'Platform' : 'Workspace' }}</span><span class="breadcrumb-slash">/</span><strong>{{ titles[page] || 'Dashboard' }}</strong></div><div class="topbar-right"><button v-if="systemUpdateStatus?.total" type="button" class="btn-secondary-app" :disabled="busy" @click="modal = 'system_update'"><AlertTriangle :size="16" /> Update available</button><button v-if="session.permissions.use_workspace && hasAbility('sales')" type="button" class="btn-primary-app topbar-new-sale" :disabled="busy || !activeBranchId" aria-label="New Sale" title="New Sale" @click="openDocument('sale')"><Plus :size="17" /><span>New Sale</span></button><button v-if="session.permissions.use_workspace && hasAbility('pos_sale')" type="button" class="btn-secondary-app topbar-pos-sale" :disabled="busy || !activeBranchId" aria-label="POS Sale" title="POS Sale" @click="navigate('pos')"><ScanLine :size="17" /><span>POS Sale</span></button><span v-if="session.user.role !== 'superadmin' && session.user.organization?.name" class="company-chip" :title="`Company: ${session.user.organization.name}`"><Building2 :size="15" /><span>{{ session.user.organization.name }}</span></span><button v-if="canShowInstall" type="button" class="btn-secondary-app install-app-button" @click="installApp"><Download :size="16" /><span>{{ language === 'bn' ? 'অ্যাপ ইনস্টল করুন' : 'Install App' }}</span></button><label class="language-switcher"><Languages :size="15" /><select v-model="language" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select></label><label v-if="session.permissions.use_workspace && branches.length" class="branch-switcher"><MapPin :size="15" /><select v-model="activeBranchId" :disabled="busy" aria-label="Active branch" @change="switchBranch"><option v-for="branch in branches.filter(item => item.active)" :key="branch.id" :value="branch.id">{{ branch.name }}</option></select></label><span class="topbar-date">{{ date(today()) }}</span><div class="profile-menu-wrap"><button class="avatar small profile-trigger" type="button" aria-label="Open profile menu" :aria-expanded="profileMenuOpen" @click="profileMenuOpen = !profileMenuOpen">{{ initial(session.user.name) }}</button><div v-if="profileMenuOpen" class="profile-menu"><button type="button" @click="openProfile"><UserCog :size="16" /> My profile</button><button type="button" @click="logout"><LogOut :size="16" /> Sign out</button></div></div></div></header>
       <main class="content" :class="{ 'dashboard-content': page === 'dashboard', 'compact-page-heading': page !== 'dashboard', 'customers-page': page === 'customers', 'suppliers-page': page === 'suppliers' }">
         <div v-if="session.user.role !== 'superadmin' && !session.impersonation && session.permissions.use_workspace && !isReportView" class="client-mobile-context">
           <label v-if="branches.length" class="mobile-branch-select"><MapPin :size="16" /><select v-model="activeBranchId" :disabled="busy" aria-label="Active branch" @change="switchBranch"><option v-for="branch in branches.filter(item => item.active)" :key="branch.id" :value="branch.id">{{ branch.name }}</option></select><ChevronDown :size="14" /></label>

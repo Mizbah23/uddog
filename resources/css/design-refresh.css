@@ -171,6 +171,8 @@ body {
 .topbar-date { font-size: 12px; }
 .topbar-new-sale { min-height: 36px; flex: none; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .topbar-pos-sale { min-height: 36px; flex: none; gap: 6px; padding: 0 12px; white-space: nowrap; }
+.install-app-button { min-height: 36px; flex: none; gap: 7px; padding: 0 12px; white-space: nowrap; border-color: #dcd5ff; color: #6556d8; }
+.install-app-button:hover { background: #f3f0ff; border-color: #b7abff; }
 @media (max-width: 1250px) { .topbar-new-sale, .topbar-pos-sale { width: 38px; justify-content: center; padding: 0; } .topbar-new-sale span, .topbar-pos-sale span { display: none; } }
 @media (max-width: 700px) { .topbar .company-chip { display: none; } }
 
