@@ -36,10 +36,11 @@ class SystemSetupController extends Controller
             'purchases.allow_purchase_returns' => ['required', 'boolean'],
             'supplier_advances' => ['sometimes', 'array:enabled'],
             'supplier_advances.enabled' => ['sometimes', 'boolean'],
-            'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,allow_cash_handover,default_reorder_level,units,unit_conversions'],
+            'store' => ['required', 'array:allow_stock_adjustments,allow_stock_transfers,allow_cash_handover,allow_staff_custom_dates,default_reorder_level,units,unit_conversions'],
             'store.allow_stock_adjustments' => ['required', 'boolean'],
             'store.allow_stock_transfers' => ['required', 'boolean'],
             'store.allow_cash_handover' => ['sometimes', 'boolean'],
+            'store.allow_staff_custom_dates' => ['sometimes', 'boolean'],
             'store.default_reorder_level' => ['required', 'numeric', 'min:0', 'max:999999', 'decimal:0,3'],
             'store.units' => ['sometimes', 'array', 'min:1', 'max:50'],
             'store.units.*' => ['required', 'string', 'max:30', 'distinct:strict'],
@@ -49,6 +50,7 @@ class SystemSetupController extends Controller
         ]);
         $data['store']['units'] = array_values(array_unique($data['store']['units'] ?? $organization->setup()['store']['units']));
         $data['store']['allow_cash_handover'] = (bool) ($data['store']['allow_cash_handover'] ?? $organization->setup()['store']['allow_cash_handover']);
+        $data['store']['allow_staff_custom_dates'] = (bool) ($data['store']['allow_staff_custom_dates'] ?? $organization->setup()['store']['allow_staff_custom_dates']);
         $data['supplier_advances']['enabled'] = (bool) ($data['supplier_advances']['enabled'] ?? $organization->setup()['supplier_advances']['enabled']);
         $existingConversions = $organization->setup()['store']['unit_conversions'];
         $submittedConversions = $data['store']['unit_conversions'] ?? $existingConversions;

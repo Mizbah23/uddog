@@ -594,6 +594,7 @@ class WorkspaceController extends Controller
         ]);
         $setup = Auth::user()->organization()->firstOrFail()->setup();
         if (Auth::user()->hasRole(UserRole::Manager, UserRole::Staff)
+            && ! $setup['store']['allow_staff_custom_dates']
             && in_array($data['type'], ['purchase', 'sale', 'resale'], true)
             && Carbon::parse($data['document_date'])->toDateString() !== now('Asia/Dhaka')->toDateString()) {
             throw ValidationException::withMessages(['document_date' => 'Managers and staff can record sales and purchases only for today.']);

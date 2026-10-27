@@ -199,6 +199,8 @@ const bangla = {
     'Cash': 'নগদ',
     'Cash handover and owner withdrawal': 'নগদ হস্তান্তর ও মালিকের উত্তোলন',
     "Track each user's cash, transfer the full balance to the owner, and record owner withdrawals.": 'প্রতিটি ব্যবহারকারীর নগদ হিসাব রাখুন, সম্পূর্ণ নগদ মালিককে দিন এবং মালিকের উত্তোলন নথিভুক্ত করুন।',
+    'Allow staff past and future dates': 'কর্মীদের আগের ও পরের তারিখে লেনদেনের অনুমতি',
+    'Managers and staff can choose any date for sales and purchases. Off: today only.': 'চালু থাকলে ম্যানেজার ও কর্মীরা বিক্রয় এবং ক্রয়ের জন্য যেকোনো তারিখ দিতে পারবেন। বন্ধ থাকলে শুধু আজকের তারিখ।',
     'Card': 'কার্ড',
     'Mobile banking': 'মোবাইল ব্যাংকিং',
     'Bank transfer': 'ব্যাংক ট্রান্সফার',
