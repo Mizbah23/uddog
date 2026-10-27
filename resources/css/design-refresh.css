@@ -638,6 +638,26 @@ body {
 @media (max-width: 560px) { .company-branches .detail-section-head { align-items: flex-start; flex-direction: column; } }
 .totals-box .total-interest { color: #7367f0; font-weight: 700; }
 .gold-exchange-card { margin-bottom: 18px; border-color: #e3ddff; background: linear-gradient(135deg, #fbfaff, #fff); }
+
+/* Keep the sign-in screen focused on the controls needed to access the app. */
+.auth-page { min-height: 100vh; min-height: 100svh; display: grid; grid-template-columns: 1fr; background: #f8f7fd; }
+.auth-panel { min-height: 100vh; min-height: 100svh; width: 100%; padding: clamp(24px, 6vh, 64px) 24px; }
+.auth-card { width: min(100%, 460px); padding: 36px; border: 1px solid #eceaf5; border-radius: 20px; background: #fff; box-shadow: 0 20px 60px rgba(48, 43, 95, .07); }
+.auth-language { margin: 0 0 42px auto; }
+.auth-page .auth-mobile-brand { display: flex; justify-content: center; gap: 14px; height: auto; padding: 0; margin: 0 0 38px; font-size: 28px; white-space: nowrap; }
+.auth-logo-mark { display: block; flex: none; width: 54px; height: 54px; }
+.auth-card .field { margin-bottom: 20px; }
+.auth-card .field input { height: 50px; font-size: 15px; }
+.btn-primary-app.full { height: 52px; margin-top: 8px; }
+@media (max-width: 560px) {
+  .auth-page { background: #fff; }
+  .auth-panel { padding: 24px 24px 36px; }
+  .auth-card { padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .auth-language { margin-bottom: clamp(38px, 7vh, 64px); }
+  .auth-page .auth-mobile-brand { margin-bottom: 38px; font-size: clamp(23px, 6vw, 28px); }
+  .auth-logo-mark { width: 50px; height: 50px; }
+  .auth-card .field { margin-bottom: 19px; }
+}
 .pos-gold-exchange { margin: 0 16px 14px; padding: 13px; border: 1px solid #e3ddff; border-radius: 10px; background: #fbfaff; }
 .pos-gold-exchange > strong { display: block; margin-bottom: 8px; color: #5145c8; font-size: 12px; }
 .pos-gold-exchange > small { color: #88869a; font-size: 10px; }
