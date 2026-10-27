@@ -15,10 +15,20 @@ return new class extends Migration
             return;
         }
 
+        if (DB::table('supplier_advances')->doesntExist() && DB::table('supplier_advance_deliveries')->doesntExist()) {
+            Schema::dropIfExists('supplier_advance_deliveries');
+            Schema::dropIfExists('supplier_advances');
+            (require __DIR__.'/2026_10_26_172539_create_supplier_advances_and_deliveries.php')->up();
+
+            return;
+        }
+
         if ($hasLegacyAdvances) {
-            Schema::table('supplier_advances', function (Blueprint $table): void {
-                $table->string('company_name')->default('Company not recorded');
-            });
+            if (! Schema::hasColumn('supplier_advances', 'company_name')) {
+                Schema::table('supplier_advances', function (Blueprint $table): void {
+                    $table->string('company_name')->default('Company not recorded');
+                });
+            }
             DB::table('supplier_advances')->select(['id', 'contact_id'])->orderBy('id')->chunkById(100, function ($advances): void {
                 foreach ($advances as $advance) {
                     $name = DB::table('contacts')->where('id', $advance->contact_id)->value('name');
@@ -26,20 +36,18 @@ return new class extends Migration
                 }
             });
 
-            Schema::table('supplier_advances', function (Blueprint $table): void {
-                foreach (['organization_id', 'branch_id', 'contact_id', 'created_by'] as $column) {
-                    $table->dropForeign([$column]);
-                }
-            });
+            $this->dropLegacyForeignKeys('supplier_advances', ['organization_id', 'branch_id', 'contact_id', 'created_by']);
             Schema::table('supplier_advances', function (Blueprint $table): void {
                 $table->dropColumn('contact_id');
             });
         }
 
         if ($hasLegacyDeliveries) {
-            Schema::table('supplier_advance_deliveries', function (Blueprint $table): void {
-                $table->string('product_details')->default('Recorded product delivery');
-            });
+            if (! Schema::hasColumn('supplier_advance_deliveries', 'product_details')) {
+                Schema::table('supplier_advance_deliveries', function (Blueprint $table): void {
+                    $table->string('product_details')->default('Recorded product delivery');
+                });
+            }
             DB::table('supplier_advance_deliveries')->select(['id', 'document_id'])->orderBy('id')->chunkById(100, function ($deliveries): void {
                 foreach ($deliveries as $delivery) {
                     $number = DB::table('documents')->where('id', $delivery->document_id)->value('number');
@@ -49,17 +57,21 @@ return new class extends Migration
                 }
             });
 
+            $this->dropLegacyForeignKeys('supplier_advance_deliveries', ['organization_id', 'branch_id', 'document_id', 'purchase_payment_id', 'created_by']);
             Schema::table('supplier_advance_deliveries', function (Blueprint $table): void {
-                foreach (['organization_id', 'branch_id', 'document_id', 'purchase_payment_id', 'created_by'] as $column) {
-                    $table->dropForeign([$column]);
-                }
-            });
-            Schema::table('supplier_advance_deliveries', function (Blueprint $table): void {
-                $table->dropUnique(['document_id']);
-                $table->dropUnique(['purchase_payment_id']);
                 $table->dropColumn(['document_id', 'purchase_payment_id']);
             });
         }
+    }
+
+    private function dropLegacyForeignKeys(string $tableName, array $columns): void
+    {
+        $foreignKeys = array_filter(Schema::getForeignKeys($tableName), fn (array $foreignKey): bool => count(array_intersect($foreignKey['columns'], $columns)) > 0);
+        Schema::table($tableName, function (Blueprint $table) use ($foreignKeys): void {
+            foreach ($foreignKeys as $foreignKey) {
+                $table->dropForeign($foreignKey['name']);
+            }
+        });
     }
 
     public function down(): void
