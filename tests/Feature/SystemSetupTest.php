@@ -74,6 +74,43 @@ class SystemSetupTest extends TestCase
         $this->assertFalse($other->fresh()->setup()['store']['allow_cash_handover']);
     }
 
+    public function test_staff_transaction_dates_are_today_only_until_the_owner_enables_custom_dates(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $manager = User::factory()->for($owner->organization)->create();
+        $staff = User::factory()->staff()->for($owner->organization)->create();
+        $otherCompany = Organization::factory()->create();
+        $supplier = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Supplier', 'type' => 'supplier']);
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Customer', 'type' => 'customer']);
+        $product = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Product', 'unit' => 'pc', 'cost_price' => 5, 'sale_price' => 10, 'quantity_on_hand' => 10, 'reorder_level' => 0]);
+        $pastDate = now('Asia/Dhaka')->subDays(2)->toDateString();
+        $futureDate = now('Asia/Dhaka')->addDays(2)->toDateString();
+        $purchase = ['type' => 'purchase', 'contact_id' => $supplier->id, 'document_date' => $pastDate, 'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 5]]];
+        $sale = ['type' => 'sale', 'contact_id' => $customer->id, 'document_date' => $futureDate, 'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 10]]];
+
+        $this->actingAs($owner)->getJson('/api/system-setup')->assertOk()->assertJsonPath('store.allow_staff_custom_dates', false);
+        $this->actingAs($manager)->postJson('/api/documents', $purchase)->assertUnprocessable()->assertJsonValidationErrors('document_date');
+        $this->actingAs($staff)->postJson('/api/documents', $sale)->assertUnprocessable()->assertJsonValidationErrors('document_date');
+        $this->assertDatabaseCount('documents', 0);
+
+        $settings = $owner->organization->setup();
+        $settings['store']['allow_staff_custom_dates'] = true;
+        $this->actingAs($owner)->putJson('/api/system-setup', $settings)
+            ->assertOk()->assertJsonPath('store.allow_staff_custom_dates', true);
+        $this->assertFalse($otherCompany->fresh()->setup()['store']['allow_staff_custom_dates']);
+        $this->actingAs($manager)->getJson('/api/session')->assertOk()->assertJsonPath('operational_setup.store.allow_staff_custom_dates', true);
+
+        $this->actingAs($manager)->postJson('/api/documents', $purchase)->assertCreated();
+        $this->actingAs($staff)->postJson('/api/documents', $sale)->assertCreated();
+        $this->assertDatabaseCount('documents', 2);
+
+        $settings['store']['allow_staff_custom_dates'] = false;
+        $this->actingAs($owner)->putJson('/api/system-setup', $settings)
+            ->assertOk()->assertJsonPath('store.allow_staff_custom_dates', false);
+        $this->actingAs($staff)->postJson('/api/documents', $sale)->assertUnprocessable()->assertJsonValidationErrors('document_date');
+        $this->assertDatabaseCount('documents', 2);
+    }
+
     public function test_duplicate_company_name_and_invalid_contact_details_are_rejected(): void
     {
         $owner = User::factory()->admin()->create();
