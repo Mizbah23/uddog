@@ -35,7 +35,7 @@ enum ReportType: string
             self::ProductLedger, self::EmployeeSales, self::BarcodeSales, self::CustomerDue => [Permission::Sales, Permission::Resales],
             self::ProductLifecycleLedger => [Permission::Purchases, Permission::Sales, Permission::Resales],
             self::SupplierDue => [Permission::Purchases, Permission::PurchaseReturns],
-            self::SupplierTT => [Permission::Purchases],
+            self::SupplierTT => [],
             self::Stock => [Permission::Inventory, Permission::Products],
             self::Adjustments => [Permission::StockAdjustments],
             self::BarcodeProducts => [Permission::Products],

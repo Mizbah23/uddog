@@ -50,7 +50,8 @@ class Organization extends Model
                 'allow_resales' => true,
                 'default_payment_method' => 'cash',
             ], $saved['sales'] ?? []),
-            'purchases' => array_replace(['allow_purchase_returns' => true, 'allow_supplier_advances' => false], $saved['purchases'] ?? []),
+            'purchases' => ['allow_purchase_returns' => $saved['purchases']['allow_purchase_returns'] ?? true],
+            'supplier_advances' => array_replace(['enabled' => false], $saved['supplier_advances'] ?? []),
             'store' => $store,
         ];
     }

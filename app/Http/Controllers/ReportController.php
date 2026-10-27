@@ -67,6 +67,9 @@ class ReportController extends Controller
         $dateFrom = $data['date_from'] ?? null;
         $dateTo = $data['date_to'] ?? null;
         $search = trim($data['search'] ?? '');
+        if ($report === ReportType::SupplierTT->value) {
+            return response()->json(['report' => $report, ...$supplierAdvances->build($organizationId, $branchId, $dateFrom, $dateTo, $search)]);
+        }
         $visibleTypes = collect();
         if (Auth::user()->hasPermission(Permission::Sales)) {
             $visibleTypes->push('sale');
@@ -112,7 +115,6 @@ class ReportController extends Controller
             'suppliers' => $this->suppliers($organizationId, $branchId),
             'supplier_ledger' => $this->supplierLedger($documents, $data['contact_id'] ?? null),
             'supplier_due' => $this->supplierDue($documents),
-            'supplier_tt' => $supplierAdvances->build($organizationId, $branchId, $dateFrom, $dateTo, $data['contact_id'] ?? null),
             'general_ledger' => $generalLedger->build($organizationId, $branchId, $dateFrom, $dateTo, $data['account'] ?? null),
             'cash_movement' => $cashMovement->build($organizationId, $branchId, $dateFrom, $dateTo),
         };

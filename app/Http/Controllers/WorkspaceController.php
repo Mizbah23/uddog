@@ -91,7 +91,7 @@ class WorkspaceController extends Controller
                 'active' => $organization?->canUseWorkspace() ?? false,
                 'access_paused' => $organization?->access_paused ?? false,
             ] : null,
-            'operational_setup' => $user?->organization ? collect($user->organization->setup())->only(['sales', 'purchases', 'store'])->all() : null,
+            'operational_setup' => $user?->organization ? collect($user->organization->setup())->only(['sales', 'purchases', 'supplier_advances', 'store'])->all() : null,
         ]);
     }
 
@@ -521,8 +521,7 @@ class WorkspaceController extends Controller
             }
 
             $hasHistory = Document::query()->where('contact_id', $contact)->exists()
-                || GoldJob::query()->where('contact_id', $contact)->exists()
-                || \App\Models\SupplierAdvance::query()->where('contact_id', $contact)->exists();
+                || GoldJob::query()->where('contact_id', $contact)->exists();
 
             if ($hasHistory || (float) $saved->opening_due !== 0.0 || (float) $saved->opening_payable !== 0.0) {
                 throw ValidationException::withMessages(['contact' => 'This customer or supplier has transactions or an opening balance and cannot be deleted.']);
@@ -631,9 +630,6 @@ class WorkspaceController extends Controller
         $expected = in_array($data['type'], ['purchase', 'purchase_return'], true) ? 'supplier' : 'customer';
         if (! in_array($contact->type, [$expected, 'both'], true)) {
             throw ValidationException::withMessages(['contact_id' => "Select a {$expected} contact."]);
-        }
-        if ($data['type'] === 'purchase_return' && \App\Models\SupplierAdvanceDelivery::query()->where('document_id', $data['purchase_id'])->exists()) {
-            throw ValidationException::withMessages(['purchase_id' => 'Reverse its supplier advance delivery before returning this purchase.']);
         }
 
         return response()->json($inventory->createDocument($data, Auth::id(), $organizationId, $branchId), 201);

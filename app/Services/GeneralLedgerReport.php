@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\CashMovement;
 use App\Models\Document;
 use App\Models\Expense;
-use App\Models\SupplierAdvance;
 
 class GeneralLedgerReport
 {
@@ -18,7 +17,6 @@ class GeneralLedgerReport
             'unclassified' => '1090 · Unclassified payments',
             'receivables' => '1100 · Accounts receivable',
             'inventory' => '1200 · Inventory',
-            'supplier_advances' => '1300 · Supplier advances',
             'payables' => '2000 · Accounts payable',
             'owner_drawings' => '3000 · Owner drawings',
             'sales' => '4000 · Sales revenue',
@@ -93,11 +91,7 @@ class GeneralLedgerReport
                         $amount = self::cents($payment->amount);
                         $paymentDate = $payment->payment_date->toDateString();
                         $paymentDetails = 'Payment · '.($document->contact?->name ?? 'Unknown contact');
-                        $moneyAccount = match ($payment->payment_method) {
-                            'gold_exchange' => 'inventory',
-                            'supplier_advance' => 'supplier_advances',
-                            default => self::moneyAccount($payment->payment_method),
-                        };
+                        $moneyAccount = $payment->payment_method === 'gold_exchange' ? 'inventory' : self::moneyAccount($payment->payment_method);
                         if ($document->type === 'purchase') {
                             $postDocument($paymentDate, $reference, $paymentDetails, 'payables', $amount, 0);
                             $postDocument($paymentDate, $reference, $paymentDetails, $moneyAccount, 0, $amount);
@@ -157,17 +151,6 @@ class GeneralLedgerReport
                         $post($date, $reference, 'Owner cash withdrawal', 'owner_drawings', $amount, 0, $movement->sender?->name, 'cash_movement', $movement->id, $record);
                         $post($date, $reference, 'Owner cash withdrawal', 'cash', 0, $amount, $movement->sender?->name, 'cash_movement', $movement->id, $record);
                     }
-                }
-            });
-
-        SupplierAdvance::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
-            ->orderBy('id')->chunkById(200, function ($advances) use ($post): void {
-                foreach ($advances as $advance) {
-                    $date = $advance->advance_date->toDateString();
-                    $amount = self::cents($advance->amount);
-                    $reference = $advance->reference ?: 'ADV-'.$advance->id;
-                    $post($date, $reference, 'Advance sent to supplier', 'supplier_advances', $amount, 0);
-                    $post($date, $reference, 'Advance sent to supplier', self::moneyAccount($advance->payment_method), 0, $amount);
                 }
             });
 

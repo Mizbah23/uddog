@@ -9,7 +9,6 @@ use App\Models\ProductDamage;
 use App\Models\ProductStock;
 use App\Models\StockCheckItem;
 use App\Models\StockMovement;
-use App\Models\SupplierAdvanceDelivery;
 use App\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,9 +23,6 @@ class DocumentDeletionService
             $purchase = $document->type === 'purchase';
             $relation = $purchase ? $document->purchasePayments() : $document->payments();
             $payment = $relation->lockForUpdate()->findOrFail($paymentId);
-            if ($purchase && SupplierAdvanceDelivery::query()->where('purchase_payment_id', $payment->id)->exists()) {
-                throw ValidationException::withMessages(['payment' => 'Reverse the linked supplier advance delivery before deleting this payment.']);
-            }
             $latestPayment = ($purchase ? $document->purchasePayments() : $document->payments())
                 ->reorder('id', 'desc')->first();
             if ($latestPayment?->id !== $payment->id) {
