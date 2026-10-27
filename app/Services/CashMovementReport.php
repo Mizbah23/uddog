@@ -7,7 +7,6 @@ use App\Models\Document;
 use App\Models\Expense;
 use App\Models\PurchasePayment;
 use App\Models\SalePayment;
-use App\Models\SupplierAdvance;
 
 class CashMovementReport
 {
@@ -56,13 +55,6 @@ class CashMovementReport
             ->with('document:id,number', 'receiver:id,name')->get()->each(function (PurchasePayment $payment) use ($add): void {
                 $add($payment->payment_date->toDateString(), $payment->document?->number ?? 'PUR-'.$payment->document_id, 'Supplier payment', $payment->receiver?->name, null, 0, self::cents($payment->amount), 0, $payment->created_at?->toDateTimeString(), $payment->notes);
             });
-        SupplierAdvance::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('payment_method', 'cash')
-            ->when($dateTo, fn ($query) => $query->whereDate('advance_date', '<=', $dateTo))
-            ->with('supplier:id,name')->get()->each(function (SupplierAdvance $advance) use ($add): void {
-                $add($advance->advance_date->toDateString(), $advance->reference ?: 'ADV-'.$advance->id,
-                    'Supplier advance', null, $advance->supplier?->name, 0, self::cents($advance->amount), 0,
-                    $advance->created_at?->toDateTimeString(), $advance->notes);
-            });
         Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
             ->where('type', 'purchase_return')->where('payment_method', 'cash')
             ->when($dateTo, fn ($query) => $query->whereDate('document_date', '<=', $dateTo))
@@ -90,7 +82,7 @@ class CashMovementReport
         $paidOpening = 0;
         $balance = 0;
         $paidBalance = 0;
-        $totals = ['customer_payments' => 0, 'cash_collected' => 0, 'supplier_refunds' => 0, 'supplier_payments' => 0, 'supplier_advances' => 0, 'cash_expenses' => 0, 'customer_refunds' => 0, 'staff_transfers' => 0, 'owner_withdrawals' => 0];
+        $totals = ['customer_payments' => 0, 'cash_collected' => 0, 'supplier_refunds' => 0, 'supplier_payments' => 0, 'cash_expenses' => 0, 'customer_refunds' => 0, 'staff_transfers' => 0, 'owner_withdrawals' => 0];
         $rows = [];
         foreach ($events as $event) {
             $change = $event['cashIn'] - $event['cashOut'];
@@ -108,7 +100,6 @@ class CashMovementReport
                 'Legacy customer payment' => 'customer_payments',
                 'Supplier refund' => 'supplier_refunds',
                 'Supplier payment' => 'supplier_payments',
-                'Supplier advance' => 'supplier_advances',
                 'Cash expense' => 'cash_expenses',
                 'Customer refund' => 'customer_refunds',
                 'Staff transfer' => 'staff_transfers',

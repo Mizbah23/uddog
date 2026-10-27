@@ -10,34 +10,33 @@ return new class extends Migration
     {
         Schema::create('supplier_advances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('branch_id')->constrained()->restrictOnDelete();
-            $table->foreignId('contact_id')->constrained('contacts')->restrictOnDelete();
+            $table->unsignedBigInteger('organization_id');
+            $table->unsignedBigInteger('branch_id');
+            $table->string('company_name', 255);
             $table->decimal('amount', 14, 2);
             $table->unsignedTinyInteger('expected_installments');
             $table->date('advance_date');
             $table->string('payment_method', 20);
             $table->string('reference', 100)->nullable();
             $table->text('notes')->nullable();
-            $table->foreignId('created_by')->constrained('users')->restrictOnDelete();
+            $table->unsignedBigInteger('created_by');
             $table->timestamps();
-            $table->index(['organization_id', 'branch_id', 'advance_date']);
+            $table->index(['organization_id', 'branch_id', 'advance_date'], 'sa_org_branch_date_idx');
         });
         Schema::create('supplier_advance_deliveries', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('branch_id')->constrained()->restrictOnDelete();
+            $table->unsignedBigInteger('organization_id');
+            $table->unsignedBigInteger('branch_id');
             $table->foreignId('supplier_advance_id')->constrained()->restrictOnDelete();
-            $table->foreignId('document_id')->unique()->constrained('documents')->restrictOnDelete();
-            $table->foreignId('purchase_payment_id')->unique()->constrained('purchase_payments')->restrictOnDelete();
             $table->string('installment_code', 100);
+            $table->string('product_details', 255);
             $table->decimal('amount', 14, 2);
             $table->date('delivery_date');
             $table->text('notes')->nullable();
-            $table->foreignId('created_by')->constrained('users')->restrictOnDelete();
+            $table->unsignedBigInteger('created_by');
             $table->timestamps();
-            $table->unique(['supplier_advance_id', 'installment_code']);
-            $table->index(['organization_id', 'branch_id', 'delivery_date']);
+            $table->unique(['supplier_advance_id', 'installment_code'], 'sa_delivery_code_unique');
+            $table->index(['organization_id', 'branch_id', 'delivery_date'], 'sa_delivery_scope_date_idx');
         });
     }
 

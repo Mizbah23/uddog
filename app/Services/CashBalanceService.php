@@ -7,7 +7,6 @@ use App\Models\Document;
 use App\Models\Expense;
 use App\Models\PurchasePayment;
 use App\Models\SalePayment;
-use App\Models\SupplierAdvance;
 use App\Models\User;
 use App\UserRole;
 
@@ -21,7 +20,6 @@ class CashBalanceService
         $receipts = $this->totals(SalePayment::query(), $organizationId, $branchId, $owner ? null : $userId);
         $supplierRefunds = $this->totals(Document::query()->where('type', 'purchase_return'), $organizationId, $branchId, $owner ? null : $userId, 'total');
         $supplierPayments = $this->totals(PurchasePayment::query(), $organizationId, $branchId, $owner ? null : $userId);
-        $supplierAdvances = $this->totals(SupplierAdvance::query(), $organizationId, $branchId, $owner ? null : $userId);
         $expenses = $this->totals(Expense::query(), $organizationId, $branchId, $owner ? null : $userId);
         $customerRefunds = $this->totals(Document::query()->where('type', 'sale_return'), $organizationId, $branchId, $owner ? null : $userId, 'total');
         $customerPayments = $this->customerPayments($organizationId, $branchId, $owner ? null : $userId);
@@ -45,7 +43,7 @@ class CashBalanceService
                 $physicalBalances[$id] = ($physicalBalances[$id] ?? 0) + $amount;
             }
         }
-        foreach ([$supplierPayments, $supplierAdvances, $expenses, $customerRefunds] as $payments) {
+        foreach ([$supplierPayments, $expenses, $customerRefunds] as $payments) {
             foreach ($payments as $id => $amount) {
                 $physicalBalances[$id] = ($physicalBalances[$id] ?? 0) - $amount;
             }
@@ -78,7 +76,7 @@ class CashBalanceService
             'customer_payments' => self::money(($customerPayments[$userId] ?? 0) - ($paidReturns[$userId] ?? 0)),
             'physical_cash' => self::money($physicalBalances[$userId] ?? 0),
             'cash_received' => self::money(($receipts[$userId] ?? 0) + ($supplierRefunds[$userId] ?? 0)),
-            'cash_paid' => self::money(($supplierPayments[$userId] ?? 0) + ($supplierAdvances[$userId] ?? 0) + ($expenses[$userId] ?? 0) + ($customerRefunds[$userId] ?? 0)),
+            'cash_paid' => self::money(($supplierPayments[$userId] ?? 0) + ($expenses[$userId] ?? 0) + ($customerRefunds[$userId] ?? 0)),
             'transferred' => self::money($transferred),
             'received_transfers' => self::money($received),
             'withdrawn' => self::money($withdrawn),

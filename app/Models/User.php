@@ -71,8 +71,10 @@ class User extends Authenticatable
 
     public function hasReportAccess(ReportType $report): bool
     {
-        if ($report === ReportType::SupplierTT && (! ($this->isSuperadmin() || $this->hasRole(UserRole::Admin)) || ! ($this->organization()->first()?->setup()['purchases']['allow_supplier_advances'] ?? false))) {
-            return false;
+        if ($report === ReportType::SupplierTT) {
+            return ($this->isSuperadmin() || $this->hasRole(UserRole::Admin))
+                && ($this->organization()->first()?->setup()['supplier_advances']['enabled'] ?? false)
+                && ($this->report_permissions === null || in_array($report->value, $this->report_permissions, true));
         }
         if ($report === ReportType::CashMovement && (! ($this->isSuperadmin() || $this->hasRole(UserRole::Admin)) || ! ($this->organization?->setup()['store']['allow_cash_handover'] ?? false))) {
             return false;
