@@ -1941,14 +1941,15 @@ async function stopSupportSession() {
 <template>
   <div v-if="loading" class="loading-screen"><div class="brand-mark" role="img" aria-label="Uddog-Soft logo"></div><span>Loading your workspace...</span></div>
   <div v-else-if="!session?.user" class="auth-page">
-    <div class="auth-art"><div class="auth-art-content"><div class="brand brand-light"><span class="brand-mark" aria-hidden="true"></span><span>Uddog-Soft</span></div><h1>Keep every product<br>and transaction<br>in focus.</h1><p>A simple workspace for buying, selling, returning, and tracking stock.</p><div class="auth-art-footer">INVENTORY MANAGEMENT, MADE CLEAR</div></div></div>
     <div class="auth-panel">
       <form class="auth-card" @submit.prevent="authMode === 'forgot' ? requestPasswordReset() : authMode === 'reset' ? resetPassword() : authenticate()">
         <label class="language-switcher auth-language"><Languages :size="15" /><select v-model="language" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select></label>
-        <div class="auth-mobile-brand brand"><span class="brand-mark" aria-hidden="true"></span><span>Uddog-Soft</span></div>
-        <span class="eyebrow">{{ session?.setup_required ? 'GET STARTED' : authMode === 'forgot' ? 'ACCOUNT RECOVERY' : authMode === 'reset' ? 'NEW PASSWORD' : 'WELCOME BACK' }}</span>
-        <h2>{{ session?.setup_required ? 'Create your workspace' : authMode === 'forgot' ? 'Forgot your password?' : authMode === 'reset' ? 'Choose a new password' : 'Sign in to your workspace' }}</h2>
-        <p class="muted">{{ session?.setup_required ? 'Set up the first administrator account.' : authMode === 'forgot' ? 'Enter your account email and we’ll send a reset link if it matches an account.' : authMode === 'reset' ? 'Set a new password for your account.' : 'Enter your account details to continue.' }}</p>
+        <div class="auth-mobile-brand brand"><img class="auth-logo-mark" :src="'/favicon.svg'" alt="" width="54" height="54"><span>Uddog-Soft</span></div>
+        <template v-if="session?.setup_required || authMode !== 'login'">
+          <span class="eyebrow">{{ session?.setup_required ? 'GET STARTED' : authMode === 'forgot' ? 'ACCOUNT RECOVERY' : 'NEW PASSWORD' }}</span>
+          <h2>{{ session?.setup_required ? 'Create your workspace' : authMode === 'forgot' ? 'Forgot your password?' : 'Choose a new password' }}</h2>
+          <p class="muted">{{ session?.setup_required ? 'Set up the first administrator account.' : authMode === 'forgot' ? 'Enter your account email and we’ll send a reset link if it matches an account.' : 'Set a new password for your account.' }}</p>
+        </template>
         <div v-if="error" class="alert-box error">{{ error }}</div>
         <div v-if="authMessage" class="alert-box success">{{ authMessage }}</div>
         <label v-if="session?.setup_required" class="field"><span>Full name</span><input v-model="authForm.name" required autocomplete="name" placeholder="Your name"></label>
