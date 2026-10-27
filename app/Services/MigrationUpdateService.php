@@ -7,6 +7,7 @@ use App\TenantContext;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class MigrationUpdateService
@@ -58,18 +59,24 @@ class MigrationUpdateService
             }
 
             $pending = $this->status($migrator, $context);
-            if ($pending['central'] > 0 && Artisan::call('migrate', [
-                '--database' => (string) config('tenancy.central_connection'),
-                '--force' => true,
-                '--no-interaction' => true,
-            ]) !== 0) {
-                throw new RuntimeException('Central database migration failed.');
+            if ($pending['central'] > 0) {
+                $exitCode = Artisan::call('migrate', [
+                    '--database' => (string) config('tenancy.central_connection'),
+                    '--force' => true,
+                    '--no-interaction' => true,
+                ]);
+                if ($exitCode !== 0) {
+                    throw $this->migrationFailure('Central', $exitCode);
+                }
             }
 
-            if ($pending['tenants'] > 0 && Artisan::call('tenants:migrate', [
-                '--no-interaction' => true,
-            ]) !== 0) {
-                throw new RuntimeException('Company database migration failed.');
+            if ($pending['tenants'] > 0) {
+                $exitCode = Artisan::call('tenants:migrate', [
+                    '--no-interaction' => true,
+                ]);
+                if ($exitCode !== 0) {
+                    throw $this->migrationFailure('Company', $exitCode);
+                }
             }
 
             return $this->status($migrator, $context);
@@ -92,5 +99,15 @@ class MigrationUpdateService
         $completed = $connection->table('migrations')->pluck('migration')->all();
 
         return count(array_diff($migrationNames, $completed));
+    }
+
+    private function migrationFailure(string $phase, int $exitCode): RuntimeException
+    {
+        $output = trim(Artisan::output());
+        Log::error("{$phase} database migration failed.", ['exit_code' => $exitCode, 'artisan_output' => $output]);
+        preg_match('/SQLSTATE\[[^]]+\]:\s*[^\r\n(]+/', $output, $match);
+        $reason = isset($match[0]) ? ' '.mb_strimwidth(trim($match[0]), 0, 240, '…') : '';
+
+        return new RuntimeException("{$phase} database migration failed.{$reason}");
     }
 }

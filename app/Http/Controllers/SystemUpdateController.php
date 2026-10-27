@@ -7,6 +7,7 @@ use App\TenantContext;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
 use Throwable;
 
 class SystemUpdateController extends Controller
@@ -26,7 +27,9 @@ class SystemUpdateController extends Controller
             report($exception);
 
             return response()->json([
-                'message' => 'The update could not finish. Check the server log or ask the server administrator to run the pending migrations.',
+                'message' => $exception instanceof RuntimeException
+                    ? $exception->getMessage()
+                    : 'The update could not finish. Check the newest server log entry for details.',
             ], 500);
         }
 
