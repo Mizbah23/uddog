@@ -16,6 +16,32 @@ class SupplierAdvanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_tt_report_combines_repeated_company_advances_without_merging_transactions(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $setup = $owner->organization->setup();
+        $setup['supplier_advances']['enabled'] = true;
+        $this->actingAs($owner)->putJson('/api/system-setup', $setup)->assertOk();
+
+        foreach ([[' ACI Salt ', 35000], ['aci salt', 15000]] as [$name, $amount]) {
+            $this->postJson('/api/supplier-advances', [
+                'company_name' => $name, 'amount' => $amount, 'expected_installments' => 3,
+                'advance_date' => now('Asia/Dhaka')->toDateString(), 'payment_method' => 'bank_transfer',
+            ])->assertCreated();
+        }
+
+        $this->assertDatabaseCount('supplier_advances', 2);
+        $this->getJson("/api/reports?report=supplier_tt&branch_id={$branch->id}")
+            ->assertOk()
+            ->assertJsonPath('summary.advance_sent', 50000)
+            ->assertJsonPath('company_totals.0.company', 'ACI Salt')
+            ->assertJsonPath('company_totals.0.advance_sent', 50000)
+            ->assertJsonPath('company_totals.0.closing_balance', 50000)
+            ->assertJsonCount(1, 'company_totals')
+            ->assertJsonCount(2, 'rows');
+    }
+
     public function test_owner_records_a_standalone_advance_and_coded_deliveries_without_changing_existing_transactions(): void
     {
         $owner = User::factory()->admin()->create();

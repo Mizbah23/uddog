@@ -28,25 +28,41 @@ class SupplierAdvanceReport
         $sent = 0;
         $received = 0;
         $rows = [];
+        $companyTotals = [];
         foreach ($events as $event) {
-            if ($from && $event['date'] < $from) {
-                $opening += $event['advance'] - $event['received'];
-
+            if ($to && $event['date'] > $to) {
                 continue;
             }
-            if ($to && $event['date'] > $to) {
+            $companyKey = mb_strtolower(trim($event['company']));
+            $companyTotals[$companyKey] ??= ['company' => trim($event['company']), 'opening_balance' => 0,
+                'advance_sent' => 0, 'products_received' => 0, 'closing_balance' => 0];
+            if ($from && $event['date'] < $from) {
+                $opening += $event['advance'] - $event['received'];
+                $companyTotals[$companyKey]['opening_balance'] += $event['advance'] - $event['received'];
+
                 continue;
             }
             $sent += $event['advance'];
             $received += $event['received'];
+            $companyTotals[$companyKey]['advance_sent'] += $event['advance'];
+            $companyTotals[$companyKey]['products_received'] += $event['received'];
             $rows[] = ['date' => $event['date'], 'company' => $event['company'], 'particular' => $event['type'],
                 'reference' => $event['reference'], 'installment_code' => $event['installment_code'], 'product_details' => $event['product_details'],
                 'advance' => round($event['advance'], 2), 'received' => round($event['received'], 2),
                 'balance' => round($opening + $sent - $received, 2)];
         }
+        foreach ($companyTotals as &$companyTotal) {
+            foreach (['opening_balance', 'advance_sent', 'products_received'] as $key) {
+                $companyTotal[$key] = round($companyTotal[$key], 2);
+            }
+            $companyTotal['closing_balance'] = round($companyTotal['opening_balance'] + $companyTotal['advance_sent'] - $companyTotal['products_received'], 2);
+        }
+        unset($companyTotal);
+        $companyTotals = array_values(array_filter($companyTotals, fn ($total) => $total['opening_balance'] != 0 || $total['advance_sent'] != 0 || $total['products_received'] != 0));
+        usort($companyTotals, fn ($a, $b) => strnatcasecmp($a['company'], $b['company']));
 
         return ['columns' => ['Date', 'Company', 'Particular', 'Reference', 'Installment code', 'Product details', 'Advance sent', 'Products received', 'Balance'],
-            'rows' => $rows, 'summary' => ['opening_balance' => round($opening, 2), 'advance_sent' => round($sent, 2),
+            'rows' => $rows, 'company_totals' => $companyTotals, 'summary' => ['opening_balance' => round($opening, 2), 'advance_sent' => round($sent, 2),
                 'products_received' => round($received, 2), 'closing_balance' => round($opening + $sent - $received, 2)],
             'note' => 'This TT register is independent of suppliers, purchase invoices, stock, payments, cash balances and the general ledger. Enter values here separately.'];
     }
