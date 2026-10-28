@@ -7,6 +7,7 @@ const props = defineProps({
   money: { type: Function, required: true },
   date: { type: Function, required: true },
   language: { type: String, required: true },
+  canViewReport: { type: Boolean, required: true },
 });
 const advances = ref([]);
 const error = ref('');
@@ -69,7 +70,7 @@ onMounted(load);
       <h1>{{ label('Supplier Advances', 'সরবরাহকারী অগ্রিম') }}</h1>
       <p>{{ label('Record advance transfers and coded product installments separately from purchases and stock.', 'ক্রয় ও মজুদ থেকে আলাদাভাবে অগ্রিম টাকা এবং কোডসহ পণ্যের কিস্তি নথিভুক্ত করুন।') }}</p>
     </div>
-    <a class="btn-secondary-app" href="/reports?report_view=1&report=supplier_tt" target="_blank" rel="noopener">{{ label('TT Report', 'টিটি প্রতিবেদন') }}</a>
+    <a v-if="canViewReport" class="btn-secondary-app" href="/reports?report_view=1&report=supplier_tt" target="_blank" rel="noopener">{{ label('TT Report', 'টিটি প্রতিবেদন') }}</a>
   </div>
   <div v-if="error" class="alert-box error">{{ error }}</div>
   <div class="category-stats">

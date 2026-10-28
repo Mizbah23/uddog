@@ -82,11 +82,11 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::delete('documents/{document}/payments/{payment}', [WorkspaceController::class, 'deleteDocumentPayment'])->middleware('role:admin');
             Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,pos_sale,resales');
             Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');
-            Route::get('supplier-advances', [SupplierAdvanceController::class, 'index'])->middleware('role:admin');
-            Route::post('supplier-advances', [SupplierAdvanceController::class, 'store'])->middleware('role:admin');
-            Route::post('supplier-advances/{advance}/deliveries', [SupplierAdvanceController::class, 'deliver'])->middleware('role:admin');
-            Route::delete('supplier-advances/{advance}/deliveries/{delivery}', [SupplierAdvanceController::class, 'reverseDelivery'])->middleware('role:admin');
-            Route::delete('supplier-advances/{advance}', [SupplierAdvanceController::class, 'destroy'])->middleware('role:admin');
+            Route::get('supplier-advances', [SupplierAdvanceController::class, 'index'])->middleware('permission:supplier_advances');
+            Route::post('supplier-advances', [SupplierAdvanceController::class, 'store'])->middleware('permission:supplier_advances');
+            Route::post('supplier-advances/{advance}/deliveries', [SupplierAdvanceController::class, 'deliver'])->middleware('permission:supplier_advances');
+            Route::delete('supplier-advances/{advance}/deliveries/{delivery}', [SupplierAdvanceController::class, 'reverseDelivery'])->middleware('permission:supplier_advances');
+            Route::delete('supplier-advances/{advance}', [SupplierAdvanceController::class, 'destroy'])->middleware('permission:supplier_advances');
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');
             Route::middleware('permission:product_damages')->group(function () {
