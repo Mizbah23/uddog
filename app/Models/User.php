@@ -62,6 +62,12 @@ class User extends Authenticatable
 
     public function hasPermission(Permission $permission): bool
     {
+        if ($permission === Permission::SupplierAdvances) {
+            return ($this->organization()->first()?->setup()['supplier_advances']['enabled'] ?? false)
+                && ($this->isSuperadmin() || $this->hasRole(UserRole::Admin)
+                    || in_array($permission->value, $this->permissions ?? [], true));
+        }
+
         if ($this->isSuperadmin() || ($this->hasRole(UserRole::Admin) && $this->permissions === null)) {
             return true;
         }
@@ -71,10 +77,8 @@ class User extends Authenticatable
 
     public function hasReportAccess(ReportType $report): bool
     {
-        if ($report === ReportType::SupplierTT) {
-            return ($this->isSuperadmin() || $this->hasRole(UserRole::Admin))
-                && ($this->organization()->first()?->setup()['supplier_advances']['enabled'] ?? false)
-                && ($this->report_permissions === null || in_array($report->value, $this->report_permissions, true));
+        if ($report === ReportType::SupplierTT && ! ($this->organization()->first()?->setup()['supplier_advances']['enabled'] ?? false)) {
+            return false;
         }
         if ($report === ReportType::CashMovement && (! ($this->isSuperadmin() || $this->hasRole(UserRole::Admin)) || ! ($this->organization?->setup()['store']['allow_cash_handover'] ?? false))) {
             return false;

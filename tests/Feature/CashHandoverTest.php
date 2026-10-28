@@ -69,23 +69,66 @@ class CashHandoverTest extends TestCase
         ]);
 
         $this->actingAs($staff)->getJson('/api/overview?branch_id='.$branch->id)
-            ->assertOk()->assertJsonPath('cash.on_hand', '150.00')
+            ->assertOk()->assertJsonPath('cash.on_hand', '140.00')
             ->assertJsonPath('cash.physical_cash', '70.00')
             ->assertJsonPath('cash.cash_received', '100.00')
             ->assertJsonPath('cash.cash_paid', '30.00');
         $this->postJson('/api/cash/transfer', ['branch_id' => $branch->id, 'notes' => 'End of shift'])
-            ->assertCreated()->assertJsonPath('movement.amount', '150.00')->assertJsonPath('cash.on_hand', '0.00');
+            ->assertCreated()->assertJsonPath('movement.amount', '140.00')->assertJsonPath('cash.on_hand', '0.00');
         $this->postJson('/api/cash/transfer', ['branch_id' => $branch->id])->assertUnprocessable();
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 1])->assertForbidden();
 
         $this->actingAs($owner)->getJson('/api/overview?branch_id='.$branch->id)
-            ->assertOk()->assertJsonPath('cash.on_hand', '150.00')
-            ->assertJsonPath('cash.received_transfers', '150.00')
+            ->assertOk()->assertJsonPath('cash.on_hand', '140.00')
+            ->assertJsonPath('cash.received_transfers', '140.00')
             ->assertJsonPath('cash.staff_balances.0.on_hand', '0.00');
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 151])->assertUnprocessable();
         $this->postJson('/api/cash/withdraw', ['branch_id' => $branch->id, 'amount' => 25, 'notes' => 'Bank deposit'])
-            ->assertCreated()->assertJsonPath('cash.on_hand', '125.00')
+            ->assertCreated()->assertJsonPath('cash.on_hand', '115.00')
             ->assertJsonPath('cash.withdrawn', '25.00');
+    }
+
+    public function test_staff_expenses_cannot_exceed_their_own_paid_balance(): void
+    {
+        [$owner, $staff, $branch] = $this->users();
+        $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
+        $otherStaff = User::factory()->staff()->for($owner->organization)->create();
+        $this->payment($otherStaff, $branch->id, '200.00');
+        $payload = [
+            'branch_id' => $branch->id, 'category' => 'Other', 'description' => 'Staff expense',
+            'amount' => '0.01', 'expense_date' => today()->toDateString(), 'payment_method' => 'cash',
+        ];
+
+        $this->actingAs($staff)->postJson('/api/expenses', $payload)->assertUnprocessable()->assertJsonValidationErrors('amount');
+        $this->assertDatabaseCount('expenses', 0);
+
+        $this->payment($staff, $branch->id, '100.00', 'card');
+        $this->postJson('/api/expenses', [...$payload, 'amount' => '60.00', 'payment_method' => 'card'])->assertCreated();
+        $this->getJson('/api/overview?branch_id='.$branch->id)->assertOk()->assertJsonPath('cash.paid_balance', '40.00');
+        $this->postJson('/api/expenses', [...$payload, 'amount' => '40.01'])->assertUnprocessable()->assertJsonValidationErrors('amount');
+        $this->postJson('/api/expenses', [...$payload, 'amount' => '40.00'])->assertCreated();
+        $this->getJson('/api/overview?branch_id='.$branch->id)->assertOk()->assertJsonPath('cash.paid_balance', '0.00');
+        $this->postJson('/api/cash/transfer', ['branch_id' => $branch->id])->assertUnprocessable();
+        $this->assertDatabaseCount('expenses', 2);
+    }
+
+    public function test_editing_a_staff_expense_cannot_make_the_staff_balance_negative(): void
+    {
+        [$owner, $staff, $branch] = $this->users();
+        $owner->organization->update(['system_settings' => ['store' => ['allow_cash_handover' => true]]]);
+        $this->payment($staff, $branch->id, '100.00');
+        $payload = [
+            'branch_id' => $branch->id, 'category' => 'Other', 'description' => 'Staff expense',
+            'amount' => '50.00', 'expense_date' => today()->toDateString(), 'payment_method' => 'cash',
+        ];
+        $expenseId = $this->actingAs($staff)->postJson('/api/expenses', $payload)->assertCreated()->json('id');
+
+        $this->actingAs($owner)->putJson('/api/expenses/'.$expenseId, [...$payload, 'amount' => '100.01'])
+            ->assertUnprocessable()->assertJsonValidationErrors('amount');
+        $this->assertDatabaseHas('expenses', ['id' => $expenseId, 'amount' => '50.00']);
+        $this->putJson('/api/expenses/'.$expenseId, [...$payload, 'amount' => '100.00'])->assertOk();
+        $this->actingAs($staff)->getJson('/api/overview?branch_id='.$branch->id)
+            ->assertOk()->assertJsonPath('cash.paid_balance', '0.00');
     }
 
     public function test_cash_actions_are_scoped_to_the_company_and_accessible_branch(): void

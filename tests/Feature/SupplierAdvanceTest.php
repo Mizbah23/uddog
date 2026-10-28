@@ -8,6 +8,7 @@ use App\Models\SupplierAdvance;
 use App\Models\SupplierAdvanceDelivery;
 use App\Models\User;
 use App\Permission;
+use App\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -78,7 +79,7 @@ class SupplierAdvanceTest extends TestCase
         $this->assertSame(0, SupplierAdvance::count());
     }
 
-    public function test_staff_cannot_access_advance_records_or_backdate_a_purchase_or_sale(): void
+    public function test_staff_without_supplier_advance_access_cannot_open_it_or_backdate_a_purchase_or_sale(): void
     {
         $owner = User::factory()->admin()->create();
         $setup = $owner->organization->setup();
@@ -102,5 +103,68 @@ class SupplierAdvanceTest extends TestCase
                 'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 10]],
             ])->assertUnprocessable()->assertJsonValidationErrors('document_date');
         }
+    }
+
+    public function test_owner_can_grant_supplier_advances_and_tt_report_to_staff_and_managers(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $setup = $owner->organization->setup();
+        $setup['supplier_advances']['enabled'] = true;
+        $this->actingAs($owner)->putJson('/api/system-setup', $setup)->assertOk();
+        $branch = $owner->organization->branches()->firstOrFail();
+
+        foreach ([UserRole::Staff, UserRole::Manager] as $index => $role) {
+            $user = User::factory()->for($owner->organization)->create([
+                'role' => $role, 'permissions' => [], 'report_permissions' => [],
+            ]);
+            $advance = [
+                'branch_id' => $branch->id, 'company_name' => 'Independent TT account',
+                'amount' => '100.00', 'expected_installments' => 3,
+                'advance_date' => now('Asia/Dhaka')->toDateString(), 'payment_method' => 'bank_transfer',
+            ];
+
+            $this->actingAs($user)->getJson('/api/supplier-advances')->assertForbidden();
+            $this->getJson('/api/reports?report=supplier_tt&branch_id='.$branch->id)->assertForbidden();
+
+            $userData = [
+                'name' => $user->name, 'email' => $user->email, 'role' => $role->value,
+                'organization_id' => $owner->organization_id, 'active' => true,
+                'permissions' => [Permission::SupplierAdvances->value], 'report_permissions' => [],
+            ];
+            $this->actingAs($owner)->putJson('/api/users/'.$user->id, $userData)->assertOk();
+
+            $this->actingAs($user->fresh())->getJson('/api/session')->assertOk()
+                ->assertJsonPath('permissions.abilities.0', Permission::SupplierAdvances->value)
+                ->assertJsonPath('permissions.reports', []);
+            $this->postJson('/api/supplier-advances', $advance)->assertCreated();
+            $this->getJson('/api/reports?report=supplier_tt&branch_id='.$branch->id)->assertForbidden();
+
+            $this->actingAs($owner)->putJson('/api/users/'.$user->id, [
+                ...$userData, 'report_permissions' => ['supplier_tt'],
+            ])->assertOk();
+            $this->actingAs($user->fresh())->getJson('/api/session')->assertOk()
+                ->assertJsonPath('permissions.reports.0', 'supplier_tt');
+            $this->getJson('/api/reports?report=supplier_tt&branch_id='.$branch->id)
+                ->assertOk()->assertJsonPath('summary.advance_sent', 100 * ($index + 1));
+
+            $this->actingAs($owner)->putJson('/api/users/'.$user->id, [
+                ...$userData, 'permissions' => [], 'report_permissions' => ['supplier_tt'],
+            ])->assertOk();
+            $this->actingAs($user->fresh())->getJson('/api/supplier-advances')->assertForbidden();
+            $this->getJson('/api/reports?report=supplier_tt&branch_id='.$branch->id)->assertForbidden();
+        }
+
+        $this->actingAs($owner)->putJson('/api/users/'.$user->id, [
+            ...$userData, 'permissions' => [Permission::SupplierAdvances->value], 'report_permissions' => ['supplier_tt'],
+        ])->assertOk();
+        $setup['supplier_advances']['enabled'] = false;
+        $this->actingAs($owner)->putJson('/api/system-setup', $setup)->assertOk();
+        $this->getJson('/api/supplier-advances')->assertForbidden();
+        $this->getJson('/api/reports?report=supplier_tt&branch_id='.$branch->id)->assertForbidden();
+        $this->actingAs($user->fresh())->getJson('/api/session')->assertOk()
+            ->assertJsonPath('permissions.abilities', [])
+            ->assertJsonPath('permissions.reports', []);
+        $this->getJson('/api/supplier-advances')->assertForbidden();
+        $this->getJson('/api/reports?report=supplier_tt&branch_id='.$branch->id)->assertForbidden();
     }
 }

@@ -3,13 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\BranchAccess;
+use App\Models\Branch;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
+use App\Models\Organization;
 use App\Models\PayrollItem;
+use App\Models\User;
+use App\Services\CashBalanceService;
+use App\TenantContext;
+use App\UserRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ExpenseController extends Controller
 {
@@ -59,8 +67,15 @@ class ExpenseController extends Controller
         $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, (int) $data['branch_id'])->id;
         unset($data['branch_id']);
 
-        $expense = Expense::create([...$data, 'organization_id' => $organizationId, 'branch_id' => $branchId, 'created_by' => Auth::id()]);
-        ExpenseCategory::query()->firstOrCreate(['organization_id' => $organizationId, 'name' => $data['category']]);
+        $expense = DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($data, $organizationId, $branchId): Expense {
+            Branch::query()->whereKey($branchId)->lockForUpdate()->firstOrFail();
+            $creator = Auth::user();
+            $this->ensurePaidBalance($organizationId, $branchId, $creator, $data['amount']);
+            $expense = Expense::create([...$data, 'organization_id' => $organizationId, 'branch_id' => $branchId, 'created_by' => $creator->id]);
+            ExpenseCategory::query()->firstOrCreate(['organization_id' => $organizationId, 'name' => $data['category']]);
+
+            return $expense;
+        });
 
         return response()->json($expense->load('creator:id,name'), 201);
     }
@@ -73,8 +88,15 @@ class ExpenseController extends Controller
         abort_if(PayrollItem::query()->where('expense_id', $record->id)->exists(), 422, 'Payroll expenses must be managed from the staff module.');
         $data = $this->validated($request, false);
         unset($data['branch_id']);
-        $record->update($data);
-        ExpenseCategory::query()->firstOrCreate(['organization_id' => $organizationId, 'name' => $data['category']]);
+        DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($record, $data, $organizationId): void {
+            Branch::query()->whereKey($record->branch_id)->lockForUpdate()->firstOrFail();
+            $creator = User::query()->where('organization_id', $organizationId)->find($record->created_by);
+            if ($creator) {
+                $this->ensurePaidBalance($organizationId, $record->branch_id, $creator, $data['amount'], $record->amount);
+            }
+            $record->update($data);
+            ExpenseCategory::query()->firstOrCreate(['organization_id' => $organizationId, 'name' => $data['category']]);
+        });
 
         return response()->json($record->fresh()->load('creator:id,name'));
     }
@@ -101,5 +123,21 @@ class ExpenseController extends Controller
             'payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
+    }
+
+    private function ensurePaidBalance(int $organizationId, int $branchId, User $creator, string|int|float $amount, string|int|float $previousAmount = 0): void
+    {
+        if (! $creator->hasRole(UserRole::Manager, UserRole::Staff)
+            || ! Organization::query()->findOrFail($organizationId)->setup()['store']['allow_cash_handover']) {
+            return;
+        }
+
+        $available = CashBalanceService::cents(app(CashBalanceService::class)->overview($organizationId, $branchId, $creator)['paid_balance'])
+            + CashBalanceService::cents($previousAmount);
+        if (CashBalanceService::cents($amount) > max(0, $available)) {
+            throw ValidationException::withMessages([
+                'amount' => 'Expense cannot exceed this user\'s available paid balance of ৳'.CashBalanceService::money(max(0, $available)).'.',
+            ]);
+        }
     }
 }

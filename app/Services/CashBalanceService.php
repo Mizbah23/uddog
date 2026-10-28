@@ -21,6 +21,10 @@ class CashBalanceService
         $supplierRefunds = $this->totals(Document::query()->where('type', 'purchase_return'), $organizationId, $branchId, $owner ? null : $userId, 'total');
         $supplierPayments = $this->totals(PurchasePayment::query(), $organizationId, $branchId, $owner ? null : $userId);
         $expenses = $this->totals(Expense::query(), $organizationId, $branchId, $owner ? null : $userId);
+        $staffExpenses = Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->when(! $owner, fn ($query) => $query->where('created_by', $userId))
+            ->selectRaw('created_by, SUM(amount) as total')->groupBy('created_by')->get()
+            ->mapWithKeys(fn ($item) => [(int) $item->created_by => self::cents($item->total)])->all();
         $customerRefunds = $this->totals(Document::query()->where('type', 'sale_return'), $organizationId, $branchId, $owner ? null : $userId, 'total');
         $customerPayments = $this->customerPayments($organizationId, $branchId, $owner ? null : $userId);
         $paidReturns = $this->documentTotals($organizationId, $branchId, $owner ? null : $userId);
@@ -36,6 +40,16 @@ class CashBalanceService
         $balances = $customerPayments;
         foreach ($paidReturns as $id => $amount) {
             $balances[$id] = ($balances[$id] ?? 0) - $amount;
+        }
+        $staffExpenseUserIds = $owner
+            ? User::query()->where('organization_id', $organizationId)
+                ->whereIn('role', [UserRole::Manager->value, UserRole::Staff->value])
+                ->whereIn('id', array_keys($staffExpenses))->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : ($viewer->hasRole(UserRole::Manager, UserRole::Staff) ? [$userId] : []);
+        foreach ($staffExpenses as $id => $amount) {
+            if (in_array($id, $staffExpenseUserIds, true)) {
+                $balances[$id] = ($balances[$id] ?? 0) - $amount;
+            }
         }
         $physicalBalances = [];
         foreach ([$receipts, $supplierRefunds] as $payments) {

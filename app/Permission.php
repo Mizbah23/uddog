@@ -10,6 +10,7 @@ enum Permission: string
     case Branches = 'branches';
     case Contacts = 'contacts';
     case Purchases = 'purchases';
+    case SupplierAdvances = 'supplier_advances';
     case Sales = 'sales';
     case PosSale = 'pos_sale';
     case SalesReturns = 'sales_returns';
@@ -33,6 +34,7 @@ enum Permission: string
             self::Branches => 'Branches',
             self::Contacts => 'Customers and suppliers',
             self::Purchases => 'Purchases',
+            self::SupplierAdvances => 'Supplier Advances',
             self::Sales => 'Sales',
             self::PosSale => 'POS Sale',
             self::SalesReturns => 'Sales returns',
