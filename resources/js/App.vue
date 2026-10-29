@@ -2005,7 +2005,7 @@ async function stopSupportSession() {
         </div>
         <div v-if="notice" class="toast-notice"><Check :size="17" />{{ notice }}</div>
         <button v-if="['customers', 'suppliers'].includes(page) && directoryDueOnly" type="button" class="directory-due-filter" @click="directoryDueOnly = false">Showing accounts with a due balance <span>{{ page === 'customers' ? 'Show all customers' : 'Show all suppliers' }} <ArrowUpRight :size="15" /></span></button>
-        <div v-if="error && ['products', 'customers', 'suppliers'].includes(page)" class="alert-box error" role="alert">{{ error }}</div>
+        <div v-if="error && ['products', 'customers', 'suppliers', 'sale', 'resale', 'purchase'].includes(page)" class="alert-box error" role="alert">{{ error }}</div>
         <template v-if="page === 'reports'">
           <section v-if="!reportDetailOpen && !isReportView" class="reports-catalog" aria-labelledby="reports-catalog-title">
             <div class="reports-catalog-header">
