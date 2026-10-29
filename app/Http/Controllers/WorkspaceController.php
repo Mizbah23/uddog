@@ -648,6 +648,7 @@ class WorkspaceController extends Controller
         $data = $request->validate([
             'correction_version' => ['required', 'string', 'size:64'],
             'reason' => ['required', 'string', 'max:1000'],
+            'recorded_amount_paid' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999999.99', 'decimal:0,2'],
             'discount' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'decimal:0,2'],
             'tax' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'decimal:0,2'],
             'items' => ['required', 'array', 'min:1', 'max:100'],

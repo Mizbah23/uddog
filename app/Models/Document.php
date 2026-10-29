@@ -58,7 +58,7 @@ class Document extends TenantModel
     public function correctionSnapshot(): array
     {
         return [
-            ...$this->only(['subtotal', 'discount', 'tax', 'total', 'amount_paid', 'payment_type', 'interest_amount', 'gold_exchange_value']),
+            ...$this->only(['subtotal', 'discount', 'tax', 'total', 'amount_paid', 'down_payment', 'payment_type', 'interest_amount', 'gold_exchange_value']),
             'items' => $this->items->sortBy('id')->values()->map(fn (DocumentItem $item): array => $item->only([
                 'id', 'product_id', 'stock_product_id', 'quantity', 'stock_quantity', 'unit_price',
                 'entered_unit', 'unit_conversion', 'entered_quantity', 'entered_unit_price', 'cost_price', 'line_total',
