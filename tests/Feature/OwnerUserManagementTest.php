@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Organization;
 use App\Models\SupportImpersonation;
 use App\Models\User;
+use App\Services\TenantProvisioner;
 use App\SubscriptionStatus;
 use App\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -209,6 +210,70 @@ class OwnerUserManagementTest extends TestCase
         $this->assertDatabaseMissing('users', ['id' => $staff->id]);
         app(TenantContext::class)->run($company, function () use ($staff): void {
             $this->assertFalse(DB::connection('tenant')->table('users')->where('id', $staff->id)->exists());
+        });
+    }
+
+    public function test_tenant_user_sync_and_migration_use_central_profile_details(): void
+    {
+        $company = Organization::factory()->create();
+        $owner = User::factory()->admin()->for($company)->create([
+            'name' => 'Habibur Rahman',
+            'email' => 'habibur@example.com',
+        ]);
+        $staff = User::factory()->staff()->for($company)->create([
+            'name' => 'Rahim Uddin',
+            'email' => 'rahim@example.com',
+        ]);
+        $database = 'uddog_test_'.Str::random(16);
+        $this->tenantFile = sys_get_temp_dir().DIRECTORY_SEPARATOR.$database.'.sqlite';
+        touch($this->tenantFile);
+        $company->forceFill(['tenant_database' => $database])->save();
+        config([
+            'tenancy.enabled' => true,
+            'tenancy.central_connection' => 'sqlite',
+            'tenancy.sqlite_directory' => sys_get_temp_dir(),
+        ]);
+
+        app(TenantContext::class)->run($company, function () use ($company, $owner, $staff): void {
+            $this->assertSame(0, Artisan::call('migrate', ['--database' => 'tenant', '--force' => true]));
+            DB::connection('tenant')->table('organizations')->insert(
+                (array) DB::connection('sqlite')->table('organizations')->find($company->id)
+            );
+            foreach ([$owner, $staff] as $user) {
+                DB::connection('tenant')->table('users')->insert([
+                    'id' => $user->id,
+                    'organization_id' => $company->id,
+                    'name' => 'User '.$user->id,
+                    'email' => "shadow-{$user->id}@tenant.invalid",
+                    'password' => bcrypt(Str::random(40)),
+                    'role' => $user->role->value,
+                    'active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        app(TenantProvisioner::class)->syncUserShadow($staff);
+        app(TenantContext::class)->run($company, function () use ($owner, $staff): void {
+            $shadow = DB::connection('tenant')->table('users')->find($staff->id);
+            $this->assertSame('Rahim Uddin', $shadow->name);
+            $this->assertSame('rahim@example.com', $shadow->email);
+            $this->assertNotSame($staff->password, $shadow->password);
+
+            DB::connection('tenant')->table('users')->where('id', $staff->id)->update([
+                'name' => 'User '.$staff->id,
+                'email' => "shadow-{$staff->id}@tenant.invalid",
+            ]);
+            $migration = require database_path('migrations/2026_10_29_050329_sync_tenant_user_names_and_emails.php');
+            $migration->up();
+
+            $repairedOwner = DB::connection('tenant')->table('users')->find($owner->id);
+            $this->assertSame('Habibur Rahman', $repairedOwner->name);
+            $this->assertSame('habibur@example.com', $repairedOwner->email);
+            $repaired = DB::connection('tenant')->table('users')->find($staff->id);
+            $this->assertSame('Rahim Uddin', $repaired->name);
+            $this->assertSame('rahim@example.com', $repaired->email);
         });
     }
 }
