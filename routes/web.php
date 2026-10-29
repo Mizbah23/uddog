@@ -79,6 +79,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::get('documents', [WorkspaceController::class, 'documents'])->middleware('permission:purchases,sales,sales_returns,resales,purchase_returns');
             Route::post('documents', [WorkspaceController::class, 'saveDocument'])->middleware('permission:purchases,sales,pos_sale,sales_returns,resales,purchase_returns');
             Route::delete('documents/{document}', [WorkspaceController::class, 'deleteDocument'])->middleware('role:admin');
+            Route::post('documents/{document}/corrections', [WorkspaceController::class, 'correctSale'])->middleware('role:admin');
             Route::delete('documents/{document}/payments/{payment}', [WorkspaceController::class, 'deleteDocumentPayment'])->middleware('role:admin');
             Route::post('documents/{document}/payments', [WorkspaceController::class, 'recordSalePayment'])->middleware('permission:sales,pos_sale,resales');
             Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');

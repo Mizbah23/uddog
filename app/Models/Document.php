@@ -8,7 +8,7 @@ class Document extends TenantModel
 {
     protected $fillable = ['organization_id', 'branch_id', 'number', 'type', 'sale_channel', 'contact_id', 'purchase_id', 'sale_id', 'document_date', 'subtotal', 'discount', 'tax', 'interest_rate', 'interest_amount', 'gold_exchange_weight', 'gold_exchange_purity', 'gold_exchange_rate', 'gold_exchange_value', 'total', 'payment_method', 'payment_type', 'amount_paid', 'down_payment', 'installment_count', 'installment_frequency', 'installment_start_date', 'first_installment_date', 'notes', 'created_by'];
 
-    protected $appends = ['stock_profit', 'total_profit', 'balance_due', 'payment_status'];
+    protected $appends = ['stock_profit', 'total_profit', 'balance_due', 'payment_status', 'correction_version'];
 
     protected function casts(): array
     {
@@ -48,6 +48,27 @@ class Document extends TenantModel
     public function purchasePayments(): HasMany
     {
         return $this->hasMany(PurchasePayment::class)->latest('payment_date')->latest('id');
+    }
+
+    public function corrections(): HasMany
+    {
+        return $this->hasMany(SaleCorrection::class)->orderByDesc('id');
+    }
+
+    public function correctionSnapshot(): array
+    {
+        return [
+            ...$this->only(['subtotal', 'discount', 'tax', 'total', 'amount_paid', 'payment_type', 'interest_amount', 'gold_exchange_value']),
+            'items' => $this->items->sortBy('id')->values()->map(fn (DocumentItem $item): array => $item->only([
+                'id', 'product_id', 'stock_product_id', 'quantity', 'stock_quantity', 'unit_price',
+                'entered_unit', 'unit_conversion', 'entered_quantity', 'entered_unit_price', 'cost_price', 'line_total',
+            ]))->all(),
+        ];
+    }
+
+    public function getCorrectionVersionAttribute(): string
+    {
+        return hash('sha256', json_encode($this->correctionSnapshot(), JSON_THROW_ON_ERROR));
     }
 
     public function purchase()

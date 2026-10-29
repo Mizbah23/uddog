@@ -89,13 +89,19 @@ class TenantOperationsTest extends TestCase
             'document_date' => '2026-10-10',
             'items' => [['product_id' => $product['id'], 'quantity' => 5, 'unit_price' => 10]],
         ])->assertCreated();
-        $this->postJson('http://'.$company->id.'.test/api/documents', [
+        $sale = $this->postJson('http://'.$company->id.'.test/api/documents', [
             'type' => 'sale',
             'contact_id' => $customer['id'],
             'document_date' => '2026-10-10',
             'payment_type' => 'due',
             'items' => [['product_id' => $product['id'], 'quantity' => 1, 'unit_price' => 20]],
-        ])->assertCreated();
+        ])->assertCreated()->json();
+        $this->postJson('http://'.$company->id.'.test/api/documents/'.$sale['id'].'/corrections', [
+            'correction_version' => $sale['correction_version'],
+            'reason' => 'Correct tenant sale quantity', 'discount' => 0, 'tax' => 0,
+            'items' => [['id' => $sale['items'][0]['id'], 'quantity' => 2, 'unit_price' => 20]],
+        ])->assertOk()->assertJsonPath('total', '40.00');
+        $this->assertSame(0, DB::connection('sqlite')->table('sale_corrections')->count());
 
         $this->assertSame(0, DB::connection('sqlite')->table('contacts')->where('organization_id', $company->id)->count());
         $this->assertSame(0, DB::connection('sqlite')->table('products')->where('organization_id', $company->id)->count());
@@ -104,6 +110,8 @@ class TenantOperationsTest extends TestCase
             $this->assertSame(2, DB::connection('tenant')->table('contacts')->where('organization_id', $company->id)->count());
             $this->assertSame(1, DB::connection('tenant')->table('products')->where('organization_id', $company->id)->count());
             $this->assertSame(2, DB::connection('tenant')->table('documents')->where('organization_id', $company->id)->count());
+            $this->assertSame(1, DB::connection('tenant')->table('sale_corrections')->where('organization_id', $company->id)->count());
+            $this->assertSame(3, (int) DB::connection('tenant')->table('product_stocks')->value('quantity_on_hand'));
         });
     }
 }

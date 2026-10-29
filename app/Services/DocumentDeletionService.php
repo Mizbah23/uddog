@@ -73,6 +73,9 @@ class DocumentDeletionService
             if (! in_array($document->type, ['purchase', 'sale', 'resale'], true)) {
                 throw ValidationException::withMessages(['document' => 'Only purchases and sales can be deleted here.']);
             }
+            if ($document->corrections()->exists()) {
+                throw ValidationException::withMessages(['document' => 'This sale has correction history and cannot be deleted. Use another correction to fix it.']);
+            }
             if (Document::query()->where('organization_id', $organizationId)
                 ->where(fn ($query) => $query->where('purchase_id', $document->id)->orWhere('sale_id', $document->id))->exists()) {
                 throw ValidationException::withMessages(['document' => 'Delete related returns before deleting this transaction.']);
