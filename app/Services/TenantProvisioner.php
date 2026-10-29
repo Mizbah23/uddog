@@ -172,8 +172,9 @@ class TenantProvisioner
                 ['id' => $user->id],
                 [
                     'organization_id' => $user->organization_id === $organization->id ? $organization->id : null,
-                    'name' => 'User '.$user->id,
-                    'email' => 'shadow-'.$user->id.'@tenant.invalid',
+                    'name' => $user->name,
+                    'email' => $user->organization_id === $organization->id
+                        ? $user->email : 'shadow-'.$user->id.'@tenant.invalid',
                     'password' => Hash::make(Str::random(40)),
                     'role' => $user->role->value,
                     'active' => $user->active,
@@ -264,8 +265,9 @@ class TenantProvisioner
             $tenant->table('users')->insert([
                 'id' => $user->id,
                 'organization_id' => $user->organization_id === $organization->id ? $organization->id : null,
-                'name' => 'User '.$user->id,
-                'email' => 'shadow-'.$user->id.'@tenant.invalid',
+                'name' => $user->name,
+                'email' => $user->organization_id === $organization->id
+                    ? $user->email : 'shadow-'.$user->id.'@tenant.invalid',
                 'password' => Hash::make(Str::random(40)),
                 'role' => $user->role->value,
                 'active' => $user->active,
