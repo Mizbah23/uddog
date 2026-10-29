@@ -18,7 +18,6 @@ const t = text => translate(text, props.language);
         </template>
       </div>
       <small>{{ t('Discount') }}: {{ money(correction.before.discount) }} → {{ money(correction.after.discount) }} · {{ t('Tax') }}: {{ money(correction.before.tax) }} → {{ money(correction.after.tax) }}</small>
-      <div v-if="Number(correction.before.amount_paid) !== Number(correction.after.amount_paid)">{{ t('Recorded paid amount') }}: {{ money(correction.before.amount_paid) }} → {{ money(correction.after.amount_paid) }}</div>
       <div><b>{{ t('Total') }}: {{ money(correction.before.total) }} → {{ money(correction.after.total) }}</b></div>
     </article>
   </section>
