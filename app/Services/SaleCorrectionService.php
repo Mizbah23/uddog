@@ -99,6 +99,15 @@ class SaleCorrectionService
             if ($discount > $subtotal || $total > self::MAX_SCALED) {
                 $this->reject('Discount cannot exceed subtotal and the total must be within the supported range.');
             }
+            if (array_key_exists('recorded_amount_paid', $data)) {
+                $recordedPaid = $this->scaled($data['recorded_amount_paid'], 2);
+                $originalPaid = $this->scaled($sale->amount_paid, 2);
+                if ($originalPaid <= 0 || $sale->payments()->exists() || $recordedPaid > $originalPaid) {
+                    $this->reject('Only a recorded paid total without individual payment entries can be reduced here. Manage individual payments from the invoice.');
+                }
+                $sale->amount_paid = $this->decimal($recordedPaid, 2);
+                $sale->down_payment = $this->decimal(min($this->scaled($sale->down_payment, 2), $recordedPaid), 2);
+            }
             if ($this->scaled($sale->amount_paid, 2) > $total) {
                 $this->reject('Payments exceed the corrected total. Remove the excess related payments before correcting this sale.');
             }
