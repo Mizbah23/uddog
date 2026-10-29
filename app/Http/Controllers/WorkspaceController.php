@@ -24,6 +24,7 @@ use App\ReportType;
 use App\Services\CashBalanceService;
 use App\Services\DocumentDeletionService;
 use App\Services\InventoryService;
+use App\Services\SaleCorrectionService;
 use App\SubscriptionStatus;
 use App\TenantContext;
 use App\UserRole;
@@ -555,7 +556,7 @@ class WorkspaceController extends Controller
             ->where('organization_id', $this->organizationId())
             ->where('branch_id', $this->branchId($request, $this->organizationId()))
             ->whereIn('type', $readableTypes)
-            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total')
+            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total', 'corrections.creator:id,name')
             ->when($type, fn ($q) => $q->where('type', $type))
             ->latest()
             ->get());
@@ -634,6 +635,28 @@ class WorkspaceController extends Controller
         }
 
         return response()->json($inventory->createDocument($data, Auth::id(), $organizationId, $branchId), 201);
+    }
+
+    public function correctSale(Request $request, int $document, SaleCorrectionService $correction): JsonResponse
+    {
+        $organizationId = $this->organizationId();
+        $branchId = $this->branchId($request, $organizationId);
+        $saved = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('type', ['sale', 'resale'])->findOrFail($document);
+        abort_unless(Auth::user()->hasPermission($this->permissionForDocumentType($saved->type))
+            || ($saved->type === 'sale' && $saved->sale_channel === 'pos' && Auth::user()->hasPermission(Permission::PosSale)), 403);
+        $data = $request->validate([
+            'correction_version' => ['required', 'string', 'size:64'],
+            'reason' => ['required', 'string', 'max:1000'],
+            'discount' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'decimal:0,2'],
+            'tax' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'decimal:0,2'],
+            'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.id' => ['required', 'integer', 'distinct'],
+            'items.*.quantity' => ['required', 'numeric', 'gt:0', 'max:99999999999.999', 'decimal:0,3'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'decimal:0,2'],
+        ]);
+
+        return response()->json($correction->correct($document, $organizationId, $branchId, Auth::id(), $data));
     }
 
     public function deleteDocument(Request $request, int $document, DocumentDeletionService $deletion): JsonResponse
