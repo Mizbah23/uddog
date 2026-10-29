@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\CashBalanceService;
 use App\TenantContext;
 use App\UserRole;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,7 +35,7 @@ class ExpenseController extends Controller
         ]);
         $organizationId = (int) Auth::user()->organization_id;
         $branchId = app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, (int) ($filters['branch_id'] ?? 0) ?: null)->id;
-        $branchExpenses = Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId);
+        $branchExpenses = $this->visibleExpenses($organizationId)->where('branch_id', $branchId);
         $query = (clone $branchExpenses)
             ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereDate('expense_date', '>=', $date))
             ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereDate('expense_date', '<=', $date))
@@ -53,7 +54,7 @@ class ExpenseController extends Controller
             'summary' => $summary,
             'categories' => collect(['Rent', 'Utilities', 'Payroll', 'Transport', 'Marketing', 'Maintenance', 'Other'])
                 ->merge(ExpenseCategory::query()->where('organization_id', $organizationId)->pluck('name'))
-                ->merge(Expense::query()->where('organization_id', $organizationId)->distinct()->pluck('category'))
+                ->merge($this->visibleExpenses($organizationId)->distinct()->pluck('category'))
                 ->unique(fn ($category) => mb_strtolower($category))
                 ->values(),
             'pagination' => ['page' => $page->currentPage(), 'last_page' => $page->lastPage()],
@@ -83,7 +84,7 @@ class ExpenseController extends Controller
     public function update(Request $request, int $expense): JsonResponse
     {
         $organizationId = (int) Auth::user()->organization_id;
-        $record = Expense::query()->where('organization_id', $organizationId)->findOrFail($expense);
+        $record = $this->visibleExpenses($organizationId)->findOrFail($expense);
         app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $record->branch_id);
         abort_if(PayrollItem::query()->where('expense_id', $record->id)->exists(), 422, 'Payroll expenses must be managed from the staff module.');
         $data = $this->validated($request, false);
@@ -104,7 +105,7 @@ class ExpenseController extends Controller
     public function destroy(int $expense): JsonResponse
     {
         $organizationId = (int) Auth::user()->organization_id;
-        $record = Expense::query()->where('organization_id', $organizationId)->findOrFail($expense);
+        $record = $this->visibleExpenses($organizationId)->findOrFail($expense);
         app(BranchAccess::class)->ensure(Auth::user(), $organizationId, $record->branch_id);
         abort_if(PayrollItem::query()->where('expense_id', $record->id)->exists(), 422, 'Payroll expenses must be managed from the staff module.');
         $record->delete();
@@ -123,6 +124,15 @@ class ExpenseController extends Controller
             'payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_banking', 'bank_transfer'])],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
+    }
+
+    private function visibleExpenses(int $organizationId): Builder
+    {
+        $user = Auth::user();
+
+        return Expense::query()->where('organization_id', $organizationId)
+            ->when($user->hasRole(UserRole::Manager, UserRole::Staff),
+                fn (Builder $query) => $query->where('created_by', $user->id));
     }
 
     private function ensurePaidBalance(int $organizationId, int $branchId, User $creator, string|int|float $amount, string|int|float $previousAmount = 0): void

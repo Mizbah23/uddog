@@ -88,6 +88,47 @@ class ExpenseManagementTest extends TestCase
         $this->assertDatabaseMissing('expenses', ['id' => $id]);
     }
 
+    public function test_managers_and_staff_only_access_expenses_they_recorded(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $manager = User::factory()->for($owner->organization)->create();
+        $staff = User::factory()->staff()->for($owner->organization)->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $expenses = collect([$owner, $manager, $staff])->mapWithKeys(function (User $user) use ($branch): array {
+            $expense = Expense::create([
+                'organization_id' => $user->organization_id,
+                'branch_id' => $branch->id,
+                'category' => 'Other',
+                'description' => "Expense by {$user->name}",
+                'amount' => 100,
+                'expense_date' => '2026-10-13',
+                'payment_method' => 'cash',
+                'created_by' => $user->id,
+            ]);
+
+            return [$user->id => $expense->id];
+        });
+
+        foreach ([$manager, $staff] as $user) {
+            $this->actingAs($user)->getJson("/api/expenses?branch_id={$branch->id}")
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.id', $expenses[$user->id])
+                ->assertJsonPath('summary.count', 1)
+                ->assertJsonPath('summary.total', 100);
+
+            $otherExpenseId = $expenses[$owner->id];
+            $this->putJson("/api/expenses/{$otherExpenseId}", [])->assertNotFound();
+            $this->deleteJson("/api/expenses/{$otherExpenseId}")->assertNotFound();
+        }
+
+        $this->actingAs($owner)->getJson("/api/expenses?branch_id={$branch->id}")
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('summary.count', 3)
+            ->assertJsonPath('summary.total', 300);
+    }
+
     public function test_invalid_date_range_is_rejected(): void
     {
         $owner = User::factory()->admin()->create();
