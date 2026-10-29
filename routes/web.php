@@ -84,8 +84,10 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::post('purchases/{document}/payments', [WorkspaceController::class, 'recordPurchasePayment'])->middleware('permission:purchases');
             Route::get('supplier-advances', [SupplierAdvanceController::class, 'index'])->middleware('permission:supplier_advances');
             Route::post('supplier-advances', [SupplierAdvanceController::class, 'store'])->middleware('permission:supplier_advances');
-            Route::post('supplier-advances/{advance}/deliveries', [SupplierAdvanceController::class, 'deliver'])->middleware('permission:supplier_advances');
-            Route::delete('supplier-advances/{advance}/deliveries/{delivery}', [SupplierAdvanceController::class, 'reverseDelivery'])->middleware('permission:supplier_advances');
+            Route::post('supplier-advance-deliveries', [SupplierAdvanceController::class, 'deliver'])->middleware('permission:supplier_advances');
+            Route::delete('supplier-advance-deliveries/{delivery}', [SupplierAdvanceController::class, 'reverseDelivery'])->middleware('permission:supplier_advances');
+            Route::post('supplier-tt-entries', [SupplierAdvanceController::class, 'storeEntry'])->middleware('permission:supplier_advances');
+            Route::delete('supplier-tt-entries/{entry}', [SupplierAdvanceController::class, 'destroyEntry'])->middleware('permission:supplier_advances');
             Route::delete('supplier-advances/{advance}', [SupplierAdvanceController::class, 'destroy'])->middleware('permission:supplier_advances');
             Route::get('movements', [WorkspaceController::class, 'movements'])->middleware('permission:inventory,stock_adjustments');
             Route::post('products/{product}/adjust', [WorkspaceController::class, 'adjust'])->middleware('permission:stock_adjustments');

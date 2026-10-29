@@ -23,7 +23,7 @@ class TenantProvisioner
         'documents', 'expenses', 'gold_jobs', 'gold_rates',
         'purchase_installments', 'purchase_payments', 'sale_installments',
         'sale_payments', 'sales_targets', 'stock_checks', 'stock_movements',
-        'stock_transfers', 'cash_movements', 'supplier_advances', 'supplier_advance_deliveries',
+        'stock_transfers', 'cash_movements', 'supplier_advances', 'supplier_advance_deliveries', 'supplier_tt_entries',
     ];
 
     /** @var array<string, array{0: string, 1: string}> */

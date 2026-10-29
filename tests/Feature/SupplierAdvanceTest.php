@@ -6,6 +6,7 @@ use App\Models\Contact;
 use App\Models\Product;
 use App\Models\SupplierAdvance;
 use App\Models\SupplierAdvanceDelivery;
+use App\Models\SupplierTtEntry;
 use App\Models\User;
 use App\Permission;
 use App\UserRole;
@@ -26,7 +27,7 @@ class SupplierAdvanceTest extends TestCase
 
         foreach ([[' ACI Salt ', 35000], ['aci salt', 15000]] as [$name, $amount]) {
             $this->postJson('/api/supplier-advances', [
-                'company_name' => $name, 'amount' => $amount, 'expected_installments' => 3,
+                'company_name' => $name, 'amount' => $amount,
                 'advance_date' => now('Asia/Dhaka')->toDateString(), 'payment_method' => 'bank_transfer',
             ])->assertCreated();
         }
@@ -42,6 +43,84 @@ class SupplierAdvanceTest extends TestCase
             ->assertJsonCount(2, 'rows');
     }
 
+    public function test_a_company_installment_can_use_the_combined_balance_of_repeated_advances(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $setup = $owner->organization->setup();
+        $setup['supplier_advances']['enabled'] = true;
+        $this->actingAs($owner)->putJson('/api/system-setup', $setup)->assertOk();
+        $today = now('Asia/Dhaka')->toDateString();
+
+        foreach ([35000, 15000] as $amount) {
+            $this->postJson('/api/supplier-advances', [
+                'company_name' => 'ACI Salt', 'amount' => $amount,
+                'advance_date' => $today, 'payment_method' => 'bank_transfer',
+            ])->assertCreated();
+        }
+
+        $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'ACI Salt', 'installment_code' => 'LOT-01', 'product_details' => 'Salt',
+            'amount' => 40000, 'delivery_date' => $today,
+        ])->assertCreated();
+        $this->getJson('/api/supplier-advances')->assertOk()
+            ->assertJsonCount(2, 'advances')->assertJsonCount(1, 'deliveries');
+        $this->getJson('/api/reports?report=supplier_tt')->assertOk()
+            ->assertJsonPath('company_totals.0.advance_sent', 50000)
+            ->assertJsonPath('company_totals.0.products_received', 40000)
+            ->assertJsonPath('company_totals.0.closing_balance', 10000);
+        $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'Unknown', 'installment_code' => 'LOT-02', 'product_details' => 'Salt',
+            'amount' => 1, 'delivery_date' => $today,
+        ])->assertUnprocessable()->assertJsonValidationErrors('company_name');
+    }
+
+    public function test_tt_report_includes_opening_balances_incentives_commissions_and_company_due_balances(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $setup = $owner->organization->setup();
+        $setup['supplier_advances']['enabled'] = true;
+        $this->actingAs($owner)->putJson('/api/system-setup', $setup)->assertOk();
+
+        foreach ([
+            ['opening_paid', 1000, '2026-01-01', 'Opening advance'],
+            ['opening_received', 100, '2026-01-01', 'Opening products'],
+            ['incentive', 50, '2026-02-01', 'Salt incentive'],
+            ['commission', 25, '2026-02-03', 'Commission'],
+        ] as [$type, $amount, $date, $particular]) {
+            $this->postJson('/api/supplier-tt-entries', [
+                'company_name' => 'ACI Salt', 'entry_type' => $type, 'amount' => $amount,
+                'entry_date' => $date, 'particular' => $particular,
+            ])->assertCreated();
+        }
+        $this->postJson('/api/supplier-advances', [
+            'company_name' => 'aci salt', 'amount' => 200, 'advance_date' => '2026-02-02',
+            'payment_method' => 'bank_transfer',
+        ])->assertCreated();
+        $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'ACI Salt', 'installment_code' => 'LOT-01', 'product_details' => 'Salt',
+            'amount' => 400, 'delivery_date' => '2026-02-04',
+        ])->assertCreated();
+
+        $this->assertDatabaseCount('supplier_tt_entries', 4);
+        $this->getJson('/api/reports?report=supplier_tt&date_from=2026-02-01&date_to=2026-02-28')
+            ->assertOk()
+            ->assertJsonPath('summary.opening_paid', 1000)
+            ->assertJsonPath('summary.opening_received', 100)
+            ->assertJsonPath('summary.other_credits', 75)
+            ->assertJsonPath('summary.advance_sent', 200)
+            ->assertJsonPath('summary.products_received', 400)
+            ->assertJsonPath('summary.total_paid', 1275)
+            ->assertJsonPath('summary.total_received', 500)
+            ->assertJsonPath('summary.advance_balance', 775)
+            ->assertJsonPath('summary.due_balance', 0)
+            ->assertJsonPath('company_totals.0.company', 'ACI Salt')
+            ->assertJsonPath('company_totals.0.closing_balance', 775)
+            ->assertJsonCount(4, 'rows');
+
+        $entry = SupplierTtEntry::query()->where('entry_type', 'commission')->firstOrFail();
+        $this->deleteJson('/api/supplier-tt-entries/'.$entry->id)->assertOk();
+    }
+
     public function test_owner_records_a_standalone_advance_and_coded_deliveries_without_changing_existing_transactions(): void
     {
         $owner = User::factory()->admin()->create();
@@ -52,38 +131,33 @@ class SupplierAdvanceTest extends TestCase
         $this->putJson('/api/system-setup', $setup)->assertOk();
 
         $today = now('Asia/Dhaka')->toDateString();
-        $this->postJson('/api/supplier-advances', [
-            'company_name' => 'ACI Salt', 'amount' => 100, 'expected_installments' => 2,
-            'advance_date' => $today, 'payment_method' => 'bank_transfer',
-        ])->assertUnprocessable()->assertJsonValidationErrors('expected_installments');
-
         $advance = $this->postJson('/api/supplier-advances', [
-            'company_name' => 'ACI Salt', 'amount' => 100, 'expected_installments' => 3,
+            'company_name' => 'ACI Salt', 'amount' => 100,
             'advance_date' => $today, 'payment_method' => 'bank_transfer', 'reference' => 'TT-001',
         ])->assertCreated()->assertJsonPath('company_name', 'ACI Salt')->json();
 
-        $first = $this->postJson("/api/supplier-advances/{$advance['id']}/deliveries", [
-            'installment_code' => 'LOT-01', 'product_details' => 'Salt cartons',
+        $first = $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'aci salt', 'installment_code' => 'LOT-01', 'product_details' => 'Salt cartons',
             'amount' => 40, 'delivery_date' => $today,
-        ])->assertCreated()->assertJsonPath('amount', '40.00')->json();
-        $this->postJson("/api/supplier-advances/{$advance['id']}/deliveries", [
-            'installment_code' => 'LOT-01', 'product_details' => 'More salt',
+        ])->assertCreated()->assertJsonPath('amount', '40.00')->assertJsonPath('company_name', 'ACI Salt')->json();
+        $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'ACI Salt', 'installment_code' => 'LOT-01', 'product_details' => 'More salt',
             'amount' => 30, 'delivery_date' => $today,
         ])->assertUnprocessable()->assertJsonValidationErrors('installment_code');
-        $this->postJson("/api/supplier-advances/{$advance['id']}/deliveries", [
-            'installment_code' => 'LOT-02', 'product_details' => 'More salt',
+        $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'ACI Salt', 'installment_code' => 'LOT-02', 'product_details' => 'More salt',
             'amount' => 70, 'delivery_date' => $today,
         ])->assertUnprocessable()->assertJsonValidationErrors('amount');
         foreach ([['LOT-02', 30], ['LOT-03', 30]] as [$code, $amount]) {
-            $this->postJson("/api/supplier-advances/{$advance['id']}/deliveries", [
-                'installment_code' => $code, 'product_details' => 'Salt cartons',
+            $this->postJson('/api/supplier-advance-deliveries', [
+                'company_name' => 'ACI Salt', 'installment_code' => $code, 'product_details' => 'Salt cartons',
                 'amount' => $amount, 'delivery_date' => $today,
             ])->assertCreated();
         }
-        $this->postJson("/api/supplier-advances/{$advance['id']}/deliveries", [
-            'installment_code' => 'LOT-04', 'product_details' => 'Salt cartons',
+        $this->postJson('/api/supplier-advance-deliveries', [
+            'company_name' => 'ACI Salt', 'installment_code' => 'LOT-04', 'product_details' => 'Salt cartons',
             'amount' => 1, 'delivery_date' => $today,
-        ])->assertUnprocessable()->assertJsonValidationErrors('installment_code');
+        ])->assertUnprocessable()->assertJsonValidationErrors('amount');
 
         $this->assertDatabaseCount('documents', 0);
         $this->assertDatabaseCount('purchase_payments', 0);
@@ -96,10 +170,10 @@ class SupplierAdvanceTest extends TestCase
         $this->getJson("/api/reports?report=supplier_tt&branch_id={$branch->id}&search=other")
             ->assertOk()->assertJsonCount(0, 'rows');
         $this->deleteJson("/api/supplier-advances/{$advance['id']}")->assertUnprocessable();
-        $this->deleteJson("/api/supplier-advances/{$advance['id']}/deliveries/{$first['id']}")->assertOk();
+        $this->deleteJson("/api/supplier-advance-deliveries/{$first['id']}")->assertOk();
         $this->assertSame(60.0, (float) SupplierAdvanceDelivery::sum('amount'));
         foreach (SupplierAdvanceDelivery::query()->pluck('id') as $deliveryId) {
-            $this->deleteJson("/api/supplier-advances/{$advance['id']}/deliveries/{$deliveryId}")->assertOk();
+            $this->deleteJson("/api/supplier-advance-deliveries/{$deliveryId}")->assertOk();
         }
         $this->deleteJson("/api/supplier-advances/{$advance['id']}")->assertOk();
         $this->assertSame(0, SupplierAdvance::count());
