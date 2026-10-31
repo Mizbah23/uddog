@@ -6,6 +6,7 @@ use App\BranchAccess;
 use App\Models\Branch;
 use App\Models\Organization;
 use App\Models\SupportImpersonation;
+use App\Services\PackageLimitService;
 use App\TenantContext;
 use App\UserRole;
 use Illuminate\Http\JsonResponse;
@@ -37,6 +38,9 @@ class BranchController extends Controller
                 throw ValidationException::withMessages(['active' => 'The default branch must remain active.']);
             }
             $branch = DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($data, $organizationId) {
+                if ($data['active']) {
+                    app(PackageLimitService::class)->assertBranchCapacity($organizationId);
+                }
                 if ($data['is_default']) {
                     Branch::where('organization_id', $organizationId)->update(['is_default' => false]);
                 }
@@ -60,6 +64,9 @@ class BranchController extends Controller
             throw ValidationException::withMessages(['is_default' => 'Assign another default branch before changing this one.']);
         }
         DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($saved, $data, $organizationId) {
+            if ($data['active']) {
+                app(PackageLimitService::class)->assertBranchCapacity($organizationId, $saved->id);
+            }
             if ($data['is_default']) {
                 Branch::where('organization_id', $organizationId)->whereKeyNot($saved->id)->update(['is_default' => false]);
             }

@@ -34,6 +34,10 @@ class UpdateClientRequest extends FormRequest
             'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($this->route('client'))],
             'subdomain' => ['nullable', 'string', 'max:63', 'regex:/\A[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\z/D', Rule::notIn(['admin', 'www', 'mail', 'ftp', 'cpanel', 'webmail', 'autodiscover', 'autoconfig']), Rule::unique('organizations', 'subdomain')->ignore($this->route('client'))],
             'plan_name' => ['nullable', 'string', 'max:100'],
+            'package_limits' => ['nullable', 'array:branches,users,sale_invoices'],
+            'package_limits.branches' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'package_limits.users' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'package_limits.sale_invoices' => ['nullable', 'integer', 'min:1', 'max:2147483647'],
             'annual_renew_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'subscription_status' => ['required', Rule::enum(SubscriptionStatus::class)],
             'subscription_ends_at' => ['nullable', 'date'],
@@ -51,6 +55,13 @@ class UpdateClientRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if (! $this->exists('package_limits') && is_string($this->input('plan_name'))) {
+            $company = Organization::query()->find($this->route('client'));
+            if ($company && $company->plan_name !== $this->input('plan_name')) {
+                $this->merge(['package_limits' => null]);
+            }
+        }
+
         if (! $this->exists('annual_renew_fee') && is_string($this->input('plan_name'))) {
             $company = Organization::query()->find($this->route('client'));
             if ($company && $this->input('plan_name') !== $company->plan_name) {

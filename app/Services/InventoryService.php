@@ -23,6 +23,9 @@ class InventoryService
     {
         return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($data, $userId, $organizationId, $branchId) {
             $type = $data['type'];
+            if (in_array($type, ['sale', 'resale'], true)) {
+                app(PackageLimitService::class)->consumeSaleInvoice($organizationId);
+            }
             $purchase = null;
             $sale = null;
             if ($type === 'purchase_return') {

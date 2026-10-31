@@ -24,6 +24,7 @@ use App\ReportType;
 use App\Services\CashBalanceService;
 use App\Services\DocumentDeletionService;
 use App\Services\InventoryService;
+use App\Services\PackageLimitService;
 use App\Services\SaleCorrectionService;
 use App\SubscriptionStatus;
 use App\TenantContext;
@@ -66,6 +67,7 @@ class WorkspaceController extends Controller
             'ecommerce_enabled' => (bool) ($organization?->ecommerce_enabled ?? false),
             'shared_stock_sales' => (bool) ($organization?->shared_stock_sales ?? false),
             'annual_renew_fees' => Organization::ANNUAL_RENEW_FEES,
+            'package_limit_defaults' => Organization::PACKAGE_LIMITS,
             'setup_required' => ! User::query()->exists(),
             'permissions' => $user ? [
                 'manage_clients' => $user->isSuperadmin(),
@@ -89,6 +91,9 @@ class WorkspaceController extends Controller
             'subscription' => $user?->hasRole(UserRole::Admin) ? [
                 'plan_name' => $organization?->plan_name,
                 'annual_renew_fee' => $organization?->annual_renew_fee,
+                'package_limits' => $organization?->packageLimits(),
+                'package_usage' => $organization ? app(PackageLimitService::class)->usage($organization) : null,
+                'package_limits_exempt' => $organization?->isDemo() ?? false,
                 'expired' => $organization?->subscriptionExpired() ?? false,
                 'status' => $organization?->subscription_status?->value,
                 'ends_on' => $expiryDate?->toDateString(),
