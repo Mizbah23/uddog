@@ -5,6 +5,7 @@ use App\Http\Controllers\CashMovementController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ContactDirectoryController;
+use App\Http\Controllers\EcommerceController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GoldStoreController;
 use App\Http\Controllers\PasswordRecoveryController;
@@ -27,6 +28,12 @@ use App\Http\Middleware\ResolveTenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+Route::middleware(ResolveTenant::class)->group(function () {
+    Route::get('/ecomm', [EcommerceController::class, 'show'])->name('ecommerce.storefront');
+    Route::get('/ecomm/catalog', [EcommerceController::class, 'catalog']);
+    Route::post('/ecomm/orders', [EcommerceController::class, 'checkout'])->middleware('throttle:5,1');
+});
+
 Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
     Route::get('session', [WorkspaceController::class, 'session']);
     Route::post('setup', [WorkspaceController::class, 'setup'])->middleware('throttle:3,1');
@@ -40,6 +47,9 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
         Route::delete('support-session', [SupportImpersonationController::class, 'destroy']);
 
         Route::middleware('subscribed')->group(function () {
+            Route::get('ecommerce/orders', [EcommerceController::class, 'orders'])->middleware(['role:admin', 'permission:sales']);
+            Route::post('ecommerce/orders/{order}/process', [EcommerceController::class, 'process'])->middleware(['role:admin', 'permission:sales']);
+            Route::put('products/{product}/ecommerce', [EcommerceController::class, 'visibility'])->middleware('permission:products');
             Route::get('branches', [BranchController::class, 'index']);
             Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('permission:branches');
             Route::get('overview', [WorkspaceController::class, 'overview'])->middleware('permission:dashboard');
@@ -153,7 +163,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
 Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
 Route::view('/{workspacePage}', 'app')
-    ->where('workspacePage', 'dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
+    ->where('workspacePage', 'ecommerce_orders|dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
     ->middleware(ResolveTenant::class);
 
 Route::get('/', function (Request $request) {

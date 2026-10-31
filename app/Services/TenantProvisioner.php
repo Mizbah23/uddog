@@ -20,7 +20,7 @@ class TenantProvisioner
     /** @var list<string> */
     private const ORGANIZATION_TABLES = [
         'branches', 'categories', 'contacts', 'products', 'product_stocks',
-        'documents', 'expenses', 'gold_jobs', 'gold_rates',
+        'documents', 'ecommerce_orders', 'expenses', 'gold_jobs', 'gold_rates',
         'purchase_installments', 'purchase_payments', 'sale_installments',
         'sale_payments', 'sale_corrections', 'sales_targets', 'stock_checks', 'stock_movements',
         'stock_transfers', 'cash_movements', 'supplier_advances', 'supplier_advance_deliveries', 'supplier_tt_entries',
@@ -167,6 +167,8 @@ class TenantProvisioner
             return;
         }
 
+        $this->syncOrganizationShadow($organization);
+
         app(TenantContext::class)->run($organization, function () use ($user, $organization): void {
             DB::connection('tenant')->table('users')->updateOrInsert(
                 ['id' => $user->id],
@@ -194,7 +196,10 @@ class TenantProvisioner
         app(TenantContext::class)->run($organization, function () use ($organization): void {
             $row = DB::connection(config('tenancy.central_connection'))
                 ->table('organizations')->where('id', $organization->id)->first();
-            DB::connection('tenant')->table('organizations')->where('id', $organization->id)->update((array) $row);
+            if (! $row) {
+                throw new RuntimeException('The company record was not found in the central database.');
+            }
+            DB::connection('tenant')->table('organizations')->updateOrInsert(['id' => $organization->id], (array) $row);
         });
     }
 
@@ -255,7 +260,7 @@ class TenantProvisioner
         $ids = DB::connection(config('tenancy.central_connection'))->table('users')
             ->where('organization_id', $organization->id)->pluck('id');
 
-        foreach (['documents' => ['created_by'], 'expenses' => ['created_by'], 'gold_jobs' => ['created_by'], 'gold_rates' => ['created_by'], 'purchase_payments' => ['created_by'], 'sale_payments' => ['created_by'], 'sale_corrections' => ['created_by'], 'sales_targets' => ['created_by', 'user_id'], 'stock_checks' => ['created_by', 'completed_by'], 'stock_movements' => ['created_by'], 'stock_transfers' => ['created_by'], 'cash_movements' => ['from_user_id', 'to_user_id'], 'branch_user_access' => ['user_id']] as $table => $columns) {
+        foreach (['documents' => ['created_by'], 'ecommerce_orders' => ['processed_by'], 'expenses' => ['created_by'], 'gold_jobs' => ['created_by'], 'gold_rates' => ['created_by'], 'purchase_payments' => ['created_by'], 'sale_payments' => ['created_by'], 'sale_corrections' => ['created_by'], 'sales_targets' => ['created_by', 'user_id'], 'stock_checks' => ['created_by', 'completed_by'], 'stock_movements' => ['created_by'], 'stock_transfers' => ['created_by'], 'cash_movements' => ['from_user_id', 'to_user_id'], 'branch_user_access' => ['user_id']] as $table => $columns) {
             foreach ($columns as $column) {
                 $ids = $ids->concat($tenant->table($table)->whereNotNull($column)->pluck($column));
             }

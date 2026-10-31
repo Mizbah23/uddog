@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Document;
+use App\Models\EcommerceOrder;
 use App\Models\GoldJob;
 use App\Models\Product;
 use App\Models\ProductDamage;
@@ -72,6 +73,9 @@ class DocumentDeletionService
                 ->lockForUpdate()->findOrFail($documentId);
             if (! in_array($document->type, ['purchase', 'sale', 'resale'], true)) {
                 throw ValidationException::withMessages(['document' => 'Only purchases and sales can be deleted here.']);
+            }
+            if (EcommerceOrder::query()->where('organization_id', $organizationId)->where('document_id', $document->id)->exists()) {
+                throw ValidationException::withMessages(['document' => 'This sale belongs to an online order and cannot be deleted. Use a sale correction instead.']);
             }
             if ($document->corrections()->exists()) {
                 throw ValidationException::withMessages(['document' => 'This sale has correction history and cannot be deleted. Use another correction to fix it.']);

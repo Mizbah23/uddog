@@ -169,9 +169,9 @@ class ClientController extends Controller
     {
         $organization = Organization::query()->findOrFail($client);
         $currentEnd = $organization->subscription_ends_at;
-        $startsFrom = $currentEnd && $currentEnd->greaterThanOrEqualTo(today())
+        $startsFrom = $currentEnd && $currentEnd->toDateString() >= today('Asia/Dhaka')->toDateString()
             ? $currentEnd->copy()
-            : today();
+            : today('Asia/Dhaka');
 
         $organization->update([
             'subscription_status' => 'active',
