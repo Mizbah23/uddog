@@ -11,16 +11,20 @@
         ['number' => '04', 'icon' => '◫', 'name' => 'সিদ্ধান্ত নিন তথ্য দেখে', 'copy' => 'বিক্রয়, কেনাকাটা, ইনভেন্টরি, খরচ ও লেজারের রিপোর্ট পর্যালোচনা করুন।'],
     ];
     $plans = [
-        ['name' => 'Starter', 'price' => '৳২০,০০০', 'audience' => 'ক্ষুদ্র ও মাঝারি উদ্যোগ এবং ছোট ব্যবসার জন্য', 'description' => 'ব্যবসার দৈনন্দিন কাজ ডিজিটালভাবে গুছিয়ে নেওয়ার শুরু।', 'accent' => 'starter'],
-        ['name' => 'Standard', 'price' => '৳৩০,০০০', 'audience' => 'মাঝারি আকারের ব্যবসার জন্য', 'description' => 'বাড়তে থাকা ব্যবসার কার্যক্রম এক জায়গা থেকে দেখার পরিকল্পনা।', 'accent' => 'standard'],
-        ['name' => 'Premium', 'price' => '৳৫০,০০০', 'audience' => 'বড় ব্যবসা, একাধিক শাখা ও শোরুমের জন্য', 'description' => '১০ জনের বেশি কর্মী নিয়ে চলা বড় কার্যক্রমের উপযোগী পরিকল্পনা।', 'accent' => 'premium'],
+        ['name' => 'Starter', 'price' => '৳২০,০০০', 'audience' => 'ক্ষুদ্র ও মাঝারি উদ্যোগ এবং ছোট ব্যবসার জন্য', 'description' => 'এক শাখার ব্যবসার দৈনন্দিন হিসাব গুছিয়ে নেওয়ার সহজ শুরু।', 'branches' => '১টি', 'users' => '২ জন', 'invoices' => '১,০০০টি', 'accent' => 'starter'],
+        ['name' => 'Standard', 'price' => '৳৩০,০০০', 'audience' => 'মাঝারি আকারের ব্যবসার জন্য', 'description' => 'দুই শাখা ও বড় দলের কাজ এক জায়গা থেকে পরিচালনা করুন।', 'branches' => '২টি', 'users' => '৫ জন', 'invoices' => '৫,০০০টি', 'accent' => 'standard'],
+        ['name' => 'Premium', 'price' => '৳৫০,০০০', 'audience' => 'বড় ব্যবসা, একাধিক শাখা ও শোরুমের জন্য', 'description' => 'বেশি শাখা, বড় দল ও সীমাহীন বিক্রয় চালানে এগিয়ে চলুন।', 'branches' => '৫টি', 'users' => '২০ জন', 'invoices' => 'সীমাহীন', 'accent' => 'premium'],
     ];
+    $renewalFees = App\Models\Organization::ANNUAL_RENEW_FEES;
+    $banglaMoney = fn (int $amount): string => '৳'.strtr(number_format($amount), ['0' => '০', '1' => '১', '2' => '২', '3' => '৩', '4' => '৪', '5' => '৫', '6' => '৬', '7' => '৭', '8' => '৮', '9' => '৯']);
+    $ecommerceContactUrl = 'https://wa.me/'.$whatsappNumber.'?text='.rawurlencode('আসসালামু আলাইকুম, আমার ব্যবসার জন্য নিজস্ব ই-কমার্স মার্কেটপ্লেস অ্যাড-অনের মূল্য ও বিস্তারিত জানতে চাই।');
     $faqs = [
         ['question' => 'Uddog-Soft দিয়ে কী কী কাজ করা যায়?', 'answer' => 'বিক্রয়, POS, কেনাকাটা, পণ্য ও ইনভেন্টরি, ক্রেতা ও সরবরাহকারীর হিসাব, খরচ, শাখা এবং রিপোর্ট একই সফটওয়্যারে পরিচালনা করা যায়।'],
         ['question' => 'মোবাইল থেকেও কি ব্যবহার করা যায়?', 'answer' => 'হ্যাঁ। মোবাইল, ল্যাপটপ ও বড় পর্দায় ব্যবহার করার উপযোগী করে Uddog-Soft তৈরি করা হয়েছে।'],
         ['question' => 'ক্রেতার পাওনা ও সরবরাহকারীর বকেয়া দেখা যাবে?', 'answer' => 'হ্যাঁ। বিক্রয় ও কেনাকাটার বিপরীতে পেমেন্টের হিসাব রেখে বকেয়া পরিমাণ দেখা যায়।'],
-        ['question' => 'একাধিক শাখার হিসাব রাখা যাবে?', 'answer' => 'হ্যাঁ। শাখাভিত্তিক তথ্য ও কার্যক্রম পর্যালোচনার ব্যবস্থা আছে।'],
-        ['question' => 'পরিকল্পনার মূল্য মাসিক, নাকি এককালীন?', 'answer' => 'এখানে পরিকল্পনার মূল্য দেখানো হয়েছে। মূল্য পরিশোধের সময়সূচি ও সেবার বিস্তারিত নিশ্চিত করে তারপর সিদ্ধান্ত নিন।'],
+        ['question' => 'একাধিক শাখার হিসাব রাখা যাবে?', 'answer' => 'Starter-এ ১টি, Standard-এ ২টি এবং Premium-এ ৫টি শাখার সুবিধা আছে। আপনার ব্যবসার আকার অনুযায়ী প্যাকেজ বেছে নিতে পারবেন।'],
+        ['question' => 'প্যাকেজমূল্য ও বার্ষিক নবায়ন ফি কত?', 'answer' => 'Starter-এর প্যাকেজমূল্য ৳২০,০০০ ও বার্ষিক নবায়ন ৳৪,০০০; Standard-এর প্যাকেজমূল্য ৳৩০,০০০ ও বার্ষিক নবায়ন ৳৭,০০০; Premium-এর প্যাকেজমূল্য ৳৫০,০০০ ও বার্ষিক নবায়ন ৳১২,০০০। প্যাকেজমূল্য ও বার্ষিক নবায়ন ফি আলাদাভাবে দেখানো হয়েছে।'],
+        ['question' => 'আমার নিজের ই-কমার্স মার্কেটপ্লেস থাকবে?', 'answer' => 'হ্যাঁ। যেকোনো প্যাকেজের সঙ্গে আলাদা পেইড অ্যাড-অন হিসেবে নিজস্ব ই-কমার্স মার্কেটপ্লেস নিতে পারবেন। নিজের দোকানের লিংকে পণ্য দেখানো, ক্রেতার যোগাযোগ এবং ক্যাশ অন ডেলিভারি অর্ডারের অনুরোধ নেওয়ার সুবিধা থাকবে। অ্যাড-অনের মূল্য ও চালু করার বিস্তারিত জানতে যোগাযোগ করুন।'],
     ];
 @endphp
 <!doctype html>
@@ -66,6 +70,7 @@
                     <a href="#features">সুবিধাসমূহ</a>
                     <a href="#how-it-works">যেভাবে কাজ করে</a>
                     <a href="#plans">মূল্য পরিকল্পনা</a>
+                    <a href="#ecommerce-addon">ই-কমার্স অ্যাড-অন</a>
                     <a href="#questions">সাধারণ প্রশ্ন</a>
                 </nav>
                 <a class="header-login" href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer">বিস্তারিত জানুন <span aria-hidden="true">↗</span></a>
@@ -75,6 +80,7 @@
                         <a href="#features">সুবিধাসমূহ</a>
                         <a href="#how-it-works">যেভাবে কাজ করে</a>
                         <a href="#plans">মূল্য পরিকল্পনা</a>
+                    <a href="#ecommerce-addon">ই-কমার্স অ্যাড-অন</a>
                         <a href="#questions">সাধারণ প্রশ্ন</a>
                         <a href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer">বিস্তারিত জানুন ↗</a>
                     </nav>
@@ -160,21 +166,45 @@
 
             <section class="plans-section" id="plans" aria-labelledby="plans-title">
                 <div class="container">
-                    <div class="plans-heading"><p class="kicker kicker-dark">মূল্য পরিকল্পনা</p><h2 id="plans-title">আপনার ব্যবসার আকার অনুযায়ী <em>পরিকল্পনা বেছে নিন।</em></h2><p>ছোট উদ্যোগ থেকে বহু শাখার বড় ব্যবসা—Uddog-Soft-এর তিনটি মূল্য পরিকল্পনা দেখুন।</p></div>
+                    <div class="plans-heading"><p class="kicker kicker-dark">মূল্য পরিকল্পনা</p><h2 id="plans-title">আপনার ব্যবসার আকার অনুযায়ী <em>পরিকল্পনা বেছে নিন।</em></h2><p>কতটি শাখা, কতজন ব্যবহারকারী, কতটি বিক্রয় চালান—এক নজরে মিলিয়ে নিন। প্যাকেজমূল্য ও বার্ষিক নবায়ন ফি দুটোই জানুন আগে।</p></div>
                     <div class="plans-grid">
                         @foreach ($plans as $plan)
                             <article class="plan-card plan-{{ $plan['accent'] }}">
                                 <div class="plan-card-top"><h3 class="plan-name">{{ $plan['name'] }}</h3><span class="plan-mark" aria-hidden="true">✳</span></div>
+                                <p class="plan-price-label">প্যাকেজমূল্য</p>
                                 <p class="plan-price">{{ $plan['price'] }}</p>
+                                <div class="plan-renewal"><span>বার্ষিক নবায়ন ফি</span><strong>{{ $banglaMoney($renewalFees[$plan['name']]) }}<small> / বছর</small></strong></div>
                                 <p class="plan-description">{{ $plan['description'] }}</p>
+                                <dl class="plan-limits" aria-label="{{ $plan['name'] }} প্যাকেজের সুবিধা">
+                                    <div><dt><span aria-hidden="true">✓</span> শাখা</dt><dd>{{ $plan['branches'] }}</dd></div>
+                                    <div><dt><span aria-hidden="true">✓</span> ব্যবহারকারী</dt><dd>{{ $plan['users'] }}</dd></div>
+                                    <div><dt><span aria-hidden="true">✓</span> বিক্রয় চালান</dt><dd>{{ $plan['invoices'] }}</dd></div>
+                                </dl>
                                 <div class="plan-rule"></div>
                                 <p class="plan-fit-label">যাদের জন্য উপযোগী</p>
                                 <p class="plan-fit">{{ $plan['audience'] }}</p>
-                                <a class="plan-contact" href="https://wa.me/{{ $whatsappNumber }}?text={{ rawurlencode('আসসালামু আলাইকুম, Uddog-Soft '.$plan['name'].' পরিকল্পনা সম্পর্কে জানতে চাই।') }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $plan['name'] }} পরিকল্পনা সম্পর্কে WhatsApp-এ যোগাযোগ করুন">যোগাযোগ করুন <span aria-hidden="true">↗</span></a>
+                                <a class="plan-contact" href="https://wa.me/{{ $whatsappNumber }}?text={{ rawurlencode('আসসালামু আলাইকুম, Uddog-Soft '.$plan['name'].' প্যাকেজ (প্যাকেজমূল্য '.$plan['price'].', বার্ষিক নবায়ন '.$banglaMoney($renewalFees[$plan['name']]).') সম্পর্কে বিস্তারিত জানতে চাই।') }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $plan['name'] }} পরিকল্পনা সম্পর্কে WhatsApp-এ যোগাযোগ করুন">যোগাযোগ করুন <span aria-hidden="true">↗</span></a>
                             </article>
                         @endforeach
                     </div>
-                    <p class="plans-note">মূল্য পরিশোধের সময়সূচি, প্রতিটি পরিকল্পনায় অন্তর্ভুক্ত সুবিধা ও সেবার বিস্তারিত নিশ্চিত করে নিন।</p>
+                    <p class="plans-note">ই-কমার্স মার্কেটপ্লেস মূল প্যাকেজের অন্তর্ভুক্ত নয়। আগ্রহী হলে আলাদা পেইড সার্ভিস হিসেবে যোগ করুন।</p>
+                </div>
+            </section>
+
+            <section class="marketplace-addon-section" id="ecommerce-addon" aria-labelledby="marketplace-addon-title">
+                <div class="container marketplace-addon">
+                    <div class="marketplace-addon-copy">
+                        <span class="marketplace-addon-badge">নিজের অনলাইন মার্কেটপ্লেস · সব প্যাকেজের সঙ্গে</span>
+                        <h2 id="marketplace-addon-title">দোকানের গণ্ডি ছাড়িয়ে,<br><em>নিজের অনলাইন মার্কেটপ্লেস।</em></h2>
+                        <p>আপনার ব্যবসার নামেই অনলাইন দোকান। ক্রেতা পণ্য দেখবেন, যোগাযোগ করবেন, অথবা ঘরে বসেই অর্ডারের অনুরোধ পাঠাবেন।</p>
+                        <ul><li>নিজস্ব দোকানের লিংক ও পণ্যের অনলাইন ক্যাটালগ</li><li>কোন পণ্য অনলাইনে দেখাবেন, নিয়ন্ত্রণ আপনার হাতে</li><li>ক্রেতার যোগাযোগ ও ক্যাশ অন ডেলিভারি অর্ডার অনুরোধ</li><li>অর্ডার গ্রহণের পর বিক্রয় ও স্টকের হিসাব একসঙ্গে</li></ul>
+                        <a class="button button-primary marketplace-addon-contact" href="{{ $ecommerceContactUrl }}" target="_blank" rel="noopener noreferrer">ই-কমার্স সাইটের মূল্য জানুন <span aria-hidden="true">↗</span></a>
+                        <small>আলাদাভাবে কিনতে হবে। আপনার প্যাকেজের সঙ্গে চালু করতে যোগাযোগ করুন।</small>
+                    </div>
+                    <div class="marketplace-preview" aria-label="অনলাইন দোকানের উদাহরণ">
+                        <div class="marketplace-preview-bar"><span aria-hidden="true">● ● ●</span><code>apnar-dokan.uddog-soft.com/ecomm</code></div>
+                        <div class="marketplace-preview-content"><span class="marketplace-preview-label">আপনার নিজের অনলাইন দোকান</span><h3>আপনার পণ্য।<br>আপনার পরিচয়ে।</h3><p>ক্রেতার হাতের মুঠোয়, এখন আপনার দোকানও।</p><div class="marketplace-preview-products" aria-hidden="true"><div><span>▧</span><i></i><i></i></div><div><span>♧</span><i></i><i></i></div><div><span>◈</span><i></i><i></i></div></div><div class="marketplace-preview-footer"><span>পণ্য দেখুন →</span><span>ক্যাশ অন ডেলিভারি</span></div><small>নমুনা প্রদর্শন · দোকানের লিংকের উদাহরণ</small></div>
+                    </div>
                 </div>
             </section>
 
