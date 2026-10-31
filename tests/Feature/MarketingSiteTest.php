@@ -111,4 +111,19 @@ class MarketingSiteTest extends TestCase
         $this->assertStringContainsString('Disallow: /api/', $robots);
         $this->assertStringContainsString('Sitemap: https://uddog-soft.com/sitemap.xml', $robots);
     }
+
+    public function test_public_pricing_compares_package_limits_and_separates_renewal_fees_and_paid_ecommerce_addon(): void
+    {
+        config(['tenancy.enabled' => false]);
+        $this->get('/')->assertOk()->assertSeeInOrder([
+            'Starter', '৳২০,০০০', '৳৪,০০০', '১টি', '২ জন', '১,০০০টি',
+            'Standard', '৳৩০,০০০', '৳৭,০০০', '২টি', '৫ জন', '৫,০০০টি',
+            'Premium', '৳৫০,০০০', '৳১২,০০০', '৫টি', '২০ জন', 'সীমাহীন',
+        ])->assertSee('বার্ষিক নবায়ন ফি')
+            ->assertSee('ই-কমার্স মার্কেটপ্লেস মূল প্যাকেজের অন্তর্ভুক্ত নয়।')
+            ->assertSee('ঐচ্ছিক পেইড অ্যাড-অন · সব প্যাকেজের সঙ্গে')
+            ->assertSee('অ্যাড-অনের মূল্য জানুন')
+            ->assertSee('ক্যাশ অন ডেলিভারি অর্ডার অনুরোধ')
+            ->assertSee(rawurlencode('আসসালামু আলাইকুম, আমার ব্যবসার জন্য নিজস্ব ই-কমার্স মার্কেটপ্লেস অ্যাড-অনের মূল্য ও বিস্তারিত জানতে চাই।'), false);
+    }
 }
