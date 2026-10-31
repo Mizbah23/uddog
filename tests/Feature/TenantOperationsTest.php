@@ -121,9 +121,16 @@ class TenantOperationsTest extends TestCase
             'address' => 'Tenant delivery address', 'expected_total' => 20, 'items' => [['product_id' => $product['id'], 'quantity' => 1]],
         ])->assertCreated();
         $this->assertSame(0, DB::connection('sqlite')->table('ecommerce_orders')->count());
+        $this->assertSame(0, DB::connection('sqlite')->table('package_usages')->count());
         app(TenantContext::class)->run($company, function () use ($company): void {
             $this->assertSame(1, DB::connection('tenant')->table('ecommerce_orders')->where('organization_id', $company->id)->count());
+            $this->assertSame(1, (int) DB::connection('tenant')->table('package_usages')->where('organization_id', $company->id)->value('sale_invoices'));
         });
+        $company->update(['package_limits' => ['sale_invoices' => 1]]);
+        $this->postJson('http://'.$company->id.'.test/api/documents', [
+            'type' => 'sale', 'contact_id' => $customer['id'], 'document_date' => now('Asia/Dhaka')->toDateString(),
+            'payment_type' => 'due', 'items' => [['product_id' => $product['id'], 'quantity' => 1, 'unit_price' => 20]],
+        ])->assertUnprocessable()->assertJsonValidationErrors('package_limits');
 
     }
 

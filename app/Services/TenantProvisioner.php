@@ -20,7 +20,7 @@ class TenantProvisioner
     /** @var list<string> */
     private const ORGANIZATION_TABLES = [
         'branches', 'categories', 'contacts', 'products', 'product_stocks',
-        'documents', 'ecommerce_orders', 'expenses', 'gold_jobs', 'gold_rates',
+        'package_usages', 'documents', 'ecommerce_orders', 'expenses', 'gold_jobs', 'gold_rates',
         'purchase_installments', 'purchase_payments', 'sale_installments',
         'sale_payments', 'sale_corrections', 'sales_targets', 'stock_checks', 'stock_movements',
         'stock_transfers', 'cash_movements', 'supplier_advances', 'supplier_advance_deliveries', 'supplier_tt_entries',

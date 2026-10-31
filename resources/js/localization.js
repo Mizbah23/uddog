@@ -1026,6 +1026,18 @@ Object.assign(bangla, {
     'Correct sale': 'বিক্রয় সংশোধন',
     'Enable e-commerce': 'ই-কমার্স চালু করুন',
     'Annual Renew Fee': 'বার্ষিক নবায়ন ফি',
+    'Company package limits': 'প্রতিষ্ঠানের প্যাকেজ সীমা',
+    'Active branch limit': 'সক্রিয় শাখার সীমা',
+    'Active user limit (including owner)': 'সক্রিয় ব্যবহারকারীর সীমা (মালিকসহ)',
+    'Sales invoice limit': 'বিক্রয় চালানের সীমা',
+    'Reset package defaults': 'প্যাকেজের নির্ধারিত সীমা ফিরিয়ে আনুন',
+    'The demo company is exempt from package limits.': 'ডেমো প্রতিষ্ঠানের ক্ষেত্রে প্যাকেজের সীমা প্রযোজ্য নয়।',
+    'These limits apply only to this company. Leave a limit blank for unlimited. Downgrades keep existing records and block additions above the allowance. Deleting invoices frees invoice slots; deactivating users frees user slots.': 'এই সীমা শুধু এই প্রতিষ্ঠানের জন্য। সীমাহীন রাখতে ঘর খালি রাখুন। সীমা কমালেও আগের রেকর্ড থাকবে, তবে সীমার বেশি নতুন রেকর্ড যোগ করা যাবে না। চালান মুছলে ও ব্যবহারকারী নিষ্ক্রিয় করলে সংশ্লিষ্ট সীমায় জায়গা খালি হয়।',
+    'Package allowance': 'প্যাকেজের বরাদ্দ',
+    'Active branches': 'সক্রিয় শাখা',
+    'Active users (including owner)': 'সক্রিয় ব্যবহারকারী (মালিকসহ)',
+    'Sales invoices': 'বিক্রয় চালান',
+    'Sales, POS, resales and accepted online orders share the invoice allowance. Deleted invoices no longer count toward usage.': 'বিক্রয়, POS, পুনর্বিক্রয় ও গৃহীত অনলাইন অর্ডার একই চালানসীমার মধ্যে গণনা হয়। মুছে ফেলা চালান আর গণনায় ধরা হয় না।',
     'Select a plan to fill the renewal fee': 'নবায়ন ফি পূরণ করতে প্যাকেজ নির্বাচন করুন',
     'Filled from the selected package. You can set a custom annual fee.': 'নির্বাচিত প্যাকেজ অনুযায়ী পূরণ হবে। চাইলে আলাদা বার্ষিক ফি নির্ধারণ করতে পারবেন।',
     'Your subscription has expired.': 'আপনার সাবস্ক্রিপশনের মেয়াদ শেষ হয়েছে।',
@@ -1715,6 +1727,9 @@ function translated(source, language) {
     }
 
     const patterns = [
+        [/^Active user limit reached \((\d+), including the owner\)\./, (match) => 'মালিকসহ সক্রিয় ব্যবহারকারীর সীমা (' + banglaNumber(match[1]) + ') পূর্ণ হয়েছে। একটি অ্যাকাউন্ট নিষ্ক্রিয় করুন অথবা সুপারঅ্যাডমিনকে প্রতিষ্ঠানের সীমা বাড়াতে বলুন।'],
+        [/^Active branch limit reached \((\d+)\)\./, (match) => 'সক্রিয় শাখার সীমা (' + banglaNumber(match[1]) + ') পূর্ণ হয়েছে। একটি শাখা নিষ্ক্রিয় করুন অথবা সুপারঅ্যাডমিনকে সীমা বাড়াতে বলুন।'],
+        [/^Sales invoice limit reached \((\d+)\)\./, (match) => 'বিক্রয় চালানের সীমা (' + banglaNumber(match[1]) + ') পূর্ণ হয়েছে। প্যাকেজ আপগ্রেড বা চালানের সীমা বাড়াতে সুপারঅ্যাডমিনের সঙ্গে যোগাযোগ করুন। অপ্রয়োজনীয় চালান মুছে একটি জায়গা খালি করতে পারেন।'],
         [/^First payment: (.+)$/, (match) => 'প্রথম কিস্তি: ' + match[1]],
         [/^starts (.+)$/, (match) => 'শুরু ' + match[1]],
         [/^Expired (\d+) days? ago$/, (match) => banglaNumber(match[1]) + ' দিন আগে মেয়াদ শেষ হয়েছে'],

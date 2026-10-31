@@ -14,17 +14,24 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'annual_renew_fee', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'shared_stock_sales', 'ecommerce_enabled', 'notes', 'system_settings', 'tenant_database'];
+    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'annual_renew_fee', 'package_limits', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'shared_stock_sales', 'ecommerce_enabled', 'notes', 'system_settings', 'tenant_database'];
 
     public const ANNUAL_RENEW_FEES = ['Starter' => 4000, 'Standard' => 7000, 'Premium' => 12000];
 
-    protected $appends = ['subscription_active'];
+    public const PACKAGE_LIMITS = [
+        'Starter' => ['branches' => 1, 'users' => 2, 'sale_invoices' => 1000],
+        'Standard' => ['branches' => 2, 'users' => 5, 'sale_invoices' => 5000],
+        'Premium' => ['branches' => 5, 'users' => 20, 'sale_invoices' => null],
+    ];
+
+    protected $appends = ['subscription_active', 'effective_package_limits'];
 
     protected function casts(): array
     {
         return [
             'subscription_status' => SubscriptionStatus::class,
             'annual_renew_fee' => 'decimal:2',
+            'package_limits' => 'array',
             'subscription_ends_at' => 'date',
             'access_paused' => 'boolean',
             'gold_store' => 'boolean',
@@ -123,6 +130,21 @@ class Organization extends Model
         $fee = $value ?? self::ANNUAL_RENEW_FEES[$this->plan_name] ?? null;
 
         return $fee === null ? null : number_format((float) $fee, 2, '.', '');
+    }
+
+    public function packageLimits(): array
+    {
+        if ($this->isDemo()) {
+            return ['branches' => null, 'users' => null, 'sale_invoices' => null];
+        }
+
+        return array_map(fn ($limit): ?int => $limit === null ? null : (int) $limit,
+            array_replace(self::PACKAGE_LIMITS[$this->plan_name] ?? self::PACKAGE_LIMITS['Starter'], $this->package_limits ?? []));
+    }
+
+    public function getEffectivePackageLimitsAttribute(): ?array
+    {
+        return array_key_exists('plan_name', $this->getAttributes()) ? $this->packageLimits() : null;
     }
 
     public function subscriptionExpired(): bool

@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\Organization;
 use App\Models\SupportImpersonation;
 use App\Models\User;
+use App\Services\PackageLimitService;
 use App\Services\TenantProvisioner;
 use App\TenantContext;
 use App\UserRole;
@@ -96,6 +97,9 @@ class UserManagementController extends Controller
             ? Organization::query()->findOrFail($data['organization_id']) : null;
         $save = function () use ($branchIds, $data): JsonResponse {
             $this->validateBranchAccess($branchIds, $data['role'], (int) ($data['organization_id'] ?? 0));
+            if ($data['role'] !== UserRole::Superadmin->value && ($data['active'] ?? true)) {
+                app(PackageLimitService::class)->assertUserCapacity((int) $data['organization_id']);
+            }
             $user = User::create($data);
             app(TenantProvisioner::class)->syncUserShadow($user);
             if (! config('tenancy.enabled') || $data['role'] !== UserRole::Superadmin->value) {
@@ -108,7 +112,7 @@ class UserManagementController extends Controller
             return response()->json($user->load('organization:id,name'), 201);
         };
 
-        return $company ? app(TenantContext::class)->run($company, $save) : $save();
+        return DB::connection(config('tenancy.central_connection'))->transaction(fn () => $company ? app(TenantContext::class)->run($company, $save) : $save());
     }
 
     public function update(UpdateUserRequest $request, int $managedUser): JsonResponse
@@ -166,6 +170,9 @@ class UserManagementController extends Controller
 
         $save = function () use ($branchIds, $data, $user): JsonResponse {
             $this->validateBranchAccess($branchIds, $data['role'], (int) ($data['organization_id'] ?? 0));
+            if ($data['role'] !== UserRole::Superadmin->value && $data['active']) {
+                app(PackageLimitService::class)->assertUserCapacity((int) $data['organization_id'], $user->id);
+            }
             $user->update($data);
             app(TenantProvisioner::class)->syncUserShadow($user);
             if (! config('tenancy.enabled') || $data['role'] !== UserRole::Superadmin->value) {
@@ -180,7 +187,7 @@ class UserManagementController extends Controller
             return response()->json($user);
         };
 
-        return $company ? app(TenantContext::class)->run($company, $save) : $save();
+        return DB::connection(config('tenancy.central_connection'))->transaction(fn () => $company ? app(TenantContext::class)->run($company, $save) : $save());
     }
 
     public function updateAccess(Request $request, int $managedUser): JsonResponse

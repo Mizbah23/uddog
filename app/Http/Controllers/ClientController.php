@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\DefaultCustomer;
+use App\Services\PackageLimitService;
 use App\Services\TenantProvisioner;
 use App\TenantContext;
 use App\UserRole;
@@ -143,6 +144,9 @@ class ClientController extends Controller
                 $ownerData['password'] = $data['owner_password'];
             }
 
+            if ($ownerData['active']) {
+                app(PackageLimitService::class)->assertUserCapacity($organization->id, $owner?->id);
+            }
             if ($owner) {
                 $owner->update($ownerData);
             } else {
