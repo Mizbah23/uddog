@@ -63,7 +63,9 @@ class WorkspaceController extends Controller
         return response()->json([
             'user' => $user,
             'gold_store' => (bool) ($organization?->gold_store ?? false),
+            'ecommerce_enabled' => (bool) ($organization?->ecommerce_enabled ?? false),
             'shared_stock_sales' => (bool) ($organization?->shared_stock_sales ?? false),
+            'annual_renew_fees' => Organization::ANNUAL_RENEW_FEES,
             'setup_required' => ! User::query()->exists(),
             'permissions' => $user ? [
                 'manage_clients' => $user->isSuperadmin(),
@@ -86,9 +88,11 @@ class WorkspaceController extends Controller
             ] : null,
             'subscription' => $user?->hasRole(UserRole::Admin) ? [
                 'plan_name' => $organization?->plan_name,
+                'annual_renew_fee' => $organization?->annual_renew_fee,
+                'expired' => $organization?->subscriptionExpired() ?? false,
                 'status' => $organization?->subscription_status?->value,
                 'ends_on' => $expiryDate?->toDateString(),
-                'days_remaining' => $expiryDate ? (int) today()->diffInDays($expiryDate, false) : null,
+                'days_remaining' => $expiryDate ? (int) today('Asia/Dhaka')->diffInDays(Carbon::parse($expiryDate->toDateString(), 'Asia/Dhaka'), false) : null,
                 'active' => $organization?->canUseWorkspace() ?? false,
                 'access_paused' => $organization?->access_paused ?? false,
             ] : null,
@@ -404,10 +408,20 @@ class WorkspaceController extends Controller
             'wastage_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'decimal:0,3'],
             'tag_number' => ['nullable', 'string', 'max:80', Rule::unique(app(TenantContext::class)->validationTable('products'))->where('organization_id', $organizationId)->ignore($savedProduct?->id)],
             'hallmark_code' => ['nullable', 'string', 'max:80'],
+            'ecommerce_visible' => ['sometimes', 'boolean'],
+            'ecommerce_description' => ['nullable', 'string', 'max:2000'],
+            'ecommerce_image_url' => ['nullable', 'url:https', 'max:2048'],
             'active' => ['boolean'],
             'stock_source_product_id' => ['nullable', Rule::exists(app(TenantContext::class)->validationTable('products'), 'id')->where('organization_id', $organizationId)],
             'stock_source_quantity' => ['required_with:stock_source_product_id', 'numeric', 'gt:0', 'decimal:0,3'],
         ]);
+        if (! Auth::user()->organization()->firstOrFail()->ecommerce_enabled) {
+            foreach (['ecommerce_visible', 'ecommerce_description', 'ecommerce_image_url'] as $field) {
+                if (array_key_exists($field, $data) && (string) ($data[$field] ?? '') !== (string) ($savedProduct?->{$field} ?? '')) {
+                    throw ValidationException::withMessages([$field => 'E-commerce is not enabled for this company.']);
+                }
+            }
+        }
         $sourceId = $data['stock_source_product_id'] ?? null;
         $sharedStockEnabled = (bool) Auth::user()->organization()->firstOrFail()->shared_stock_sales;
         if ($sourceId && ! $sharedStockEnabled && (! $savedProduct || (int) $savedProduct->stock_source_product_id !== (int) $sourceId || (float) $savedProduct->stock_source_quantity !== (float) ($data['stock_source_quantity'] ?? 1))) {

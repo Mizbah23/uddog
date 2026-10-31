@@ -7,12 +7,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends TenantModel
 {
-    protected $fillable = ['organization_id', 'sku', 'barcode', 'category_id', 'name', 'unit', 'cost_price', 'sale_price', 'quantity_on_hand', 'reorder_level', 'warranty_months', 'active', 'is_gold_item', 'gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code', 'stock_source_product_id', 'stock_source_quantity'];
+    protected $fillable = ['organization_id', 'sku', 'barcode', 'category_id', 'name', 'unit', 'cost_price', 'sale_price', 'quantity_on_hand', 'reorder_level', 'warranty_months', 'active', 'ecommerce_visible', 'ecommerce_description', 'ecommerce_image_url', 'is_gold_item', 'gold_purity', 'gold_gross_weight', 'gold_stone_weight', 'gold_other_weight', 'stone_value', 'making_charge_mode', 'making_charge', 'wastage_percent', 'tag_number', 'hallmark_code', 'stock_source_product_id', 'stock_source_quantity'];
 
     protected function casts(): array
     {
         return [
             'active' => 'boolean',
+            'ecommerce_visible' => 'boolean',
             'cost_price' => 'decimal:2',
             'sale_price' => 'decimal:2',
             'quantity_on_hand' => 'decimal:3',

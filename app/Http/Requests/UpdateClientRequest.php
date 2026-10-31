@@ -34,10 +34,12 @@ class UpdateClientRequest extends FormRequest
             'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($this->route('client'))],
             'subdomain' => ['nullable', 'string', 'max:63', 'regex:/\A[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\z/D', Rule::notIn(['admin', 'www', 'mail', 'ftp', 'cpanel', 'webmail', 'autodiscover', 'autoconfig']), Rule::unique('organizations', 'subdomain')->ignore($this->route('client'))],
             'plan_name' => ['nullable', 'string', 'max:100'],
+            'annual_renew_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'subscription_status' => ['required', Rule::enum(SubscriptionStatus::class)],
             'subscription_ends_at' => ['nullable', 'date'],
             'gold_store' => ['sometimes', 'boolean'],
             'shared_stock_sales' => ['sometimes', 'boolean'],
+            'ecommerce_enabled' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'owner_name' => ['required', 'string', 'max:100'],
             'owner_email' => ['nullable', 'required_without:owner_mobile', 'email', 'max:255', Rule::unique('users', 'email')->ignore($ownerId)],
@@ -49,6 +51,13 @@ class UpdateClientRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if (! $this->exists('annual_renew_fee') && is_string($this->input('plan_name'))) {
+            $company = Organization::query()->find($this->route('client'));
+            if ($company && $this->input('plan_name') !== $company->plan_name) {
+                $this->merge(['annual_renew_fee' => Organization::ANNUAL_RENEW_FEES[$this->input('plan_name')] ?? $company->annual_renew_fee]);
+            }
+        }
+
         if (is_string($this->input('subdomain'))) {
             $this->merge(['subdomain' => strtolower(trim($this->input('subdomain'))) ?: null]);
         }

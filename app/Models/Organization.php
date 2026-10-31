@@ -14,7 +14,9 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'shared_stock_sales', 'notes', 'system_settings', 'tenant_database'];
+    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'annual_renew_fee', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'shared_stock_sales', 'ecommerce_enabled', 'notes', 'system_settings', 'tenant_database'];
+
+    public const ANNUAL_RENEW_FEES = ['Starter' => 4000, 'Standard' => 7000, 'Premium' => 12000];
 
     protected $appends = ['subscription_active'];
 
@@ -22,10 +24,12 @@ class Organization extends Model
     {
         return [
             'subscription_status' => SubscriptionStatus::class,
+            'annual_renew_fee' => 'decimal:2',
             'subscription_ends_at' => 'date',
             'access_paused' => 'boolean',
             'gold_store' => 'boolean',
             'shared_stock_sales' => 'boolean',
+            'ecommerce_enabled' => 'boolean',
             'system_settings' => 'array',
         ];
     }
@@ -114,10 +118,23 @@ class Organization extends Model
         return $this->hasMany(SupportImpersonation::class);
     }
 
+    public function getAnnualRenewFeeAttribute(mixed $value): ?string
+    {
+        $fee = $value ?? self::ANNUAL_RENEW_FEES[$this->plan_name] ?? null;
+
+        return $fee === null ? null : number_format((float) $fee, 2, '.', '');
+    }
+
+    public function subscriptionExpired(): bool
+    {
+        return $this->subscription_ends_at !== null
+            && $this->subscription_ends_at->toDateString() < now('Asia/Dhaka')->toDateString();
+    }
+
     public function hasActiveSubscription(): bool
     {
         return in_array($this->subscription_status, [SubscriptionStatus::Trial, SubscriptionStatus::Active], true)
-            && (! $this->subscription_ends_at || $this->subscription_ends_at->isToday() || $this->subscription_ends_at->isFuture());
+            && ! $this->subscriptionExpired();
     }
 
     public function getSubscriptionActiveAttribute(): bool
