@@ -29,8 +29,10 @@ use App\Services\SaleCorrectionService;
 use App\SubscriptionStatus;
 use App\TenantContext;
 use App\UserRole;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -346,10 +348,24 @@ class WorkspaceController extends Controller
 
     public function products(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'paginate' => ['sometimes', 'boolean'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'search' => ['nullable', 'string', 'max:200'],
+        ]);
         $organizationId = $this->organizationId();
         $branchId = $this->branchId($request, $organizationId);
+        $results = $this->productsForBranch($organizationId, $branchId, trim($filters['search'] ?? ''), $request->boolean('paginate') ? ($filters['per_page'] ?? 25) : null);
+        if ($request->boolean('paginate')) {
+            return response()->json([
+                'data' => $results->items(),
+                'pagination' => ['page' => $results->currentPage(), 'last_page' => $results->lastPage(),
+                    'per_page' => $results->perPage(), 'total' => $results->total()],
+            ]);
+        }
 
-        return response()->json($this->productsForBranch($organizationId, $branchId, $request->query('search')));
+        return response()->json($results);
     }
 
     public function saveProduct(Request $request, ?int $product = null): JsonResponse
@@ -555,9 +571,21 @@ class WorkspaceController extends Controller
 
     public function documents(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'paginate' => ['sometimes', 'boolean'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'search' => ['nullable', 'string', 'max:200'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', ...($request->filled('date_from') ? ['after_or_equal:date_from'] : [])],
+        ]);
         $type = $request->query('type');
         if ($type && ! in_array($type, ['purchase', 'sale', 'resale', 'purchase_return', 'sale_return'], true)) {
             throw ValidationException::withMessages(['type' => 'Invalid document type.']);
+        }
+        if ($request->boolean('paginate') && in_array($type, ['sale', 'purchase'], true) && empty($filters['date_from']) && empty($filters['date_to'])) {
+            $filters['date_from'] = Carbon::today('Asia/Dhaka')->toDateString();
+            $filters['date_to'] = $filters['date_from'];
         }
         $allowedTypes = $this->allowedDocumentTypes();
         if ($type && ! in_array($type, $allowedTypes, true)) {
@@ -571,14 +599,30 @@ class WorkspaceController extends Controller
             $readableTypes = array_values(array_unique([...$readableTypes, 'purchase']));
         }
 
-        return response()->json(Document::query()
+        $query = Document::query()
             ->where('organization_id', $this->organizationId())
             ->where('branch_id', $this->branchId($request, $this->organizationId()))
             ->whereIn('type', $readableTypes)
             ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total', 'corrections.creator:id,name')
             ->when($type, fn ($q) => $q->where('type', $type))
-            ->latest()
-            ->get());
+            ->when($filters['date_from'] ?? null, fn ($q, $date) => $q->where('document_date', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn ($q, $date) => $q->where('document_date', '<=', $date))
+            ->when(trim($filters['search'] ?? ''), fn ($q, $search) => $q->where(function ($q) use ($search): void {
+                $q->where('number', 'like', '%'.$search.'%')
+                    ->orWhereHas('contact', fn ($contact) => $contact->where('name', 'like', '%'.$search.'%'));
+            }));
+
+        if ($request->boolean('paginate')) {
+            $results = $query->orderByDesc('document_date')->orderByDesc('id')->paginate($filters['per_page'] ?? 25);
+
+            return response()->json([
+                'data' => $results->items(),
+                'pagination' => ['page' => $results->currentPage(), 'last_page' => $results->lastPage(),
+                    'per_page' => $results->perPage(), 'total' => $results->total()],
+            ]);
+        }
+
+        return response()->json($query->latest()->get());
     }
 
     public function saveDocument(Request $request, InventoryService $inventory): JsonResponse
@@ -819,26 +863,31 @@ class WorkspaceController extends Controller
         return app(BranchAccess::class)->activeBranch(Auth::user(), $organizationId, $request->integer('branch_id') ?: null)->id;
     }
 
-    private function productsForBranch(int $organizationId, int $branchId, ?string $search = null)
+    private function productsForBranch(int $organizationId, int $branchId, ?string $search = null, ?int $perPage = null): Collection|LengthAwarePaginator
     {
-        $stockByProduct = ProductStock::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->pluck('quantity_on_hand', 'product_id');
-
-        return Product::query()->where('organization_id', $organizationId)
+        $query = Product::query()->where('organization_id', $organizationId)
             ->with('category:id,name,active', 'stockSource:id,name,unit,active')
             ->with(['stocks' => fn ($query) => $query->where('branch_id', $branchId)])
             ->when($search, fn ($query, $value) => $query->where(fn ($q) => $q->where('name', 'like', "%{$value}%")->orWhere('sku', 'like', "%{$value}%")->orWhere('barcode', 'like', "%{$value}%")->orWhereHas('category', fn ($category) => $category->where('name', 'like', "%{$value}%"))))
-            ->orderBy('name')->get()
-            ->each(function (Product $product) use ($stockByProduct) {
-                $product->setAttribute('quantity_on_hand', $product->stocks->first()?->quantity_on_hand ?? '0.000');
-                if ($product->stock_source_product_id) {
-                    $sourceStock = $stockByProduct[$product->stock_source_product_id] ?? 0;
-                    $product->setAttribute('source_quantity_on_hand', number_format((float) $sourceStock, 3, '.', ''));
-                    $product->setAttribute('available_quantity', number_format(floor((float) $sourceStock * 1000 / (float) $product->stock_source_quantity) / 1000, 3, '.', ''));
-                } else {
-                    $product->setAttribute('available_quantity', $product->quantity_on_hand);
-                }
-                $product->unsetRelation('stocks');
-            });
+            ->orderBy('name')->orderBy('id');
+        $results = $perPage ? $query->paginate($perPage) : $query->get();
+        $rows = $perPage ? $results->getCollection() : $results;
+        $sourceIds = $rows->pluck('stock_source_product_id')->filter()->unique();
+        $stockByProduct = ProductStock::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->whereIn('product_id', $sourceIds)->pluck('quantity_on_hand', 'product_id');
+        $rows->each(function (Product $product) use ($stockByProduct): void {
+            $product->setAttribute('quantity_on_hand', $product->stocks->first()?->quantity_on_hand ?? '0.000');
+            if ($product->stock_source_product_id) {
+                $sourceStock = $stockByProduct[$product->stock_source_product_id] ?? 0;
+                $product->setAttribute('source_quantity_on_hand', number_format((float) $sourceStock, 3, '.', ''));
+                $product->setAttribute('available_quantity', number_format(floor((float) $sourceStock * 1000 / (float) $product->stock_source_quantity) / 1000, 3, '.', ''));
+            } else {
+                $product->setAttribute('available_quantity', $product->quantity_on_hand);
+            }
+            $product->unsetRelation('stocks');
+        });
+
+        return $results;
     }
 
     /** @return list<string> */

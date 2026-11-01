@@ -29,3 +29,5 @@
 .subscription-renewal-notice{padding:16px 20px;border:1px solid #f2c6b4;background:#fff3eb;border-radius:9px;line-height:1.8;color:#a44924;font-size:14px}.subscription-renewal-notice strong{white-space:nowrap}.subscription-lock .subscription-renewal-notice{max-width:560px}
 
 .package-usage-card{margin:20px 0;padding:18px;border:1px solid #e8e5f3;border-radius:10px;background:#faf9fd}.package-usage-card h3{font-size:14px;margin-bottom:14px}.package-usage-card dl{display:grid;gap:13px;margin:0 0 15px}.package-usage-card dl>div{display:flex;justify-content:space-between;gap:16px;font-size:12px;line-height:1.6}.package-usage-card dd{margin:0;font-weight:700;white-space:nowrap}.package-usage-card .exceeded{color:#b96b27}.package-usage-card small{font-size:11px;color:#858296;line-height:1.8}
+
+.document-history-filters{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.document-history-filters .field{margin:0;min-width:150px}.document-history-filters .search-box{max-width:320px}@media(max-width:700px){.document-history-filters{width:100%}.document-history-filters .search-box{max-width:none;width:100%}}
