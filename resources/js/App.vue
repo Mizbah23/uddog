@@ -119,6 +119,99 @@ const contacts = ref([]);
 const customers = ref([]);
 const suppliers = ref([]);
 const documents = ref([]);
+const documentHistory = ref([]);
+const documentReferences = ref([]);
+const historyTypes = ['purchase', 'sale', 'resale', 'purchase_return', 'sale_return'];
+function defaultDocumentFilters(type) {
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return ['sale', 'purchase'].includes(type) ? { date_from: date, date_to: date } : { date_from: '', date_to: '' };
+}
+const documentFilters = ref(defaultDocumentFilters(page.value));
+const documentPagination = ref({ page: 1, last_page: 1, total: 0, per_page: 25 });
+const documentLoading = ref(false);
+let documentRequestVersion = 0;
+let documentFilterTimer;
+async function loadDocumentHistory(targetPage = 1) {
+  if (!historyTypes.includes(page.value) || !activeBranchId.value) return;
+  const version = ++documentRequestVersion;
+  error.value = '';
+  documentLoading.value = true;
+  const params = new URLSearchParams({ paginate: '1', type: page.value, branch_id: String(activeBranchId.value), page: String(targetPage), per_page: String(documentPagination.value.per_page) });
+  if (search.value.trim()) params.set('search', search.value.trim());
+  for (const [key, value] of Object.entries(documentFilters.value)) if (value) params.set(key, value);
+  try {
+    const result = await api(`documents?${params}`);
+    if (version !== documentRequestVersion) return;
+    if (!result.data.length && result.pagination.total > 0 && targetPage > result.pagination.last_page) return await loadDocumentHistory(result.pagination.last_page);
+    documentHistory.value = result.data;
+    documents.value = result.data;
+    documentPagination.value = result.pagination;
+    detailId.value = null;
+  } catch (e) { if (version === documentRequestVersion) error.value = e.message; }
+  finally { if (version === documentRequestVersion) documentLoading.value = false; }
+}
+watch([page, search, () => documentFilters.value.date_from, () => documentFilters.value.date_to], () => {
+  clearTimeout(documentFilterTimer);
+  if (!historyTypes.includes(page.value)) { documentRequestVersion++; documentLoading.value = false; return; }
+  documentRequestVersion++;
+  documentHistory.value = [];
+  documentLoading.value = true;
+  documentFilterTimer = setTimeout(() => loadDocumentHistory(1), 300);
+});
+watch(page, async (next, previous) => {
+  if (['sale', 'purchase'].includes(next)) documentFilters.value = defaultDocumentFilters(next);
+  if ((!historyTypes.includes(previous) && previous !== 'products') || historyTypes.includes(next) || next === 'products' || !activeBranchId.value || !hasAbility('purchases', 'sales', 'sales_returns', 'resales', 'purchase_returns')) return;
+  const branchId = activeBranchId.value;
+  try {
+    const data = await api(`documents?branch_id=${branchId}`);
+    if (page.value === next && activeBranchId.value === branchId) documents.value = data;
+  } catch (e) { if (page.value === next && activeBranchId.value === branchId) error.value = e.message; }
+});
+watch(page, async (next, previous) => {
+  if (!(previous === 'products' || historyTypes.includes(previous)) || next === 'products' || historyTypes.includes(next) || !activeBranchId.value || !hasAbility('dashboard')) return;
+  const branchId = activeBranchId.value;
+  try {
+    const data = await api(`overview?branch_id=${branchId}`);
+    if (page.value === next && activeBranchId.value === branchId) overview.value = data;
+  } catch (e) { if (page.value === next && activeBranchId.value === branchId) error.value = e.message; }
+});
+const productCatalog = ref([]);
+const productPagination = ref({ page: 1, last_page: 1, total: 0, per_page: 25 });
+const productLoading = ref(false);
+let productRequestVersion = 0;
+let productSearchTimer;
+async function loadProductCatalog(targetPage = 1) {
+  if (page.value !== 'products' || !activeBranchId.value) return;
+  const version = ++productRequestVersion;
+  productLoading.value = true;
+  error.value = '';
+  const params = new URLSearchParams({ paginate: '1', branch_id: String(activeBranchId.value), page: String(targetPage), per_page: '25', search: search.value.trim() });
+  try {
+    const result = await api(`products?${params}`);
+    if (version !== productRequestVersion) return;
+    if (!result.data.length && result.pagination.total > 0 && targetPage > result.pagination.last_page) return await loadProductCatalog(result.pagination.last_page);
+    productCatalog.value = result.data;
+    products.value = result.data;
+    productPagination.value = result.pagination;
+  } catch (e) { if (version === productRequestVersion) error.value = e.message; }
+  finally { if (version === productRequestVersion) productLoading.value = false; }
+}
+watch([page, search], () => {
+  clearTimeout(productSearchTimer);
+  productRequestVersion++;
+  if (page.value !== 'products') { productLoading.value = false; return; }
+  productCatalog.value = [];
+  productLoading.value = true;
+  productSearchTimer = setTimeout(() => loadProductCatalog(1), 300);
+});
+watch(page, async (next, previous) => {
+  if (previous !== 'products' || next === 'products' || !activeBranchId.value) return;
+  const branchId = activeBranchId.value;
+  try {
+    const data = await api(`products?branch_id=${branchId}`);
+    if (page.value === next && activeBranchId.value === branchId) products.value = data;
+  } catch (e) { if (page.value === next && activeBranchId.value === branchId) error.value = e.message; }
+});
 const movements = ref([]);
 const expenses = ref([]);
 const expenseToday = new Date().toLocaleDateString('en-CA');
@@ -500,15 +593,21 @@ async function refresh() {
     activeBranchId.value = selectedBranch?.id || '';
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
     const branchQuery = selectedBranch ? `?branch_id=${selectedBranch.id}` : '';
-    if (hasAbility('dashboard')) requests.push(api(`overview${branchQuery}`).then(data => { overview.value = data; }));
-    if (hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory', 'stock_adjustments', 'stock_transfers', 'product_damages')) requests.push(api(`products${branchQuery}`).then(data => { products.value = data; }));
+    if (hasAbility('dashboard') && page.value !== 'products' && !historyTypes.includes(page.value)) requests.push(api(`overview${branchQuery}`).then(data => { overview.value = data; }));
+    if (hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory', 'stock_adjustments', 'stock_transfers', 'product_damages')) {
+      if (page.value === 'products') requests.push(loadProductCatalog(productPagination.value.page));
+      else requests.push(api(`products${branchQuery}`).then(data => { products.value = data; }));
+    }
     if (hasAbility('categories', 'products', 'purchases', 'pos_sale')) requests.push(api('categories').then(data => { categories.value = data; }));
     if (hasAbility('contacts', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns')) requests.push(api('contacts').then(data => { contacts.value = data; }));
     if (hasAbility('contacts')) {
       requests.push(api('customers').then(data => { customers.value = data; }));
       requests.push(api('suppliers').then(data => { suppliers.value = data; }));
     }
-    if (hasAbility('purchases', 'sales', 'sales_returns', 'resales', 'purchase_returns')) requests.push(api(`documents${branchQuery}`).then(data => { documents.value = data; }));
+    if (page.value !== 'products' && hasAbility('purchases', 'sales', 'sales_returns', 'resales', 'purchase_returns')) {
+      if (historyTypes.includes(page.value)) requests.push(loadDocumentHistory(documentPagination.value.page));
+      else requests.push(api(`documents${branchQuery}`).then(data => { documents.value = data; }));
+    }
     if (hasAbility('inventory', 'stock_adjustments')) requests.push(api(`movements${branchQuery}`).then(data => { movements.value = data; }));
     if (hasAbility('stock_checks')) requests.push(api(`stock-checks${branchQuery}`).then(data => { stockChecks.value = data; }));
     if (hasAbility('stock_transfers')) requests.push(api(`stock-transfers${branchQuery}`).then(data => { stockTransfers.value = data; }));
@@ -800,6 +899,13 @@ function reportCell(column, value) {
 async function switchBranch() {
   localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(activeBranchId.value));
   expensePage.value = 1;
+  productPagination.value.page = 1;
+  productRequestVersion++;
+  productCatalog.value = [];
+  documentPagination.value.page = 1;
+  documentRequestVersion++;
+  documentHistory.value = [];
+  documents.value = [];
   error.value = ''; busy.value = true;
   try { await refresh(); if (page.value === 'reports' && (reportDetailOpen.value || isReportView.value)) await loadReport(); } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
@@ -863,7 +969,7 @@ async function saveProfile() {
 function clearMessages() { error.value = ''; notice.value = ''; }
 function toast(message) { notice.value = translate(message, language.value); setTimeout(() => { notice.value = ''; }, 4000); }
 
-const filteredProducts = computed(() => products.value.filter(p => `${p.name} ${p.sku || ''} ${p.barcode || ''} ${p.category?.name || ''}`.toLowerCase().includes(search.value.toLowerCase())));
+const filteredProducts = computed(() => productCatalog.value);
 const filteredCategories = computed(() => categories.value.filter(category => `${category.name} ${category.description || ''}`.toLowerCase().includes(search.value.toLowerCase())));
 const expenseCategoryOptions = computed(() => expenseCategories.value);
 async function loadExpenses() {
@@ -882,7 +988,7 @@ const customerDueTotal = computed(() => customers.value.reduce((total, contact) 
 const supplierDueTotal = computed(() => suppliers.value.reduce((total, contact) => total + Math.max(0, Number(contact.balance_total) || 0), 0));
 const directoryContacts = computed(() => (page.value === 'customers' ? customers.value : suppliers.value).filter(contact => (!directoryDueOnly.value || Number(contact.balance_total) > 0) && `${contact.name} ${contact.company || ''} ${contact.phone || ''} ${contact.email || ''} ${contact.address || ''} ${contact.area || ''} ${contact.category || ''}`.toLowerCase().includes(search.value.toLowerCase())));
 const directoryTotals = computed(() => directoryContacts.value.reduce((totals, contact) => ({ amount: totals.amount + Number(contact.sales_total || contact.purchases_total || 0), paid: totals.paid + Number(contact.paid_total || 0), balance: totals.balance + Number(contact.balance_total || 0) }), { amount: 0, paid: 0, balance: 0 }));
-const filteredDocuments = computed(() => documents.value.filter(d => d.type === page.value && `${d.number} ${d.contact?.name || ''}`.toLowerCase().includes(search.value.toLowerCase())));
+const filteredDocuments = computed(() => documentHistory.value.filter(d => d.type === page.value));
 function customerDueDocuments(contactId) { return documents.value.filter(document => ['sale', 'resale'].includes(document.type) && Number(document.contact_id) === Number(contactId) && Number(document.balance_due) > 0).sort((a, b) => Number(b.balance_due) - Number(a.balance_due)); }
 const customerDueContacts = computed(() => customers.value
   .map(customer => ({ ...customer, dueDocuments: customerDueDocuments(customer.id) }))
@@ -942,11 +1048,11 @@ function monthlyBarStyle(value) {
   const height = `${Math.abs(amount) / dashboardChartRange.value * 90}%`;
   return amount < 0 ? { height, top: `${100 - dashboardZeroBottom.value}%` } : { height, bottom: `${dashboardZeroBottom.value}%` };
 }
-const selectedPurchase = computed(() => documents.value.find(d => d.id === Number(documentForm.value.purchase_id)));
-const selectedSale = computed(() => documents.value.find(d => d.id === Number(documentForm.value.sale_id)));
-const purchaseOptions = computed(() => documents.value.filter(d => d.type === 'purchase'));
+const selectedPurchase = computed(() => documentReferences.value.find(d => d.id === Number(documentForm.value.purchase_id)));
+const selectedSale = computed(() => documentReferences.value.find(d => d.id === Number(documentForm.value.sale_id)));
+const purchaseOptions = computed(() => documentReferences.value.filter(d => d.type === 'purchase'));
 function returnedSaleQuantity(saleId, productId) {
-  return documents.value
+  return documentReferences.value
     .filter(document => document.type === 'sale_return' && document.sale_id === saleId)
     .flatMap(document => document.items)
     .filter(item => item.product_id === productId)
@@ -956,7 +1062,7 @@ function returnableQuantity(productId) {
   const soldItem = selectedSale.value?.items.find(item => item.product_id === Number(productId));
   return Math.max(0, Number(soldItem?.quantity || 0) - returnedSaleQuantity(selectedSale.value?.id, Number(productId)));
 }
-const saleOptions = computed(() => documents.value.filter(document => ['sale', 'resale'].includes(document.type)
+const saleOptions = computed(() => documentReferences.value.filter(document => ['sale', 'resale'].includes(document.type)
   && document.items.some(item => Number(item.quantity) > returnedSaleQuantity(document.id, item.product_id))));
 const availableContacts = computed(() => contacts.value.filter(c => c.type === 'both' || c.type === (['purchase', 'purchase_return'].includes(documentForm.value.type) ? 'supplier' : 'customer')));
 const relatedContactName = computed(() => ['purchase', 'purchase_return'].includes(documentForm.value.type) ? 'supplier' : 'customer');
@@ -1191,7 +1297,11 @@ async function toggleEcommerceProduct(product, visible) {
   } catch (exception) { error.value = exception.message; await refresh(); }
   finally { busy.value = false; }
 }
-function openProduct(product = null, context = '') {
+async function openProduct(product = null, context = '') {
+  if (page.value === 'products' && session.value?.shared_stock_sales) {
+    try { products.value = await api(`products?branch_id=${activeBranchId.value}`); }
+    catch (e) { error.value = e.message; return; }
+  }
   clearMessages(); editingId.value = product?.id || null;
   documentCreateContext.value = context;
   productForm.value = product ? { stock_source_product_id: product.stock_source_product_id || '', stock_source_quantity: product.stock_source_quantity || '1', sku: product.sku || '', barcode: product.barcode || '', name: product.name, category_id: product.category_id || '', unit: product.unit === 'pcs' ? 'pc' : product.unit, cost_price: product.cost_price, sale_price: product.sale_price, reorder_level: product.reorder_level, warranty_months: product.warranty_months ?? '', active: product.active, ecommerce_visible: !!product.ecommerce_visible, ecommerce_description: product.ecommerce_description || '', ecommerce_image_url: product.ecommerce_image_url || '', is_gold_item: !!product.is_gold_item, gold_purity: product.gold_purity || '22K', gold_gross_weight: product.gold_gross_weight || '', gold_stone_weight: product.gold_stone_weight || '0', gold_other_weight: product.gold_other_weight || '0', stone_value: product.stone_value || '0', making_charge_mode: product.making_charge_mode || 'per_gram', making_charge: product.making_charge || '0', wastage_percent: product.wastage_percent || '0', tag_number: product.tag_number || '', hallmark_code: product.hallmark_code || '' } : { stock_source_product_id: '', stock_source_quantity: '1', sku: '', barcode: '', name: '', category_id: '', unit: 'pc', cost_price: '', sale_price: '', reorder_level: String(session.value?.operational_setup?.store?.default_reorder_level ?? 0), warranty_months: '', active: true, ecommerce_visible: false, ecommerce_description: '', ecommerce_image_url: '', is_gold_item: false, gold_purity: '22K', gold_gross_weight: '', gold_stone_weight: '0', gold_other_weight: '0', stone_value: '0', making_charge_mode: 'per_gram', making_charge: '0', wastage_percent: '0', tag_number: '', hallmark_code: '' };
@@ -1237,7 +1347,11 @@ function openContact(contact = null, context = '') {
   contactForm.value = contact ? { name: contact.name, company: contact.company || '', type: contact.type, phone: contact.phone || '', email: contact.email || '', address: contact.address || '', area: contact.area || '', category: contact.category || '', credit_limit: contact.credit_limit || '0', opening_due: '0', opening_payable: '0', active: contact.active } : { name: '', company: '', type: defaultType, phone: '', email: '', address: '', area: '', category: '', credit_limit: '0', opening_due: '0', opening_payable: '0', active: true };
   modal.value = 'contact';
 }
-function openDocument(type = page.value) {
+async function openDocument(type = page.value) {
+  if (['resale', 'purchase_return', 'sale_return'].includes(type)) {
+    try { documentReferences.value = await api(`documents?branch_id=${activeBranchId.value}`); }
+    catch (e) { error.value = e.message; return; }
+  }
   if (!operationEnabled(type)) { error.value = 'This workflow is disabled in System Setup.'; return; }
   clearMessages();
   documentCreateContext.value = '';
@@ -2251,7 +2365,7 @@ async function stopSupportSession() {
         </template>
 
         <EcommerceOrders v-else-if="page === 'ecommerce_orders' && session.ecommerce_enabled && session.user.role === 'admin'" :api="api" :money="money" :date="date" :language="language" @updated="refresh" />
-        <template v-else-if="page === 'products'"><div class="page-heading"><div><span class="eyebrow">CATALOG</span><h1>Products</h1><p>Manage products, categories, barcodes and reorder levels.</p></div><button class="btn-primary-app" @click="openProduct()"><Plus :size="18" /> Add product</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h2>Product catalog</h2><p>{{ products.length }} products</p></div><div class="search-box"><Search :size="17" /><input v-model="search" placeholder="Search products, category, SKU or barcode..."></div></div><div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>SKU</th><th>BARCODE</th><th>CATEGORY</th><th>ON HAND</th><th>AVG. COST</th><th>DEFAULT SALE PRICE</th><th v-if="session.ecommerce_enabled">ONLINE STORE</th><th></th></tr></thead><tbody><tr v-for="product in filteredProducts" :key="product.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.unit }} <span v-if="product.stock_source">· {{ product.stock_source.name }} থেকে মজুদ</span> <span v-if="!product.active">· Inactive</span></small></div></div></td><td class="mono">{{ product.sku || '—' }}</td><td class="mono">{{ product.barcode || 'Not generated' }}</td><td>{{ product.category?.name || 'Uncategorized' }}</td><td><div class="product-stock-balance"><span class="stock-pill" :class="lowStock(product) ? 'low' : 'good'">{{ qty(product.stock_source_product_id ? product.source_quantity_on_hand : product.quantity_on_hand) }} {{ product.stock_source_product_id ? product.stock_source?.unit : product.unit }}<small v-if="product.stock_source_product_id"> · shared</small></span><small v-if="product.stock_source_product_id">Sellable: {{ qty(product.available_quantity) }} {{ product.unit }} · Per sale: {{ qty(product.stock_source_quantity) }} {{ product.stock_source?.unit }}</small></div></td><td>{{ money(product.stock_source_product_id ? Number(products.find(source => source.id === Number(product.stock_source_product_id))?.cost_price || 0) * Number(product.stock_source_quantity || 1) : product.cost_price) }}</td><td>{{ money(product.sale_price) }}</td><td v-if="session.ecommerce_enabled"><input class="ecommerce-product-toggle" type="checkbox" role="switch" :aria-label="`${translate('Show in online store', language)}: ${product.name}`" :checked="product.ecommerce_visible" :disabled="busy" @change="toggleEcommerceProduct(product, $event.target.checked)"></td><td><div class="row-actions"><button class="icon-button" :title="product.barcode ? 'View and print barcode' : 'Generate barcode'" @click="openBarcode(product)"><Barcode :size="18" /></button><button class="icon-button" title="Edit product" @click="openProduct(product)"><Pencil :size="17" /></button><button v-if="canDeleteCatalogRecords" class="icon-button" type="button" title="Delete product" :disabled="busy" @click="deleteProduct(product)"><Trash2 :size="17" /></button></div></td></tr></tbody></table></div><div v-if="!filteredProducts.length" class="empty-state"><Package :size="32" /><strong>No products found</strong><span>Add a product or change your search.</span></div></section></template>
+        <template v-else-if="page === 'products'"><div class="page-heading"><div><span class="eyebrow">CATALOG</span><h1>Products</h1><p>Manage products, categories, barcodes and reorder levels.</p></div><button class="btn-primary-app" @click="openProduct()"><Plus :size="18" /> Add product</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h2>Product catalog</h2><p>{{ productPagination.total }} products</p></div><div class="search-box"><Search :size="17" /><input v-model="search" maxlength="200" placeholder="Search products, category, SKU or barcode..."></div></div><p v-if="productLoading" class="payment-plan-note" role="status">{{ translate('Loading...', language) }}</p><div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>SKU</th><th>BARCODE</th><th>CATEGORY</th><th>ON HAND</th><th>AVG. COST</th><th>DEFAULT SALE PRICE</th><th v-if="session.ecommerce_enabled">ONLINE STORE</th><th></th></tr></thead><tbody><tr v-for="product in filteredProducts" :key="product.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.unit }} <span v-if="product.stock_source">· {{ product.stock_source.name }} থেকে মজুদ</span> <span v-if="!product.active">· Inactive</span></small></div></div></td><td class="mono">{{ product.sku || '—' }}</td><td class="mono">{{ product.barcode || 'Not generated' }}</td><td>{{ product.category?.name || 'Uncategorized' }}</td><td><div class="product-stock-balance"><span class="stock-pill" :class="lowStock(product) ? 'low' : 'good'">{{ qty(product.stock_source_product_id ? product.source_quantity_on_hand : product.quantity_on_hand) }} {{ product.stock_source_product_id ? product.stock_source?.unit : product.unit }}<small v-if="product.stock_source_product_id"> · shared</small></span><small v-if="product.stock_source_product_id">Sellable: {{ qty(product.available_quantity) }} {{ product.unit }} · Per sale: {{ qty(product.stock_source_quantity) }} {{ product.stock_source?.unit }}</small></div></td><td>{{ money(product.stock_source_product_id ? Number(products.find(source => source.id === Number(product.stock_source_product_id))?.cost_price || 0) * Number(product.stock_source_quantity || 1) : product.cost_price) }}</td><td>{{ money(product.sale_price) }}</td><td v-if="session.ecommerce_enabled"><input class="ecommerce-product-toggle" type="checkbox" role="switch" :aria-label="`${translate('Show in online store', language)}: ${product.name}`" :checked="product.ecommerce_visible" :disabled="busy" @change="toggleEcommerceProduct(product, $event.target.checked)"></td><td><div class="row-actions"><button class="icon-button" :title="product.barcode ? 'View and print barcode' : 'Generate barcode'" @click="openBarcode(product)"><Barcode :size="18" /></button><button class="icon-button" title="Edit product" @click="openProduct(product)"><Pencil :size="17" /></button><button v-if="canDeleteCatalogRecords" class="icon-button" type="button" title="Delete product" :disabled="busy" @click="deleteProduct(product)"><Trash2 :size="17" /></button></div></td></tr></tbody></table></div><div v-if="!productLoading && !filteredProducts.length" class="empty-state"><Package :size="32" /><strong>No products found</strong><span>Add a product or change your search.</span></div><div v-if="productPagination.last_page > 1" class="expense-pagination"><button class="btn-secondary-app" :disabled="productLoading || productPagination.page <= 1" @click="loadProductCatalog(productPagination.page - 1)">{{ translate('Previous', language) }}</button><span>{{ translate('Page', language) }} {{ productPagination.page }} / {{ productPagination.last_page }}</span><button class="btn-secondary-app" :disabled="productLoading || productPagination.page >= productPagination.last_page" @click="loadProductCatalog(productPagination.page + 1)">{{ translate('Next', language) }}</button></div></section></template>
 
         <template v-else-if="page === 'categories'"><div class="page-heading"><div><span class="eyebrow">CATALOG SETUP</span><h1>Categories</h1><p>Organize products into reusable groups for faster searching and reporting.</p></div><button class="btn-primary-app" @click="openCategory()"><Plus :size="18" /> Add category</button></div><div class="category-stats"><div class="stat-card"><div class="stat-top"><span>Total categories</span><span class="stat-icon violet"><Tags :size="19" /></span></div><strong>{{ categories.length }}</strong><small>Available product groups</small></div><div class="stat-card"><div class="stat-top"><span>Active categories</span><span class="stat-icon green"><Check :size="19" /></span></div><strong>{{ categories.filter(category => category.active).length }}</strong><small>Visible when assigning products</small></div><div class="stat-card"><div class="stat-top"><span>Categorized products</span><span class="stat-icon blue"><Package :size="19" /></span></div><strong>{{ categories.reduce((total, category) => total + Number(category.products_count || 0), 0) }}</strong><small>Products assigned to a category</small></div></div><section class="panel table-panel category-table"><div class="table-toolbar"><div><h2>Category list</h2><p>{{ filteredCategories.length }} of {{ categories.length }} categories</p></div><div class="search-box"><Search :size="17" /><input v-model="search" placeholder="Search categories..."></div></div><div class="table-scroll"><table><thead><tr><th>CATEGORY</th><th>DESCRIPTION</th><th>PRODUCTS</th><th>STATUS</th><th></th></tr></thead><tbody><tr v-for="category in filteredCategories" :key="category.id"><td><div class="name-cell"><span class="product-avatar category-avatar"><Tags :size="16" /></span><strong>{{ category.name }}</strong></div></td><td class="category-description">{{ category.description || '—' }}</td><td><strong>{{ category.products_count }}</strong> products</td><td><span class="stock-pill" :class="category.active ? 'good' : 'low'">{{ category.active ? 'Active' : 'Inactive' }}</span></td><td><div class="row-actions"><button class="icon-button" title="Edit category" @click="openCategory(category)"><Pencil :size="17" /></button><button class="icon-button" title="Delete unused category" :disabled="category.products_count > 0 || busy" @click="deleteCategory(category)"><Trash2 :size="17" /></button></div></td></tr></tbody></table></div><div v-if="!filteredCategories.length" class="empty-state"><Tags :size="32" /><strong>No categories found</strong><span>Create a category to start organizing products.</span></div></section></template>
 
@@ -2282,7 +2396,7 @@ async function stopSupportSession() {
           </div>
         </template>
 
-        <template v-else-if="['purchase', 'sale', 'resale', 'purchase_return', 'sale_return'].includes(page)"><div class="page-heading"><div><span class="eyebrow">TRANSACTIONS</span><h1>{{ titles[page] }}</h1><p>{{ page === 'purchase_return' ? 'Return items to suppliers with a linked purchase.' : page === 'sale_return' ? 'Refund sold items and restore them to inventory.' : `Track every ${label(page).toLowerCase()} and its stock movement.` }}</p></div><button class="btn-primary-app" @click="openDocument(page)"><Plus :size="18" /> New {{ label(page).toLowerCase() }}</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h2>{{ titles[page] }} history</h2><p>{{ filteredDocuments.length }} records</p></div><div class="search-box"><Search :size="17" /><input v-model="search" placeholder="Search invoice or contact..."></div></div>
+        <template v-else-if="['purchase', 'sale', 'resale', 'purchase_return', 'sale_return'].includes(page)"><div class="page-heading"><div><span class="eyebrow">TRANSACTIONS</span><h1>{{ titles[page] }}</h1><p>{{ page === 'purchase_return' ? 'Return items to suppliers with a linked purchase.' : page === 'sale_return' ? 'Refund sold items and restore them to inventory.' : `Track every ${label(page).toLowerCase()} and its stock movement.` }}</p></div><button class="btn-primary-app" @click="openDocument(page)"><Plus :size="18" /> New {{ label(page).toLowerCase() }}</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h2>{{ titles[page] }} history</h2><p>{{ documentPagination.total }} records</p></div><div class="document-history-filters"><label class="field"><span>{{ translate('From date', language) }}</span><input v-model="documentFilters.date_from" type="date" :max="documentFilters.date_to || undefined"></label><label class="field"><span>{{ translate('To date', language) }}</span><input v-model="documentFilters.date_to" type="date" :min="documentFilters.date_from || undefined"></label><button v-if="documentFilters.date_from || documentFilters.date_to" class="btn-secondary-app small" @click="documentFilters = defaultDocumentFilters(page)">{{ translate(['sale', 'purchase'].includes(page) ? 'Today' : 'Clear filters', language) }}</button><div class="search-box"><Search :size="17" /><input v-model="search" maxlength="200" placeholder="Search invoice or contact..."></div></div></div><p v-if="documentLoading" class="payment-plan-note" role="status">{{ translate('Loading...', language) }}</p>
           <div class="table-scroll transaction-history-scroll">
             <table class="transaction-history-table">
               <thead><tr>
@@ -2328,7 +2442,7 @@ async function stopSupportSession() {
                 </td></tr>
               </tbody>
             </table>
-          </div><div v-if="!filteredDocuments.length" class="empty-state"><ShoppingCart :size="32" /><strong>No {{ titles[page].toLowerCase() }} yet</strong><span>Create a record to see it here.</span></div></section></template>
+          </div><div v-if="!documentLoading && !filteredDocuments.length" class="empty-state"><ShoppingCart :size="32" /><strong>{{ translate('No matching records', language) }}</strong><span>{{ translate('No records match the selected filters.', language) }}</span></div><div v-if="documentPagination.last_page > 1" class="expense-pagination"><button class="btn-secondary-app" :disabled="documentLoading || documentPagination.page <= 1" @click="loadDocumentHistory(documentPagination.page - 1)">{{ translate('Previous', language) }}</button><span>{{ translate('Page', language) }} {{ documentPagination.page }} / {{ documentPagination.last_page }}</span><button class="btn-secondary-app" :disabled="documentLoading || documentPagination.page >= documentPagination.last_page" @click="loadDocumentHistory(documentPagination.page + 1)">{{ translate('Next', language) }}</button></div></section></template>
 
         <template v-else-if="page === 'inventory'"><div class="page-heading"><div><span class="eyebrow">STOCK CONTROL</span><h1>Inventory</h1><p>See current balances and the history behind every change.</p></div><button v-if="hasAbility('stock_adjustments')" class="btn-primary-app" @click="openAdjustment()"><Plus :size="18" /> Adjust stock</button></div><div class="inventory-grid"><section class="panel table-panel"><div class="table-toolbar"><div><h2>Stock on hand</h2><p>{{ stockProducts.length }} stock products</p></div></div><div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>{{ language === 'bn' ? 'স্টকে আছে' : 'AVAILABLE' }}</th><th>REORDER AT</th><th v-if="hasAbility('stock_adjustments')"></th></tr></thead><tbody><tr v-for="product in stockProducts" :key="product.id"><td><div class="name-cell"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.sku || 'No SKU' }}</small></div></div></td><td><span class="stock-pill" :class="lowStock(product) ? 'low' : 'good'">{{ qty(product.quantity_on_hand) }} {{ product.unit }}</span></td><td>{{ qty(product.reorder_level) }}</td><td v-if="hasAbility('stock_adjustments')"><button class="icon-button" title="Adjust stock" @click="openAdjustment(product)"><Pencil :size="17" /></button></td></tr></tbody></table></div><div v-if="!stockProducts.length" class="empty-state"><Package :size="32" /><strong>No products yet</strong><span>Add products to start tracking stock.</span></div></section><section class="panel movements-panel"><div class="panel-heading"><div><h2>Recent movements</h2><p>Latest 200 entries</p></div></div><div v-if="movements.length" class="movement-list"><div v-for="movement in movements" :key="movement.id" class="movement-row"><span class="movement-symbol" :class="Number(movement.quantity_change) > 0 ? 'in' : 'out'"><ArrowDownRight v-if="Number(movement.quantity_change) > 0" :size="18" /><ArrowUpRight v-else :size="18" /></span><div class="movement-copy"><strong>{{ movement.product?.name }}</strong><span>{{ movement.document?.number || label(movement.type) }} · {{ date(movement.created_at) }}</span><small v-if="movement.notes">{{ movement.notes }}</small></div><div class="movement-qty" :class="Number(movement.quantity_change) > 0 ? 'positive' : 'negative'"><strong>{{ Number(movement.quantity_change) > 0 ? '+' : '' }}{{ qty(movement.quantity_change) }}</strong><span>Balance {{ qty(movement.balance_after) }}</span></div></div></div><div v-else class="empty-state compact"><Boxes :size="32" /><strong>No stock movements</strong><span>Purchases and adjustments will appear here.</span></div></section></div></template>
 
