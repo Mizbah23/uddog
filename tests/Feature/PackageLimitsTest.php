@@ -24,6 +24,25 @@ class PackageLimitsTest extends TestCase
         return User::factory()->admin()->for($company)->create();
     }
 
+    public function test_existing_saved_default_allowances_are_upgraded_while_custom_limits_are_preserved(): void
+    {
+        $starter = $this->owner('Starter', ['branches' => 3, 'sale_invoices' => 1000]);
+        $standard = $this->owner('Standard', ['sale_invoices' => 5000]);
+        $custom = $this->owner('Starter', ['sale_invoices' => 700]);
+        $unlimited = $this->owner('Standard', ['sale_invoices' => null]);
+        $demo = $this->owner('Starter', ['sale_invoices' => 1000]);
+        $demo->organization->update(['subdomain' => 'demo']);
+        $migration = require database_path('migrations/2026_11_01_044808_increase_package_invoice_allowances.php');
+        $migration->up();
+        $this->assertSame(['branches' => 3, 'sale_invoices' => 5000], $starter->organization->fresh()->package_limits);
+        $this->assertSame(15000, $standard->organization->fresh()->packageLimits()['sale_invoices']);
+        $this->assertSame(700, $custom->organization->fresh()->packageLimits()['sale_invoices']);
+        $this->assertNull($unlimited->organization->fresh()->packageLimits()['sale_invoices']);
+        $this->assertSame(['sale_invoices' => 1000], $demo->organization->fresh()->package_limits);
+        $migration->up();
+        $this->assertSame(5000, $starter->organization->fresh()->packageLimits()['sale_invoices']);
+    }
+
     private function branchPayload(string $code = 'SECOND', bool $active = true): array
     {
         return ['name' => $code.' Branch', 'code' => $code, 'is_default' => false, 'active' => $active];
@@ -66,8 +85,8 @@ class PackageLimitsTest extends TestCase
         return $payload;
     }
 
-    #[TestWith(['Starter', 1, 2, 1000])]
-    #[TestWith(['Standard', 2, 5, 5000])]
+    #[TestWith(['Starter', 1, 2, 5000])]
+    #[TestWith(['Standard', 2, 5, 15000])]
     #[TestWith(['Premium', 5, 20, null])]
     public function test_existing_and_new_companies_receive_package_defaults(string $plan, int $branches, int $users, ?int $invoices): void
     {
@@ -129,8 +148,8 @@ class PackageLimitsTest extends TestCase
         $this->assertFalse($active->fresh()->active);
     }
 
-    #[TestWith(['Starter', 1000])]
-    #[TestWith(['Standard', 5000])]
+    #[TestWith(['Starter', 5000])]
+    #[TestWith(['Standard', 15000])]
     public function test_invoice_limit_allows_the_last_invoice_then_rejects_another(string $plan, int $limit): void
     {
         $owner = $this->owner($plan);
@@ -158,7 +177,7 @@ class PackageLimitsTest extends TestCase
         $this->assertDatabaseCount('documents', 1);
     }
 
-    public function test_deleting_one_of_thirteen_starter_invoices_leaves_988_slots_and_ignores_old_lifetime_usage(): void
+    public function test_deleting_one_of_thirteen_starter_invoices_leaves_4988_slots_and_ignores_old_lifetime_usage(): void
     {
         $owner = $this->owner();
         [, $payload] = $this->saleRecords($owner);
@@ -166,11 +185,11 @@ class PackageLimitsTest extends TestCase
         for ($i = 0; $i < 13; $i++) {
             $sale = $this->postJson('/api/documents', $payload)->assertCreated()->json();
         }
-        DB::table('package_usages')->where('organization_id', $owner->organization_id)->update(['sale_invoices' => 1000]);
+        DB::table('package_usages')->where('organization_id', $owner->organization_id)->update(['sale_invoices' => 5000]);
         $this->deleteJson('/api/documents/'.$sale['id'])->assertOk();
         $this->getJson('/api/session')->assertOk()
             ->assertJsonPath('subscription.package_usage.sale_invoices', 12)
-            ->assertJsonPath('subscription.package_limits.sale_invoices', 1000);
+            ->assertJsonPath('subscription.package_limits.sale_invoices', 5000);
         $this->postJson('/api/documents', $payload)->assertCreated();
     }
 

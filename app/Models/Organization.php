@@ -19,8 +19,8 @@ class Organization extends Model
     public const ANNUAL_RENEW_FEES = ['Starter' => 4000, 'Standard' => 7000, 'Premium' => 12000];
 
     public const PACKAGE_LIMITS = [
-        'Starter' => ['branches' => 1, 'users' => 2, 'sale_invoices' => 1000],
-        'Standard' => ['branches' => 2, 'users' => 5, 'sale_invoices' => 5000],
+        'Starter' => ['branches' => 1, 'users' => 2, 'sale_invoices' => 5000],
+        'Standard' => ['branches' => 2, 'users' => 5, 'sale_invoices' => 15000],
         'Premium' => ['branches' => 5, 'users' => 20, 'sale_invoices' => null],
     ];
 
