@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\SupplierAdvance;
-use App\Models\SupplierAdvanceDelivery;
-use App\Models\SupplierTtEntry;
+use App\TenantContext;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 
 class SupplierAdvanceReport
 {
@@ -12,71 +12,32 @@ class SupplierAdvanceReport
 
     public function build(int $organizationId, int $branchId, ?string $from, ?string $to, ?string $companySearch = null): array
     {
-        $matchesCompany = fn (string $company) => ! $companySearch
-            || str_contains(mb_strtolower($company), mb_strtolower($companySearch));
-
-        $advances = SupplierAdvance::query()
-            ->where('organization_id', $organizationId)
-            ->where('branch_id', $branchId)
-            ->get()
-            ->filter(fn (SupplierAdvance $advance) => $matchesCompany($advance->company_name));
-        $deliveries = SupplierAdvanceDelivery::query()
-            ->where('organization_id', $organizationId)
-            ->where('branch_id', $branchId)
-            ->with('advance:id,company_name,reference')
-            ->get()
-            ->filter(fn (SupplierAdvanceDelivery $delivery) => $matchesCompany($delivery->company_name ?: $delivery->advance?->company_name ?: ''));
-        $entries = SupplierTtEntry::query()
-            ->where('organization_id', $organizationId)
-            ->where('branch_id', $branchId)
-            ->get()
-            ->filter(fn (SupplierTtEntry $entry) => $matchesCompany($entry->company_name));
-
-        $events = [];
-        foreach ($advances as $advance) {
-            $events[] = $this->event(
-                $advance->advance_date->toDateString(), $advance->id, 1, $advance->company_name,
-                'Advance sent', $advance->reference ?: 'ADV-'.$advance->id, '', '', (float) $advance->amount, 0,
-            );
-        }
-        foreach ($deliveries as $delivery) {
-            $events[] = $this->event(
-                $delivery->delivery_date->toDateString(), $delivery->id, 2, $delivery->company_name ?: $delivery->advance?->company_name ?: '',
-                'Products received', $delivery->advance?->reference ?: ($delivery->advance ? 'ADV-'.$delivery->advance->id : ''),
-                $delivery->installment_code, $delivery->product_details, 0, (float) $delivery->amount,
-            );
-        }
-        foreach ($entries as $entry) {
-            $paid = in_array($entry->entry_type, self::PAID_ENTRY_TYPES, true);
-            $events[] = $this->event(
-                $entry->entry_date->toDateString(), $entry->id, $paid ? 0 : 3, $entry->company_name,
-                $entry->particular ?: $this->entryLabel($entry->entry_type), '', '', '',
-                $paid ? (float) $entry->amount : 0, $paid ? 0 : (float) $entry->amount, $entry->entry_type,
-            );
-        }
-
-        usort($events, fn (array $left, array $right) => [$left['date'], $left['order'], $left['id']] <=> [$right['date'], $right['order'], $right['id']]);
-
         $summary = $this->emptyTotals();
         $companyTotals = [];
         $runningBalance = 0;
         $rows = [];
 
-        foreach ($events as $event) {
-            if ($to && $event['date'] > $to) {
-                continue;
-            }
-
-            $key = mb_strtolower(trim($event['company']));
-            $companyTotals[$key] ??= ['company' => trim($event['company']), ...$this->emptyTotals()];
-
-            if ($from && $event['date'] < $from) {
+        if ($from) {
+            $openingQuery = $this->eventsQuery($organizationId, $branchId, $from, null, $companySearch, true);
+            foreach ($openingQuery->orderBy('first_date')->orderBy('first_order')->orderBy('first_id')->get() as $opening) {
+                $key = mb_strtolower(trim($opening->company));
+                $companyTotals[$key] ??= ['company' => trim($opening->company), ...$this->emptyTotals()];
+                $event = ['advance' => (float) $opening->paid, 'received' => (float) $opening->received];
                 $this->addToTotals($summary, $event, true);
                 $this->addToTotals($companyTotals[$key], $event, true);
                 $runningBalance += $event['advance'] - $event['received'];
-
-                continue;
             }
+        }
+
+        $events = $this->eventsQuery($organizationId, $branchId, $from, $to, $companySearch)
+            ->orderBy('event_date')->orderBy('sort_order')->orderBy('id')->cursor();
+        foreach ($events as $record) {
+            $particular = $record->particular ?: ($record->entry_type ? $this->entryLabel($record->entry_type) : '');
+            $event = $this->event($record->event_date, $record->id, $record->sort_order, $record->company,
+                $particular, $record->reference, $record->installment_code, $record->product_details,
+                (float) $record->advance, (float) $record->received, $record->entry_type);
+            $key = mb_strtolower(trim($event['company']));
+            $companyTotals[$key] ??= ['company' => trim($event['company']), ...$this->emptyTotals()];
 
             $this->addToTotals($summary, $event);
             $this->addToTotals($companyTotals[$key], $event);
@@ -110,6 +71,54 @@ class SupplierAdvanceReport
             'summary' => $summary,
             'note' => 'This TT register is independent of suppliers, purchase invoices, stock, payments, cash balances and the general ledger. Enter values here separately.',
         ];
+    }
+
+    private function eventsQuery(int $organizationId, int $branchId, ?string $from, ?string $to, ?string $search, bool $opening = false): Builder
+    {
+        $connection = DB::connection(app(TenantContext::class)->connectionName());
+        $scope = function (Builder $query, string $alias, string $date, string $company) use ($organizationId, $branchId, $from, $to, $search, $opening): Builder {
+            $query->where($alias.'.organization_id', $organizationId)->where($alias.'.branch_id', $branchId);
+            if ($from) {
+                $query->where($date, $opening ? '<' : '>=', $from);
+            }
+            if ($to) {
+                $query->where($date, '<=', $to);
+            }
+            if ($search !== null && $search !== '') {
+                $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+                $query->whereRaw("LOWER({$company}) LIKE ? ESCAPE '!'", [$pattern]);
+            }
+
+            return $query;
+        };
+        $fallbackReference = $connection->getDriverName() === 'mysql' ? "CONCAT('ADV-', a.id)" : "('ADV-' || a.id)";
+        $advances = $scope($connection->table('supplier_advances as a'), 'a', 'a.advance_date', 'a.company_name')
+            ->selectRaw("a.advance_date AS event_date, a.id, 1 AS sort_order, a.company_name AS company, 'Advance sent' AS particular, COALESCE(NULLIF(NULLIF(a.reference, ''), '0'), {$fallbackReference}) AS reference, '' AS installment_code, '' AS product_details, a.amount AS advance, 0 AS received, NULL AS entry_type");
+        $deliveryCompany = "COALESCE(NULLIF(d.company_name, ''), a.company_name, '')";
+        $deliveries = $scope($connection->table('supplier_advance_deliveries as d')
+            ->leftJoin('supplier_advances as a', function ($join): void {
+                $join->on('a.id', '=', 'd.supplier_advance_id')->on('a.organization_id', '=', 'd.organization_id')->on('a.branch_id', '=', 'd.branch_id');
+            }), 'd', 'd.delivery_date', $deliveryCompany)
+            ->selectRaw("d.delivery_date AS event_date, d.id, 2 AS sort_order, {$deliveryCompany} AS company, 'Products received' AS particular, COALESCE(NULLIF(NULLIF(a.reference, ''), '0'), {$fallbackReference}, '') AS reference, d.installment_code, d.product_details, 0 AS advance, d.amount AS received, NULL AS entry_type");
+        $paidTypes = "'".implode("', '", self::PAID_ENTRY_TYPES)."'";
+        $entries = $scope($connection->table('supplier_tt_entries as e'), 'e', 'e.entry_date', 'e.company_name')
+            ->selectRaw("e.entry_date AS event_date, e.id, CASE WHEN e.entry_type IN ({$paidTypes}) THEN 0 ELSE 3 END AS sort_order, e.company_name AS company, e.particular, '' AS reference, '' AS installment_code, '' AS product_details, CASE WHEN e.entry_type IN ({$paidTypes}) THEN e.amount ELSE 0 END AS advance, CASE WHEN e.entry_type IN ({$paidTypes}) THEN 0 ELSE e.amount END AS received, e.entry_type");
+
+        if ($opening) {
+            $aggregate = function (Builder $query, string $company, string $date, string $id, string $order, string $paid, string $received) use ($connection): Builder {
+                $query->select([])->selectRaw("{$company} AS company, SUM({$paid}) AS paid, SUM({$received}) AS received, MIN({$date}) AS first_date, MIN({$order}) AS first_order, MIN({$id}) AS first_id")
+                    ->groupByRaw($company);
+                $binaryCompany = $connection->getDriverName() === 'mysql' ? "CAST({$company} AS BINARY)" : "{$company} COLLATE BINARY";
+
+                return $query->groupByRaw($binaryCompany);
+            };
+            $advances = $aggregate($advances, 'a.company_name', 'a.advance_date', 'a.id', '1', 'a.amount', '0');
+            $deliveries = $aggregate($deliveries, $deliveryCompany, 'd.delivery_date', 'd.id', '2', '0', 'd.amount');
+            $entries = $aggregate($entries, 'e.company_name', 'e.entry_date', 'e.id', "CASE WHEN e.entry_type IN ({$paidTypes}) THEN 0 ELSE 3 END",
+                "CASE WHEN e.entry_type IN ({$paidTypes}) THEN e.amount ELSE 0 END", "CASE WHEN e.entry_type IN ({$paidTypes}) THEN 0 ELSE e.amount END");
+        }
+
+        return $connection->query()->fromSub($advances->unionAll($deliveries)->unionAll($entries), 'tt_events');
     }
 
     private function event(string $date, int $id, int $order, string $company, string $particular, string $reference, string $installmentCode, string $productDetails, float $advance, float $received, ?string $entryType = null): array
