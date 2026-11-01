@@ -11,8 +11,8 @@
         ['number' => '04', 'icon' => '◫', 'name' => 'সিদ্ধান্ত নিন তথ্য দেখে', 'copy' => 'বিক্রয়, কেনাকাটা, ইনভেন্টরি, খরচ ও লেজারের রিপোর্ট পর্যালোচনা করুন।'],
     ];
     $plans = [
-        ['name' => 'Starter', 'price' => '৳২০,০০০', 'audience' => 'ক্ষুদ্র ও মাঝারি উদ্যোগ এবং ছোট ব্যবসার জন্য', 'description' => 'এক শাখার ব্যবসার দৈনন্দিন হিসাব গুছিয়ে নেওয়ার সহজ শুরু।', 'branches' => '১টি', 'users' => '২ জন', 'invoices' => '১,০০০টি', 'accent' => 'starter'],
-        ['name' => 'Standard', 'price' => '৳৩০,০০০', 'audience' => 'মাঝারি আকারের ব্যবসার জন্য', 'description' => 'দুই শাখা ও বড় দলের কাজ এক জায়গা থেকে পরিচালনা করুন।', 'branches' => '২টি', 'users' => '৫ জন', 'invoices' => '৫,০০০টি', 'accent' => 'standard'],
+        ['name' => 'Starter', 'price' => '৳২০,০০০', 'audience' => 'ক্ষুদ্র ও মাঝারি উদ্যোগ এবং ছোট ব্যবসার জন্য', 'description' => 'এক শাখার ব্যবসার দৈনন্দিন হিসাব গুছিয়ে নেওয়ার সহজ শুরু।', 'branches' => '১টি', 'users' => '২ জন', 'invoices' => '৫,০০০টি', 'accent' => 'starter'],
+        ['name' => 'Standard', 'price' => '৳৩০,০০০', 'audience' => 'মাঝারি আকারের ব্যবসার জন্য', 'description' => 'দুই শাখা ও বড় দলের কাজ এক জায়গা থেকে পরিচালনা করুন।', 'branches' => '২টি', 'users' => '৫ জন', 'invoices' => '১৫,০০০টি', 'accent' => 'standard'],
         ['name' => 'Premium', 'price' => '৳৫০,০০০', 'audience' => 'বড় ব্যবসা, একাধিক শাখা ও শোরুমের জন্য', 'description' => 'বেশি শাখা, বড় দল ও সীমাহীন বিক্রয় চালানে এগিয়ে চলুন।', 'branches' => '৫টি', 'users' => '২০ জন', 'invoices' => 'সীমাহীন', 'accent' => 'premium'],
     ];
     $renewalFees = App\Models\Organization::ANNUAL_RENEW_FEES;
