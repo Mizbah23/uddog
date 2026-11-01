@@ -157,20 +157,23 @@ function jpegBytes(canvas) {
   return bytes;
 }
 
-function pdfFromCanvas(canvas) {
-  const pageWidth = 842;
-  const pageHeight = 595;
-  const margin = 24;
+function pdfFromCanvas(canvas, portrait = false) {
+  const pageWidth = portrait ? 595 : 842;
+  const pageHeight = portrait ? 842 : 595;
+  const margin = portrait ? 0 : 24;
   const imageWidth = pageWidth - margin * 2;
-  const maxSliceHeight = Math.floor((pageHeight - margin * 2) * canvas.width / imageWidth);
+  const maxSliceHeight = Array.isArray(canvas) ? 0 : Math.floor((pageHeight - margin * 2) * canvas.width / imageWidth);
   const slices = [];
+  if (Array.isArray(canvas)) {
+    for (const page of canvas) slices.push({ width: page.width, height: page.height, bytes: jpegBytes(page) });
+  }
   for (let top = 0; top < canvas.height; top += maxSliceHeight) {
     const height = Math.min(maxSliceHeight, canvas.height - top);
     const pageCanvas = document.createElement('canvas');
     pageCanvas.width = canvas.width;
     pageCanvas.height = height;
     pageCanvas.getContext('2d').drawImage(canvas, 0, top, canvas.width, height, 0, 0, canvas.width, height);
-    slices.push({ height, bytes: jpegBytes(pageCanvas) });
+    slices.push({ width: canvas.width, height, bytes: jpegBytes(pageCanvas) });
   }
   const chunks = [];
   const offsets = [0];
@@ -197,11 +200,11 @@ function pdfFromCanvas(canvas) {
     const pageId = index * 3 + 3;
     const contentId = pageId + 1;
     const imageId = pageId + 2;
-    const imageHeight = slice.height * imageWidth / canvas.width;
+    const imageHeight = slice.height * imageWidth / slice.width;
     const drawing = ascii(`q\n${imageWidth} 0 0 ${imageHeight.toFixed(3)} ${margin} ${(pageHeight - margin - imageHeight).toFixed(3)} cm\n/Im0 Do\nQ\n`);
     object(pageId, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>\n`);
     object(contentId, `<< /Length ${drawing.length} >>\n`, drawing);
-    object(imageId, `<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${slice.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${slice.bytes.length} >>\n`, slice.bytes);
+    object(imageId, `<< /Type /XObject /Subtype /Image /Width ${slice.width} /Height ${slice.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${slice.bytes.length} >>\n`, slice.bytes);
   });
   const xref = length;
   append(`xref\n0 ${offsets.length}\n0000000000 65535 f \n`);
@@ -216,4 +219,8 @@ export function saveProfitLossPdf(report, filename) {
 
 export function saveCanvasPdf(canvas, filename) {
   download(pdfFromCanvas(canvas), `${filename}.pdf`);
+}
+
+export function saveCanvasPagesPdf(pages, filename) {
+  download(pdfFromCanvas(pages, true), `${filename}.pdf`);
 }
