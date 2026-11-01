@@ -106,8 +106,7 @@ class SupplierAdvanceReport
 
         if ($opening) {
             $aggregate = function (Builder $query, string $company, string $date, string $id, string $order, string $paid, string $received) use ($connection): Builder {
-                $query->select([])->selectRaw("{$company} AS company, SUM({$paid}) AS paid, SUM({$received}) AS received, MIN({$date}) AS first_date, MIN({$order}) AS first_order, MIN({$id}) AS first_id")
-                    ->groupByRaw($company);
+                $query->select([])->selectRaw("MIN({$company}) AS company, SUM({$paid}) AS paid, SUM({$received}) AS received, MIN({$date}) AS first_date, MIN({$order}) AS first_order, MIN({$id}) AS first_id");
                 $binaryCompany = $connection->getDriverName() === 'mysql' ? "CAST({$company} AS BINARY)" : "{$company} COLLATE BINARY";
 
                 return $query->groupByRaw($binaryCompany);

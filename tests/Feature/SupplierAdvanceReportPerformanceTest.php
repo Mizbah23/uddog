@@ -62,6 +62,34 @@ class SupplierAdvanceReportPerformanceTest extends TestCase
         $this->assertCount(1, $result['company_totals']);
     }
 
+    public function test_opening_balances_group_legacy_delivery_company_expressions_without_unaggregated_columns(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $base = ['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'created_by' => $owner->id];
+        $advance = SupplierAdvance::create([...$base, 'company_name' => 'Legacy company', 'advance_date' => '2026-10-01', 'amount' => 100, 'payment_method' => 'cash']);
+        SupplierAdvanceDelivery::create([...$base, 'company_name' => null, 'supplier_advance_id' => $advance->id, 'delivery_date' => '2026-10-02', 'installment_code' => 'LEGACY', 'product_details' => 'Salt', 'amount' => 30]);
+        SupplierAdvanceDelivery::create([...$base, 'company_name' => 'Other company', 'delivery_date' => '2026-10-02', 'installment_code' => 'OTHER', 'product_details' => 'Salt', 'amount' => 20]);
+        SupplierTtEntry::create([...$base, 'company_name' => 'legacy company', 'entry_date' => '2026-10-03', 'entry_type' => 'commission', 'amount' => 5]);
+        DB::enableQueryLog();
+        try {
+            DB::flushQueryLog();
+            $result = app(SupplierAdvanceReport::class)->build($owner->organization_id, $branch->id, '2026-11-01', '2026-11-01');
+            $queries = DB::getQueryLog();
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+        $this->assertStringContainsString("MIN(COALESCE(NULLIF(d.company_name, ''), a.company_name, '')) AS company", $queries[0]['query']);
+        $this->assertSame(105.0, $result['summary']['opening_paid']);
+        $this->assertSame(50.0, $result['summary']['opening_received']);
+        $this->assertSame(55.0, $result['summary']['closing_balance']);
+        $this->assertCount(0, $result['rows']);
+        $companies = collect($result['company_totals'])->keyBy('company');
+        $this->assertSame(75.0, $companies['Legacy company']['closing_balance']);
+        $this->assertSame(20.0, $companies['Other company']['due_balance']);
+    }
+
     public function test_literal_company_search_and_legacy_delivery_fallback_are_preserved(): void
     {
         $owner = User::factory()->admin()->create();
