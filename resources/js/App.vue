@@ -592,6 +592,7 @@ async function refresh() {
       || branches.value.find(branch => branch.active);
     activeBranchId.value = selectedBranch?.id || '';
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
+    if (isReportView.value && reportKind.value === 'supplier_tt') return;
     const branchQuery = selectedBranch ? `?branch_id=${selectedBranch.id}` : '';
     if (hasAbility('dashboard') && page.value !== 'products' && !historyTypes.includes(page.value)) requests.push(api(`overview${branchQuery}`).then(data => { overview.value = data; }));
     if (hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory', 'stock_adjustments', 'stock_transfers', 'product_damages')) {
