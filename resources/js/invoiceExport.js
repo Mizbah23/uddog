@@ -1,4 +1,4 @@
-import { saveCanvasPagesPdf } from './profitLossExport';
+import { saveCanvasPagesPdf } from './profitLossExport.js';
 
 const width = 794;
 const height = 1123;
