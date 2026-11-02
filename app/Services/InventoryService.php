@@ -398,6 +398,25 @@ class InventoryService
         });
     }
 
+    private function duePaymentTerms(array $data, int $totalCents, int $exchangeCents = 0): array
+    {
+        $paid = self::scaled($data['amount_paid'] ?? 0, 2);
+        if ($paid < 0 || $paid + $exchangeCents > $totalCents) {
+            throw ValidationException::withMessages(['amount_paid' => 'Partial payment must be zero or more and cannot exceed the remaining invoice total.']);
+        }
+        $method = $paid > 0 ? ($data['payment_method'] ?? 'cash') : 'credit';
+        if ($paid > 0 && ! in_array($method, ['cash', 'card', 'mobile_banking', 'bank_transfer'], true)) {
+            throw ValidationException::withMessages(['payment_method' => 'Choose a payment method for the partial payment.']);
+        }
+
+        return [
+            'payment_type' => 'due', 'payment_method' => $method, 'initial_payment' => $paid + $exchangeCents,
+            'down_payment' => 0, 'installment_count' => null, 'installment_frequency' => null,
+            'first_installment_date' => null, 'remaining' => $totalCents - $paid - $exchangeCents,
+            'exchange_value' => $exchangeCents,
+        ];
+    }
+
     private function paymentTerms(array $data, string $type, string $saleChannel, int $totalCents): array
     {
         if ($type === 'purchase') {
@@ -417,11 +436,7 @@ class InventoryService
             }
 
             if ($paymentType === 'due') {
-                return [
-                    'payment_type' => 'due', 'payment_method' => 'credit', 'initial_payment' => 0,
-                    'down_payment' => 0, 'installment_count' => null, 'installment_frequency' => null,
-                    'first_installment_date' => null, 'remaining' => $totalCents,
-                ];
+                return $this->duePaymentTerms($data, $totalCents);
             }
 
             $downPayment = self::scaled($data['down_payment'] ?? 0, 2);
@@ -468,17 +483,7 @@ class InventoryService
         }
 
         if ($paymentType === 'due') {
-            $legacyPartialPayment = ! $providedType && $providedAmount > 0;
-            if (! $legacyPartialPayment && ($providedAmount > 0 || self::scaled($data['down_payment'] ?? 0, 2) > 0)) {
-                throw ValidationException::withMessages(['down_payment' => 'A due sale has no initial payment. Choose an installment plan to take a down payment.']);
-            }
-            $initialPayment = $exchangeCents + ($legacyPartialPayment ? $providedAmount : 0);
-
-            return [
-                'payment_type' => 'due', 'payment_method' => $legacyPartialPayment ? ($paymentMethod ?: 'cash') : 'credit', 'initial_payment' => $initialPayment,
-                'down_payment' => 0, 'installment_count' => null, 'installment_frequency' => null,
-                'first_installment_date' => null, 'remaining' => $totalCents - $initialPayment, 'exchange_value' => $exchangeCents,
-            ];
+            return $this->duePaymentTerms($data, $totalCents, $exchangeCents);
         }
 
         $downPayment = self::scaled($data['down_payment'] ?? $data['amount_paid'] ?? 0, 2);

@@ -262,6 +262,8 @@ Object.assign(bangla, {
     'Download PDF': 'পিডিএফ ডাউনলোড',
     'Preparing PDF...': 'পিডিএফ তৈরি হচ্ছে...',
     'Could not download the invoice PDF. Please try again.': 'চালানের পিডিএফ ডাউনলোড করা যায়নি। আবার চেষ্টা করুন।',
+    'Partial payment (optional)': 'আংশিক পরিশোধ (ঐচ্ছিক)',
+    'Leave zero for full due, or enter the amount paid today.': 'সম্পূর্ণ বকেয়া রাখতে শূন্য রাখুন, অথবা আজ পরিশোধিত টাকার পরিমাণ লিখুন।',
     'Previous': 'আগের',
     'From date': 'শুরুর তারিখ',
     'To date': 'শেষের তারিখ',
