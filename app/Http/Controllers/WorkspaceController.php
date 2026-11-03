@@ -349,6 +349,7 @@ class WorkspaceController extends Controller
     public function products(Request $request): JsonResponse
     {
         $filters = $request->validate([
+            'lookup' => ['sometimes', 'boolean'],
             'paginate' => ['sometimes', 'boolean'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
@@ -356,6 +357,9 @@ class WorkspaceController extends Controller
         ]);
         $organizationId = $this->organizationId();
         $branchId = $this->branchId($request, $organizationId);
+        if ($request->boolean('lookup')) {
+            return response()->json(Product::query()->where('organization_id', $organizationId)->whereNull('stock_source_product_id')->orderBy('name')->orderBy('id')->get(['id', 'name', 'sku', 'stock_source_product_id']));
+        }
         $results = $this->productsForBranch($organizationId, $branchId, trim($filters['search'] ?? ''), $request->boolean('paginate') ? ($filters['per_page'] ?? 25) : null);
         if ($request->boolean('paginate')) {
             return response()->json([

@@ -57,6 +57,17 @@ class ProductCatalogTest extends TestCase
             ->assertJsonPath('data.0.available_quantity', '4.000')->assertJsonPath('pagination.total', 2);
     }
 
+    public function test_report_product_lookup_is_lightweight_and_company_scoped(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $source = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Report stock', 'sku' => 'LOOKUP', 'unit' => 'pc']);
+        Product::create(['organization_id' => $owner->organization_id, 'name' => 'Linked sale name', 'unit' => 'pc', 'stock_source_product_id' => $source->id, 'stock_source_quantity' => 1]);
+        $other = User::factory()->admin()->create();
+        Product::create(['organization_id' => $other->organization_id, 'name' => 'Private stock', 'unit' => 'pc']);
+        $this->actingAs($owner)->getJson('/api/products?lookup=1')->assertOk()->assertJsonCount(1)
+            ->assertJsonPath('0.id', $source->id)->assertJsonPath('0.sku', 'LOOKUP')->assertJsonMissingPath('0.quantity_on_hand')->assertJsonMissingPath('0.cost_price');
+    }
+
     private function productData(array $overrides = []): array
     {
         return array_merge([

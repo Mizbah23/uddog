@@ -157,6 +157,35 @@ class GeneralLedgerReportTest extends TestCase
             ->assertJsonValidationErrors('account');
     }
 
+    public function test_date_cutoff_preserves_future_payment_reconciliation_and_backdated_collections(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $contact = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Cutoff customer', 'type' => 'customer']);
+        $sale = $this->document($owner, $branch, $contact, 'sale', 'CUTOFF-OLD', '2026-10-01', 100, 100);
+        foreach ([['2026-10-01', 20], ['2026-11-02', 30], ['2026-11-20', 50]] as [$date, $amount]) {
+            $sale->payments()->create(['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'amount' => $amount, 'payment_method' => 'cash', 'payment_date' => $date, 'created_by' => $owner->id]);
+        }
+        $future = $this->document($owner, $branch, $contact, 'sale', 'CUTOFF-FUTURE', '2026-11-20', 100, 5);
+        $future->payments()->create(['organization_id' => $owner->organization_id, 'branch_id' => $branch->id, 'amount' => 5, 'payment_method' => 'cash', 'payment_date' => '2026-11-02', 'created_by' => $owner->id]);
+        $this->actingAs($owner)->getJson('/api/reports?report=general_ledger&account=receivables&date_from=2026-11-01&date_to=2026-11-03')
+            ->assertOk()->assertJsonPath('summary.opening_balance', 80)->assertJsonPath('summary.closing_balance', 45)
+            ->assertJsonPath('summary.total_credit', 35)->assertJsonCount(2, 'rows');
+    }
+
+    public function test_general_ledger_invoice_drilldown_is_scoped_and_permission_checked(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $contact = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Drilldown customer', 'type' => 'customer']);
+        $sale = $this->document($owner, $branch, $contact, 'sale', 'GL-DETAIL', '2026-11-01', 100, 0);
+        $this->actingAs($owner)->getJson('/api/reports/general-ledger/invoices/'.$sale->id)->assertOk()->assertJsonPath('id', $sale->id)->assertJsonStructure(['items', 'payments', 'contact']);
+        $other = User::factory()->admin()->create();
+        $this->actingAs($other)->getJson('/api/reports/general-ledger/invoices/'.$sale->id)->assertNotFound();
+        $staff = User::factory()->staff()->for($owner->organization)->create(['permissions' => ['sales'], 'report_permissions' => ['sales']]);
+        $this->actingAs($staff)->getJson('/api/reports/general-ledger/invoices/'.$sale->id)->assertForbidden();
+    }
+
     private function document(User $owner, Branch $branch, Contact $contact, string $type, string $number, string $date, int $total, int $paid): Document
     {
         return Document::create([

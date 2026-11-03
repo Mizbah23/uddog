@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\StockMovement;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 class ProductLifecycleLedgerReport
@@ -23,25 +24,36 @@ class ProductLifecycleLedgerReport
             throw ValidationException::withMessages(['product_id' => 'Choose the linked stock product to see the complete purchase and sales lifecycle.']);
         }
         $allBranchIds = Branch::query()->where('organization_id', $organizationId)->pluck('id')->all();
-        $movements = StockMovement::query()->where('organization_id', $organizationId)
-            ->where('product_id', $productId)->whereIn('branch_id', $allBranchIds)
-            ->with('productDamage')->orderBy('id')->get();
+        $movementQuery = StockMovement::query()->where('organization_id', $organizationId)
+            ->where('product_id', $productId)->whereIn('branch_id', $allBranchIds);
+        $movementTotals = (clone $movementQuery)->select('branch_id')->selectRaw('SUM(quantity_change) AS quantity')->groupBy('branch_id')->pluck('quantity', 'branch_id');
+        if ($dateTo) {
+            $movementQuery->where(function ($query) use ($dateTo): void {
+                $query->whereHas('document', fn ($documents) => $documents->where('document_date', '<=', $dateTo))
+                    ->orWhere(fn ($unlinked) => $unlinked->whereNull('document_id')->where('created_at', '<', Carbon::parse($dateTo)->addDay()->startOfDay()));
+            });
+        }
+        $movements = (clone $movementQuery)->with('productDamage:id,purchase_id')->orderBy('id')->get();
         $documents = Document::query()->where('organization_id', $organizationId)
-            ->whereIn('id', $movements->pluck('document_id')->filter()->unique())
-            ->with(['items' => fn ($query) => $query->orderBy('id')])->get()->keyBy('id');
+            ->whereIn('id', (clone $movementQuery)->select('document_id')->whereNotNull('document_id'))
+            ->select('id', 'number', 'document_date', 'discount', 'sale_id', 'purchase_id')
+            ->with(['items' => fn ($query) => $query->select('id', 'document_id', 'product_id', 'stock_product_id', 'line_total', 'quantity', 'unit_price', 'cost_price')->orderBy('id')])->get()->keyBy('id');
         $itemQueues = [];
         $lineCosts = [];
         foreach ($documents as $document) {
             $subtotal = max(1, $document->items->sum(fn ($item) => self::cents($item->line_total)));
             $remainingDiscount = self::cents($document->discount);
             foreach ($document->items->values() as $index => $item) {
-                $itemQueues[$document->id.':'.($item->stock_product_id ?: $item->product_id)][] = $item;
                 $discount = $index === $document->items->count() - 1
                     ? $remainingDiscount
                     : min($remainingDiscount, (int) round(self::cents($document->discount) * self::cents($item->line_total) / $subtotal));
                 $remainingDiscount -= $discount;
-                $lineCosts[$item->id] = self::cents($item->line_total) - $discount;
+                if ((int) ($item->stock_product_id ?: $item->product_id) === $productId) {
+                    $itemQueues[$document->id.':'.$productId][] = $item;
+                    $lineCosts[$item->id] = self::cents($item->line_total) - $discount;
+                }
             }
+            $document->unsetRelation('items');
         }
 
         $stocks = ProductStock::query()->where('organization_id', $organizationId)->where('product_id', $productId)
@@ -49,7 +61,7 @@ class ProductLifecycleLedgerReport
         $states = [];
         $openingEstimated = false;
         foreach ($allBranchIds as $branchId) {
-            $openingQty = self::mills($stocks[$branchId] ?? 0) - $movements->where('branch_id', $branchId)->sum(fn ($movement) => self::mills($movement->quantity_change));
+            $openingQty = self::mills($stocks[$branchId] ?? 0) - self::mills($movementTotals[$branchId] ?? 0);
             $openingCost = (int) round($openingQty * self::cents($product->cost_price) / 1000);
             $openingEstimated = $openingEstimated || $openingQty > 0;
             $states[$branchId] = [
@@ -62,7 +74,7 @@ class ProductLifecycleLedgerReport
         }
 
         $events = $movements->map(function (StockMovement $movement) use ($documents, &$itemQueues) {
-            $document = $documents[$movement->document_id] ?? null;
+            $document = $movement->document_id ? $documents->get($movement->document_id) : null;
             $queueKey = $movement->document_id.':'.$movement->product_id;
             $item = $document && ! empty($itemQueues[$queueKey]) ? array_shift($itemQueues[$queueKey]) : null;
             $at = $document
@@ -274,6 +286,9 @@ class ProductLifecycleLedgerReport
         $allocations = [];
         $remaining = $quantity;
         foreach ($lots as &$lot) {
+            if ($remaining <= 0) {
+                break;
+            }
             if ($preferred !== null && $lot['id'] !== $preferred) {
                 continue;
             }

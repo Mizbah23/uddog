@@ -31,8 +31,17 @@ class GeneralLedgerReport
     {
         $entries = [];
         $sequence = 0;
-        $post = function (string $date, string $reference, string $details, string $accountKey, int $debit, int $credit, ?string $party = null, ?string $sourceType = null, ?int $sourceId = null, ?array $sourceRecord = null) use (&$entries, &$sequence): void {
+        $openingBalances = array_fill_keys(array_keys(self::accounts()), 0);
+        $post = function (string $date, string $reference, string $details, string $accountKey, int $debit, int $credit, ?string $party = null, ?string $sourceType = null, ?int $sourceId = null, ?array $sourceRecord = null) use (&$entries, &$sequence, &$openingBalances, $dateFrom, $dateTo, $account): void {
             if ($debit === 0 && $credit === 0) {
+                return;
+            }
+            if (($dateTo && $date > $dateTo) || ($account && $accountKey !== $account)) {
+                return;
+            }
+            if ($dateFrom && $date < $dateFrom) {
+                $openingBalances[$accountKey] += $debit - $credit;
+
                 return;
             }
             $entries[] = [
@@ -46,7 +55,14 @@ class GeneralLedgerReport
 
         Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
             ->whereIn('type', ['sale', 'resale', 'sale_return', 'purchase', 'purchase_return'])
-            ->with(['contact:id,name', 'items:id,document_id,quantity,cost_price', 'payments:id,document_id,amount,payment_method,payment_date', 'purchasePayments:id,document_id,amount,payment_method,payment_date'])
+            ->when($dateTo, fn ($query) => $query->where(fn ($query) => $query->where('document_date', '<=', $dateTo)
+                ->orWhereHas('payments', fn ($payments) => $payments->where('payment_date', '<=', $dateTo))
+                ->orWhereHas('purchasePayments', fn ($payments) => $payments->where('payment_date', '<=', $dateTo))))
+            ->select('id', 'contact_id', 'type', 'number', 'document_date', 'total', 'amount_paid', 'payment_method')
+            ->withSum('payments', 'amount')->withSum('purchasePayments', 'amount')
+            ->with(['contact:id,name', 'items:id,document_id,quantity,cost_price',
+                'payments' => fn ($query) => $query->select('id', 'document_id', 'amount', 'payment_method', 'payment_date')->when($dateTo, fn ($q) => $q->where('payment_date', '<=', $dateTo)),
+                'purchasePayments' => fn ($query) => $query->select('id', 'document_id', 'amount', 'payment_method', 'payment_date')->when($dateTo, fn ($q) => $q->where('payment_date', '<=', $dateTo))])
             ->orderBy('id')->chunkById(200, function ($documents) use ($post): void {
                 foreach ($documents as $document) {
                     $postDocument = fn (string $date, string $reference, string $details, string $accountKey, int $debit, int $credit) => $post($date, $reference, $details, $accountKey, $debit, $credit, $document->contact?->name, 'document', $document->id);
@@ -103,7 +119,7 @@ class GeneralLedgerReport
 
                     // Older imported invoices may have a paid amount without individual payment records.
                     if (in_array($document->type, ['sale', 'resale', 'purchase'], true)) {
-                        $unrecorded = max(0, self::cents($document->amount_paid) - (int) $payments->sum(fn ($payment) => self::cents($payment->amount)));
+                        $unrecorded = max(0, self::cents($document->amount_paid) - self::cents(($document->type === 'purchase' ? $document->purchase_payments_sum_amount : $document->payments_sum_amount) ?? 0));
                         if ($unrecorded > 0) {
                             $moneyAccount = self::moneyAccount($document->payment_method);
                             if ($document->type === 'purchase') {
@@ -119,7 +135,7 @@ class GeneralLedgerReport
             });
 
         Expense::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
-            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))
+            ->when($dateTo, fn ($query) => $query->where('expense_date', '<=', $dateTo))
             ->orderBy('id')->chunkById(200, function ($expenses) use ($post): void {
                 foreach ($expenses as $expense) {
                     $date = $expense->expense_date->toDateString();
@@ -159,7 +175,7 @@ class GeneralLedgerReport
         usort($entries, fn (array $left, array $right): int => [$accountOrder[$left['account_key']], $left['date'], $left['sequence']]
             <=> [$accountOrder[$right['account_key']], $right['date'], $right['sequence']]);
 
-        $balances = array_fill_keys(array_keys($accounts), 0);
+        $balances = $openingBalances;
         $opening = 0;
         $totalDebit = 0;
         $totalCredit = 0;
