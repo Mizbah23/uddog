@@ -691,7 +691,7 @@ function selectReport(id) {
   reportKind.value = id;
   navigate('reports');
   reportDetailOpen.value = true;
-  loadReport();
+  reportResult.value = { columns: [], rows: [], summary: {} };
   nextTick(() => window.scrollTo(0, 0));
 }
 function canOpenReport(report) {
@@ -748,6 +748,7 @@ const reportViewUrl = computed(() => {
   return url.toString();
 });
 async function loadReport() {
+  if (!isReportView.value) return;
   if (!availableReportKinds.value.some(report => report.id === reportKind.value)) {
     reportKind.value = availableReportKinds.value[0]?.id || 'sales';
   }
@@ -915,7 +916,7 @@ async function switchBranch() {
   documentHistory.value = [];
   documents.value = [];
   error.value = ''; busy.value = true;
-  try { await refresh(); if (page.value === 'reports' && (reportDetailOpen.value || isReportView.value)) await loadReport(); } catch (e) { error.value = e.message; } finally { busy.value = false; }
+  try { await refresh(); if (isReportView.value) await loadReport(); } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 
 async function authenticate() {
@@ -2214,7 +2215,7 @@ async function stopSupportSession() {
           </section>
           <div v-if="reportDetailOpen || isReportView" class="report-detail">
           <button v-if="!isReportView" type="button" class="reports-catalog-back" @click="reportDetailOpen = false"><ArrowLeft :size="17" /> All reports</button>
-          <div class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ reportBranchName }}</p></div><div v-if="isReportView && !reportLoading && reportCanExport" class="report-action-group" aria-label="Report actions"><button type="button" class="report-icon-action" title="Print" aria-label="Print" data-tooltip="Print" @click="printReport"><Printer :size="19" /></button><template v-if="['profit_loss', 'product_ledger'].includes(reportKind)"><button type="button" class="report-icon-action" title="Save as PDF" aria-label="Save as PDF" data-tooltip="Save as PDF" :disabled="reportSaveBusy" @click="saveReportFile('pdf')"><FileText :size="19" /></button><button type="button" class="report-icon-action" title="Save as image" aria-label="Save as image" data-tooltip="Save as image" :disabled="reportSaveBusy" @click="saveReportFile('image')"><ImageIcon :size="19" /></button></template><button v-else type="button" class="report-icon-action" title="Export CSV" aria-label="Export CSV" data-tooltip="Export CSV" @click="exportReportCsv"><ArrowDownRight :size="19" /></button></div></div>
+          <div v-if="isReportView" class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ reportBranchName }}</p></div><div v-if="isReportView && !reportLoading && reportCanExport" class="report-action-group" aria-label="Report actions"><button type="button" class="report-icon-action" title="Print" aria-label="Print" data-tooltip="Print" @click="printReport"><Printer :size="19" /></button><template v-if="['profit_loss', 'product_ledger'].includes(reportKind)"><button type="button" class="report-icon-action" title="Save as PDF" aria-label="Save as PDF" data-tooltip="Save as PDF" :disabled="reportSaveBusy" @click="saveReportFile('pdf')"><FileText :size="19" /></button><button type="button" class="report-icon-action" title="Save as image" aria-label="Save as image" data-tooltip="Save as image" :disabled="reportSaveBusy" @click="saveReportFile('image')"><ImageIcon :size="19" /></button></template><button v-else type="button" class="report-icon-action" title="Export CSV" aria-label="Export CSV" data-tooltip="Export CSV" @click="exportReportCsv"><ArrowDownRight :size="19" /></button></div></div>
           <section v-if="!isReportView" class="panel report-filter-panel">
             <div class="report-filter-grid" :class="{ 'ledger-filter-grid': reportKind === 'general_ledger', 'product-ledger-filter-grid': ['product_ledger', 'product_lifecycle_ledger'].includes(reportKind) }">
               <div class="report-current"><span>Report</span><strong>{{ activeReport.label }}</strong></div>
@@ -2232,6 +2233,7 @@ async function stopSupportSession() {
             <p class="report-description">{{ activeReport.description }} · {{ reportBranchName }}</p>
           </section>
           <div v-if="error" class="alert-box error report-error">{{ error }}</div>
+          <template v-if="isReportView">
           <section v-if="reportKind === 'profit_loss'" class="profit-loss-sheet" aria-label="Profit and loss statement">
             <div class="profit-loss-sheet-header"><small>FINANCIAL OVERVIEW</small><strong>{{ session.user.organization?.name || 'Company / store' }}</strong><span>Profit &amp; Loss · {{ reportPeriod }} · {{ reportBranchName }}</span></div>
             <div v-if="reportLoading" class="profit-loss-sheet-status">Loading report…</div>
@@ -2275,6 +2277,7 @@ async function stopSupportSession() {
               <footer v-if="reportResult.rows.length" class="profit-loss-footer"><div class="profit-loss-signatures"><div><span></span><strong>{{ translate('Prepared by:', language) }}</strong></div><div><span></span><strong>{{ translate('Verified by:', language) }}</strong></div><div><span></span><strong>{{ translate('Approved by:', language) }}</strong></div></div><p>{{ reportGeneratedLabel }}</p></footer>
             </template>
           </section>
+          </template>
           </div>
         </template>
         <template v-if="page === 'admin_dashboard'"><div class="page-heading"><div><span class="eyebrow">SAAS OVERVIEW</span><h1>Company subscriptions</h1><p>Monitor every company, subscription validity and owner account from one place.</p></div><button class="btn-primary-app" @click="openClient()"><Plus :size="18" /> Add company</button></div><div class="stats-grid"><div class="stat-card"><div class="stat-top"><span>Total companies</span><span class="stat-icon violet"><Building2 :size="19" /></span></div><strong>{{ clientStats.total }}</strong><small>Companies using your software</small></div><div class="stat-card"><div class="stat-top"><span>Active subscriptions</span><span class="stat-icon green"><ShieldCheck :size="19" /></span></div><strong>{{ clientStats.active }}</strong><small>Active and trial companies</small></div><div class="stat-card"><div class="stat-top"><span>Expiring in 30 days</span><span class="stat-icon orange"><Clock3 :size="19" /></span></div><strong>{{ clientStats.expiring }}</strong><small>Renewal follow-up required</small></div><div class="stat-card"><div class="stat-top"><span>Needs attention</span><span class="stat-icon orange"><AlertTriangle :size="19" /></span></div><strong>{{ clientStats.attention }}</strong><small>Expired, overdue or suspended</small></div></div><section class="panel table-panel admin-subscription-panel"><div class="table-toolbar"><div><h2>Validity and support queue</h2><p>Expired subscriptions and upcoming renewals appear first.</p></div><button class="text-button" @click="navigate('clients')">Manage all companies <ArrowUpRight :size="16" /></button></div><div class="table-scroll"><table><thead><tr><th>COMPANY</th><th>OWNER</th><th>PLAN</th><th>STATUS</th><th>VALID UNTIL</th><th>USERS</th><th>SUPPORT</th></tr></thead><tbody><tr v-for="client in upcomingClients" :key="client.id"><td><div class="name-cell"><span class="product-avatar contact-avatar">{{ initial(client.name) }}</span><strong>{{ client.name }}</strong></div></td><td><div v-if="client.admins?.length" class="name-cell"><div><strong>{{ client.admins[0].name }}</strong><small>{{ client.admins[0].email || client.admins[0].mobile }}</small></div></div><span v-else>Owner not assigned</span></td><td>{{ client.plan_name || '—' }}</td><td><span class="stock-pill" :class="client.subscription_active ? 'good' : 'low'">{{ clientValidityLabel(client) }}</span></td><td>{{ date(client.subscription_ends_at) }}</td><td>{{ client.users_count }}</td><td><button v-if="client.admins?.some(owner => owner.active)" class="btn-secondary-app small" :disabled="busy" @click="startSupportSession(client)"><Eye :size="15" /> View as owner</button><button v-else class="btn-secondary-app small" @click="openClient(client)"><UserCog :size="15" /> Set up owner</button></td></tr></tbody></table></div><div v-if="!upcomingClients.length" class="empty-state"><ShieldCheck :size="32" /><strong>No renewals need attention</strong><span>Add company validity dates to monitor renewals here.</span></div></section></template>
