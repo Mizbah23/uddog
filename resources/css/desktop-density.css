@@ -1,0 +1,16 @@
+/* Match a 90% browser zoom on desktop while keeping native mobile and print sizing. */
+@media screen and (min-width: 1024px) {
+  html:has(.app-shell) {
+    --desktop-app-scale: .9;
+    zoom: var(--desktop-app-scale);
+  }
+
+  .app-shell {
+    min-height: calc(100dvh / var(--desktop-app-scale, 1));
+  }
+
+  .app-shell > .sidebar {
+    height: calc(100dvh / var(--desktop-app-scale, 1));
+    min-height: calc(100dvh / var(--desktop-app-scale, 1));
+  }
+}
