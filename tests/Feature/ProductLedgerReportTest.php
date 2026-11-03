@@ -109,6 +109,23 @@ class ProductLedgerReportTest extends TestCase
             ->assertJsonPath('summary.total_sales', 100);
     }
 
+    public function test_multiple_document_batches_preserve_all_product_totals_and_search_allocations(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $first = $this->product($owner, 'Batch one', 'BATCH-1');
+        $second = $this->product($owner, 'Batch two', 'BATCH-2');
+        for ($i = 0; $i < 205; $i++) {
+            $sale = $this->document($owner, $branch, 'sale', '2026-11-01', 200, 10, 20);
+            foreach ([$first, $second] as $product) {
+                $sale->items()->create(['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 100, 'line_total' => 100, 'cost_price' => 60]);
+            }
+        }
+        $this->actingAs($owner)->getJson('/api/reports?report=product_ledger&date_from=2026-11-01&date_to=2026-11-03&search=BATCH-1')
+            ->assertOk()->assertJsonCount(1, 'rows')->assertJsonPath('summary.quantity', 205)
+            ->assertJsonPath('summary.total_sales', 19475)->assertJsonPath('summary.installment_profit', 2050);
+    }
+
     private function product(User $owner, string $name, string $sku): Product
     {
         return Product::create(['organization_id' => $owner->organization_id, 'sku' => $sku, 'name' => $name, 'cost_price' => 30, 'sale_price' => 50]);

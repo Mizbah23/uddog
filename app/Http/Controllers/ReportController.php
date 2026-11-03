@@ -6,6 +6,7 @@ use App\BranchAccess;
 use App\Models\Category;
 use App\Models\Contact;
 use App\Models\Document;
+use App\Models\DocumentItem;
 use App\Models\Expense;
 use App\Models\Organization;
 use App\Models\Product;
@@ -94,8 +95,8 @@ class ReportController extends Controller
         }
         $visibleTypes = $visibleTypes->unique()->values()->all();
         $documents = Document::query()->where('organization_id', $organizationId)->whereIn('branch_id', $branchIds)->whereIn('type', $visibleTypes)
-            ->when($dateFrom, fn ($query) => $query->whereDate('document_date', '>=', $dateFrom))
-            ->when($dateTo, fn ($query) => $query->whereDate('document_date', '<=', $dateTo));
+            ->when($dateFrom, fn ($query) => $query->where('document_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($query) => $query->where('document_date', '<=', $dateTo));
 
         $result = match ($report) {
             'sales' => $this->sales($documents),
@@ -130,6 +131,11 @@ class ReportController extends Controller
     public function supplierLedgerInvoice(Request $request, int $document): JsonResponse
     {
         return $this->ledgerInvoice($request, $document, ReportType::SupplierLedger, ['purchase', 'purchase_return'], ['supplier', 'both']);
+    }
+
+    public function generalLedgerInvoice(Request $request, int $document): JsonResponse
+    {
+        return $this->ledgerInvoice($request, $document, ReportType::GeneralLedger, ['sale', 'resale', 'sale_return', 'purchase', 'purchase_return'], ['customer', 'supplier', 'both']);
     }
 
     private function ledgerInvoice(Request $request, int $document, ReportType $report, array $types, array $contactTypes): JsonResponse
@@ -178,21 +184,29 @@ class ReportController extends Controller
 
     private function profitLoss(Builder $documents, int $organizationId, array $branchIds, string $branchName, ?string $dateFrom, ?string $dateTo): array
     {
-        $sales = (clone $documents)->whereIn('type', ['sale', 'resale'])->with('items')->get();
-        $returnDocuments = (clone $documents)->where('type', 'sale_return')->with('items')->get();
-        $totalSales = $sales->sum(fn (Document $document) => (float) $document->total);
-        $returns = $returnDocuments->sum(fn (Document $document) => (float) $document->total);
-        $returnProfit = $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->line_total - ((float) $item->cost_price * (float) $item->quantity)));
-        $grossProfit = $sales->sum(fn (Document $document) => (float) $document->total_profit);
+        $itemTotals = DocumentItem::query()->whereIn('document_id', (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])->select('documents.id'))
+            ->select('document_id')->selectRaw('SUM(line_total - cost_price * quantity) AS stock_profit, SUM(cost_price * quantity) AS cost')->groupBy('document_id');
+        $totals = (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])
+            ->leftJoinSub($itemTotals, 'item_totals', 'documents.id', '=', 'item_totals.document_id')
+            ->toBase()->selectRaw("SUM(CASE WHEN type IN ('sale', 'resale') THEN total ELSE 0 END) AS sales,
+                SUM(CASE WHEN type = 'sale_return' THEN total ELSE 0 END) AS returns,
+                SUM(CASE WHEN type IN ('sale', 'resale') THEN ROUND(COALESCE(stock_profit, 0), 2) - discount + interest_amount ELSE -COALESCE(stock_profit, 0) END) AS profit,
+                SUM(CASE WHEN type = 'sale_return' THEN -COALESCE(cost, 0) ELSE COALESCE(cost, 0) END) AS cost")->first();
+        $totalSales = (float) $totals->sales;
+        $returns = (float) $totals->returns;
         $netSales = $totalSales - $returns;
+        $grossProfitAfterReturns = (float) $totals->profit;
+        $costOfSales = (float) $totals->cost;
         $expenses = Expense::query()->where('organization_id', $organizationId)->whereIn('branch_id', $branchIds)
-            ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
-            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))->get();
-        $expenseTotal = $expenses->sum(fn (Expense $expense) => (float) $expense->amount);
-        $grossProfitAfterReturns = $grossProfit - $returnProfit;
+            ->when($dateFrom, fn ($query) => $query->where('expense_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($query) => $query->where('expense_date', '<=', $dateTo))
+            ->toBase()->selectRaw("MIN(COALESCE(NULLIF(category, ''), 'Uncategorized')) AS account, SUM(amount) AS amount")
+            ->groupBy('category');
+        $binaryCategory = $expenses->getConnection()->getDriverName() === 'mysql' ? 'CAST(category AS BINARY)' : 'category COLLATE BINARY';
+        $expenseGroups = $expenses->groupByRaw($binaryCategory)->get()->map(fn ($group) => ['account' => $group->account, 'amount' => (float) $group->amount]);
+        $expenseGroups = $expenseGroups->groupBy('account')->map(fn ($groups, $account) => ['account' => $account, 'amount' => $groups->sum('amount')])->values();
+        $expenseTotal = $expenseGroups->sum('amount');
         $netProfit = $grossProfitAfterReturns - $expenseTotal;
-        $costOfSales = $sales->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->cost_price * (float) $item->quantity))
-            - $returnDocuments->sum(fn (Document $document) => $document->items->sum(fn ($item) => (float) $item->cost_price * (float) $item->quantity));
         $salesAdjustments = $netSales - $grossProfitAfterReturns - $costOfSales;
         $totalCostsAndExpenses = $netSales - $netProfit;
         $income = collect([
@@ -202,9 +216,7 @@ class ReportController extends Controller
         $expenseAccounts = collect([
             ['account' => 'Cost of sales', 'amount' => $costOfSales],
             ['account' => 'Tax & sales adjustments', 'amount' => $salesAdjustments],
-        ])->filter(fn (array $item) => $item['amount'] != 0)->concat($expenses->groupBy(fn (Expense $expense) => $expense->category ?: 'Uncategorized')
-            ->map(fn ($items, string $category) => ['account' => $category, 'amount' => $items->sum(fn (Expense $expense) => (float) $expense->amount)])
-            ->sortBy('account')->values())->values();
+        ])->filter(fn (array $item) => $item['amount'] != 0)->concat($expenseGroups->sortBy('account')->values())->values();
         $rows = collect(range(0, max($income->count(), $expenseAccounts->count(), 1) - 1))
             ->map(fn (int $index) => [
                 'income_account' => $income->get($index)['account'] ?? '',
@@ -233,56 +245,58 @@ class ReportController extends Controller
 
     private function productLedger(Builder $documents, string $branchName, string $search): array
     {
-        $documents = (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])
-            ->with('items.product:id,name,sku,barcode')->get();
         $products = [];
+        (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])
+            ->select('documents.id', 'type', 'discount', 'interest_amount')
+            ->with(['items' => fn ($query) => $query->orderBy('id'), 'items.product:id,name,sku,barcode'])
+            ->chunkById(200, function ($documents) use (&$products, $search): void {
+                foreach ($documents as $document) {
+                    $items = $document->items->values();
+                    $subtotalCents = $items->sum(fn ($item) => (int) round((float) $item->line_total * 100));
+                    $discountCents = (int) round((float) $document->discount * 100);
+                    $interestCents = (int) round((float) $document->interest_amount * 100);
+                    $remainingDiscount = $discountCents;
+                    $remainingInterest = $interestCents;
+                    $direction = $document->type === 'sale_return' ? -1 : 1;
 
-        foreach ($documents as $document) {
-            $items = $document->items->values();
-            $subtotalCents = $items->sum(fn ($item) => (int) round((float) $item->line_total * 100));
-            $discountCents = (int) round((float) $document->discount * 100);
-            $interestCents = (int) round((float) $document->interest_amount * 100);
-            $remainingDiscount = $discountCents;
-            $remainingInterest = $interestCents;
-            $direction = $document->type === 'sale_return' ? -1 : 1;
+                    foreach ($items as $index => $item) {
+                        $lineCents = (int) round((float) $item->line_total * 100);
+                        $share = $subtotalCents > 0 ? $lineCents / $subtotalCents : 1 / max(1, $items->count());
+                        $isLast = $index === $items->count() - 1;
+                        $itemDiscount = $isLast ? $remainingDiscount : min($remainingDiscount, (int) round($discountCents * $share));
+                        $itemInterest = $isLast ? $remainingInterest : min($remainingInterest, (int) round($interestCents * $share));
+                        $remainingDiscount -= $itemDiscount;
+                        $remainingInterest -= $itemInterest;
 
-            foreach ($items as $index => $item) {
-                $lineCents = (int) round((float) $item->line_total * 100);
-                $share = $subtotalCents > 0 ? $lineCents / $subtotalCents : 1 / max(1, $items->count());
-                $isLast = $index === $items->count() - 1;
-                $itemDiscount = $isLast ? $remainingDiscount : min($remainingDiscount, (int) round($discountCents * $share));
-                $itemInterest = $isLast ? $remainingInterest : min($remainingInterest, (int) round($interestCents * $share));
-                $remainingDiscount -= $itemDiscount;
-                $remainingInterest -= $itemInterest;
+                        $product = $item->product;
+                        if ($search !== '' && ! str_contains(mb_strtolower(($product?->name ?? '').' '.($product?->sku ?? '').' '.($product?->barcode ?? '')), mb_strtolower($search))) {
+                            continue;
+                        }
 
-                $product = $item->product;
-                if ($search !== '' && ! str_contains(mb_strtolower(($product?->name ?? '').' '.($product?->sku ?? '').' '.($product?->barcode ?? '')), mb_strtolower($search))) {
-                    continue;
+                        $productId = $item->product_id;
+                        $products[$productId] ??= [
+                            'product' => $product?->name ?? "Product #{$productId}",
+                            'quantity' => 0,
+                            'sales_cents' => 0,
+                            'cost_cents' => 0,
+                            'stock_profit_cents' => 0,
+                            'interest_cents' => 0,
+                            'period_profit_cents' => 0,
+                        ];
+                        $quantity = (float) $item->quantity * $direction;
+                        $salesCents = ($lineCents - $itemDiscount) * $direction;
+                        $costCents = (int) round((float) $item->cost_price * (float) $item->quantity * 100) * $direction;
+                        $stockProfitCents = $salesCents - $costCents;
+                        $installmentProfitCents = $itemInterest * $direction;
+                        $products[$productId]['quantity'] += $quantity;
+                        $products[$productId]['sales_cents'] += $salesCents;
+                        $products[$productId]['cost_cents'] += $costCents;
+                        $products[$productId]['stock_profit_cents'] += $stockProfitCents;
+                        $products[$productId]['interest_cents'] += $installmentProfitCents;
+                        $products[$productId]['period_profit_cents'] += $stockProfitCents + $installmentProfitCents;
+                    }
                 }
-
-                $productId = $item->product_id;
-                $products[$productId] ??= [
-                    'product' => $product?->name ?? "Product #{$productId}",
-                    'quantity' => 0,
-                    'sales_cents' => 0,
-                    'cost_cents' => 0,
-                    'stock_profit_cents' => 0,
-                    'interest_cents' => 0,
-                    'period_profit_cents' => 0,
-                ];
-                $quantity = (float) $item->quantity * $direction;
-                $salesCents = ($lineCents - $itemDiscount) * $direction;
-                $costCents = (int) round((float) $item->cost_price * (float) $item->quantity * 100) * $direction;
-                $stockProfitCents = $salesCents - $costCents;
-                $installmentProfitCents = $itemInterest * $direction;
-                $products[$productId]['quantity'] += $quantity;
-                $products[$productId]['sales_cents'] += $salesCents;
-                $products[$productId]['cost_cents'] += $costCents;
-                $products[$productId]['stock_profit_cents'] += $stockProfitCents;
-                $products[$productId]['interest_cents'] += $installmentProfitCents;
-                $products[$productId]['period_profit_cents'] += $stockProfitCents + $installmentProfitCents;
-            }
-        }
+            });
 
         $rows = collect($products)->sortBy('product', SORT_NATURAL | SORT_FLAG_CASE)->values()
             ->map(fn (array $product, int $index) => [

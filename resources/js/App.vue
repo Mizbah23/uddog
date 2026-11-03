@@ -596,7 +596,10 @@ async function refresh() {
       || branches.value.find(branch => branch.active);
     activeBranchId.value = selectedBranch?.id || '';
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
-    if (isReportView.value && reportKind.value === 'supplier_tt') return;
+    if (isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss'].includes(reportKind.value)) {
+      if (reportKind.value === 'product_lifecycle_ledger') products.value = await api('products?lookup=1');
+      return;
+    }
     const branchQuery = selectedBranch ? `?branch_id=${selectedBranch.id}` : '';
     if (hasAbility('dashboard') && page.value !== 'products' && !historyTypes.includes(page.value)) requests.push(api(`overview${branchQuery}`).then(data => { overview.value = data; }));
     if (hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory', 'stock_adjustments', 'stock_transfers', 'product_damages')) {
@@ -1370,7 +1373,7 @@ function openInvoice(document) {
   selectedDocument.value = document;
   modal.value = 'invoice';
 }
-function openLedgerSource(row) {
+async function openLedgerSource(row) {
   if (row.source_type === 'cash_movement' && row.source_record) {
     ledgerCashMovement.value = { ...row.source_record, reference: row.reference };
     clearMessages();
@@ -1384,8 +1387,10 @@ function openLedgerSource(row) {
     return;
   }
   const document = documents.value.find(item => Number(item.id) === Number(row.source_id));
-  if (document) openInvoice(document);
-  else error.value = 'The related invoice could not be found in this branch.';
+  if (document) { openInvoice(document); return; }
+  if (row.source_type !== 'document' || !row.source_id) { error.value = 'The related invoice could not be found in this branch.'; return; }
+  try { openInvoice(await api(`reports/general-ledger/invoices/${row.source_id}?branch_id=${reportBranchId.value}`)); }
+  catch (e) { error.value = e.message; }
 }
 async function openContactLedgerInvoice(row) {
   error.value = '';

@@ -126,6 +126,22 @@ class ProfitLossReportTest extends TestCase
             ->assertJsonPath('expenses.0.amount', 30);
     }
 
+    public function test_sql_aggregation_preserves_fractional_costs_and_per_invoice_profit_rounding(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $product = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Fractional product', 'unit' => 'kg']);
+        $sale = $this->document($owner, $branch, 'sale', 'PL-FRACTION', 20);
+        $sale->update(['discount' => '1.02', 'interest_amount' => '0.55', 'total' => '19.53']);
+        $sale->items()->create(['product_id' => $product->id, 'quantity' => '0.333', 'unit_price' => 60, 'cost_price' => '10.01', 'line_total' => 20]);
+        $return = $this->document($owner, $branch, 'sale_return', 'PL-FRACTION-RETURN', 7);
+        $return->items()->create(['product_id' => $product->id, 'quantity' => '0.111', 'unit_price' => 60, 'cost_price' => '10.01', 'line_total' => 7]);
+        $summary = $this->actingAs($owner)->getJson('/api/reports?report=profit_loss&date_from=2026-10-01&date_to=2026-11-03')->assertOk()->json('summary');
+        $this->assertEqualsWithDelta(12.53, $summary['net_sales'], 0.000001);
+        $this->assertEqualsWithDelta(10.31111, $summary['gross_profit'], 0.000001);
+        $this->assertEqualsWithDelta(2.22222, $summary['cost_of_sales'], 0.000001);
+    }
+
     private function document(User $owner, Branch $branch, string $type, string $number, int $total, int $discount = 0, int $interest = 0, int $tax = 0): Document
     {
         $customer = Contact::create(['organization_id' => $owner->organization_id, 'name' => 'Report customer', 'type' => 'customer']);
