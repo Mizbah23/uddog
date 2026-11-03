@@ -23,6 +23,7 @@ import '../css/staff-module.css';
 import '../css/responsive.css';
 import '../css/client-mobile-dashboard.css';
 import '../css/profit-loss-report.css';
+import '../css/desktop-density.css';
 import { LayoutDashboard, Package, Users, ShoppingCart, ShoppingBag, Repeat2, Undo2, Boxes, Plus, Search, Menu, X, LogOut, ArrowLeft, ArrowUpRight, ArrowDownRight, AlertTriangle, ChevronDown, Trash2, Pencil, Check, Clock3, Building2, UserCog, ShieldCheck, Eye, EyeOff, CalendarPlus, Info, ClipboardList, ScanLine, Minus, Banknote, ReceiptText, Barcode, Printer, FileText, Image as ImageIcon, Tags, MapPin, ClipboardCheck, ArrowLeftRight, Target, Languages, ChartNoAxesCombined, Settings2, Download } from '@lucide/vue';
 
 const workspaceNav = [
