@@ -4,6 +4,8 @@
     </IfModule>
 
     RewriteEngine On
+    RewriteCond %{HTTP_HOST} ^(?:www\.)?nishajagro\.bd\.poolcaresaudi\.com(?::[0-9]+)?$ [NC]
+    RewriteRule ^ - [F,L]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .

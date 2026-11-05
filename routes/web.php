@@ -179,6 +179,9 @@ Route::view('/{workspacePage}', 'app')
 
 Route::get('/', function (Request $request) {
     $host = strtolower($request->getHost());
+    if (array_key_exists($host, config('tenancy.storefront_domains', []))) {
+        return app(ResolveTenant::class)->handle($request, fn () => app(EcommerceController::class)->show($request));
+    }
     if (config('tenancy.enabled') && $host === 'www.'.strtolower((string) config('tenancy.base_domain'))) {
         return redirect()->away(rtrim((string) config('marketing.url'), '/').'/', 301);
     }

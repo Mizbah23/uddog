@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'storefront_domains' => json_decode(env('STOREFRONT_DOMAINS', '{}'), true) ?: [],
     'enabled' => (bool) env('TENANCY_ENABLED', false),
     'base_domain' => env('TENANCY_BASE_DOMAIN', 'uddog-soft.com'),
     'central_host' => env('TENANCY_CENTRAL_HOST', 'uddog-soft.com'),
