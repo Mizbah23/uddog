@@ -12,6 +12,7 @@ use App\Models\Organization;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\SupportImpersonation;
+use App\Models\User;
 use App\Permission;
 use App\ReportType;
 use App\Services\CashMovementReport;
@@ -518,24 +519,26 @@ class ReportController extends Controller
 
     private function expenseReport(int $organizationId, int $branchId, ?string $dateFrom, ?string $dateTo, string $search): array
     {
-        $expenses = Expense::query()->with('creator:id,name')
+        $expenses = Expense::query()
             ->where('organization_id', $organizationId)->where('branch_id', $branchId)
-            ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
-            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))
+            ->when($dateFrom, fn ($query) => $query->where('expense_date', '>=', substr($dateFrom, 0, 10)))
+            ->when($dateTo, fn ($query) => $query->where('expense_date', '<=', substr($dateTo, 0, 10)))
             ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search): void {
                 $query->where('category', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%")
                     ->orWhere('notes', 'like', "%{$search}%");
             }))
-            ->orderBy('expense_date')->orderBy('id')->get();
+            ->orderBy('expense_date')->orderBy('id')->toBase()
+            ->get(['expense_date', 'category', 'description', 'payment_method', 'notes', 'amount', 'created_by']);
+        $creators = User::query()->whereIn('id', $expenses->pluck('created_by')->unique())->pluck('name', 'id');
 
         return $this->table(['Date', 'Category', 'Description', 'Payment method', 'Recorded by', 'Notes', 'Amount'],
-            $expenses->map(fn (Expense $expense) => [
-                'date' => $expense->expense_date->format('Y-m-d'),
+            $expenses->map(fn (object $expense) => [
+                'date' => substr((string) $expense->expense_date, 0, 10),
                 'category' => $expense->category,
                 'description' => $expense->description,
                 'payment_method' => ucwords(str_replace('_', ' ', $expense->payment_method)),
-                'recorded_by' => $expense->creator?->name ?? '—',
+                'recorded_by' => $creators[$expense->created_by] ?? '—',
                 'notes' => $expense->notes,
                 'amount' => (float) $expense->amount,
             ]), ['records' => $expenses->count(), 'total_expenses' => (float) $expenses->sum('amount')]);
