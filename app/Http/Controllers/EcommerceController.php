@@ -160,8 +160,11 @@ class EcommerceController extends Controller
 
     private function storeData(Organization $organization, Branch $branch): array
     {
+        $appearance = $organization->setup()['ecommerce'];
+
         return [
-            'name' => $organization->name,
+            'name' => $appearance['name'] ?: $organization->name,
+            'appearance' => $appearance,
             'phone' => $organization->phone ?: $branch->phone,
             'address' => $organization->address ?: $branch->address,
         ];

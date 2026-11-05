@@ -22,6 +22,13 @@ class SystemSetupController extends Controller
     {
         $organization = $this->organization($request);
         $data = $request->validate([
+            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color'],
+            'ecommerce.name' => ['nullable', 'string', 'max:100'],
+            'ecommerce.hero' => ['nullable', 'string', 'max:200'],
+            'ecommerce.subtitle' => ['nullable', 'string', 'max:600'],
+            'ecommerce.primary_color' => ['sometimes', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'ecommerce.hero_color' => ['sometimes', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'ecommerce.accent_color' => ['sometimes', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'company' => ['sometimes', 'array:name,phone,address'],
             'company.name' => ['required_with:company', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($organization)],
             'company.phone' => ['nullable', 'string', 'max:50'],
@@ -60,7 +67,7 @@ class SystemSetupController extends Controller
         }
         $organization->update([
             ...($data['company'] ?? []),
-            'system_settings' => collect($data)->only(['sales', 'purchases', 'supplier_advances', 'store'])->all(),
+            'system_settings' => [...collect($data)->only(['sales', 'purchases', 'supplier_advances', 'store'])->all(), 'ecommerce' => array_replace($organization->setup()['ecommerce'], $data['ecommerce'] ?? [])],
         ]);
         $provisioner->syncOrganizationShadow($organization);
 
