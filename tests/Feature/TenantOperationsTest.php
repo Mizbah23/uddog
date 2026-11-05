@@ -115,8 +115,8 @@ class TenantOperationsTest extends TestCase
         });
         $company->update(['ecommerce_enabled' => true]);
         $this->putJson('http://'.$company->id.'.test/api/products/'.$product['id'].'/ecommerce', ['ecommerce_visible' => true])->assertOk();
-        $this->getJson('http://'.$company->id.'.test/ecomm/catalog')->assertOk()->assertJsonPath('products.0.id', $product['id'])->assertJsonPath('products.0.in_stock', true);
-        $this->postJson('http://'.$company->id.'.test/ecomm/orders', [
+        $this->getJson('http://'.$company->id.'.test/online-store/catalog')->assertOk()->assertJsonPath('products.0.id', $product['id'])->assertJsonPath('products.0.in_stock', true);
+        $this->postJson('http://'.$company->id.'.test/online-store/orders', [
             'checkout_token' => (string) Str::uuid(), 'customer_name' => 'Tenant online customer', 'phone' => '01712345678',
             'address' => 'Tenant delivery address', 'expected_total' => 20, 'items' => [['product_id' => $product['id'], 'quantity' => 1]],
         ])->assertCreated();

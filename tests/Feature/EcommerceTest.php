@@ -31,6 +31,12 @@ class EcommerceTest extends TestCase
         return ['checkout_token' => (string) Str::uuid(), 'customer_name' => 'Online Customer', 'phone' => '01812345678', 'address' => 'Dhaka delivery address', 'expected_total' => '50.00', 'items' => [['product_id' => $product->id, 'quantity' => 2]]];
     }
 
+    public function test_old_storefront_links_redirect_to_the_new_customer_facing_path(): void
+    {
+        $this->get('http://liton.uddog-soft.com/ecomm?source=shared')
+            ->assertStatus(301)->assertRedirect('/online-store?source=shared');
+    }
+
     public function test_public_storefront_exposes_only_visible_active_tenant_products_and_no_private_fields(): void
     {
         [$owner, $product] = $this->records();
@@ -38,12 +44,32 @@ class EcommerceTest extends TestCase
         Product::create(['organization_id' => $owner->organization_id, 'name' => 'Inactive product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true, 'active' => false]);
         $other = User::factory()->admin()->create();
         Product::create(['organization_id' => $other->organization_id, 'name' => 'Other tenant product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true]);
-        $this->get('http://liton.uddog-soft.com/ecomm')->assertOk()->assertSee($owner->organization->name);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonCount(1, 'products')
+        $this->get('http://liton.uddog-soft.com/online-store')->assertOk()->assertSee($owner->organization->name);
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(1, 'products')
             ->assertJsonPath('products.0.id', $product->id)->assertJsonPath('products.0.price', '25.00')
-            ->assertJsonPath('products.0.in_stock', true)->assertJsonPath('store.phone', '01712345678')
+            ->assertJsonPath('products.0.in_stock', true)->assertJsonPath('products.0.available_quantity', 20)
+            ->assertJsonPath('store.phone', '01712345678')->assertJsonMissingPath('products.0.description')
             ->assertJsonMissingPath('products.0.cost_price')->assertJsonMissingPath('products.0.quantity_on_hand')
             ->assertJsonMissingPath('products.0.organization_id');
+    }
+
+    public function test_product_detail_exposes_online_description_only_for_a_visible_tenant_product(): void
+    {
+        [$owner, $product] = $this->records();
+        $product->update(['ecommerce_description' => 'A full online product description.']);
+        $other = User::factory()->admin()->create();
+        $otherProduct = Product::create(['organization_id' => $other->organization_id, 'name' => 'Private product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true]);
+
+        $this->get('http://liton.uddog-soft.com/online-store/products/'.$product->id)
+            ->assertOk()->assertSee($owner->organization->name);
+        $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$product->id)
+            ->assertOk()->assertJsonPath('product.description', 'A full online product description.')
+            ->assertJsonPath('product.available_quantity', 20)
+            ->assertJsonMissingPath('product.cost_price')->assertJsonMissingPath('product.organization_id');
+        $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$otherProduct->id)->assertNotFound();
+
+        $product->update(['ecommerce_visible' => false]);
+        $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$product->id)->assertNotFound();
     }
 
     #[TestWith(['disabled'])]
@@ -56,29 +82,30 @@ class EcommerceTest extends TestCase
             'disabled' => ['ecommerce_enabled' => false], 'paused' => ['access_paused' => true],
             default => ['subscription_ends_at' => now()->subDay()->toDateString()],
         });
-        $this->get('http://liton.uddog-soft.com/ecomm')->assertNotFound();
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertNotFound();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertNotFound();
+        $this->get('http://liton.uddog-soft.com/online-store')->assertNotFound();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertNotFound();
+        $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$product->id)->assertNotFound();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertNotFound();
         $this->assertDatabaseCount('ecommerce_orders', 0);
     }
 
     public function test_central_and_unknown_hosts_never_expose_an_arbitrary_store(): void
     {
         $this->records();
-        $this->getJson('http://uddog-soft.com/ecomm/catalog')->assertNotFound();
-        $this->getJson('http://unknown.uddog-soft.com/ecomm/catalog')->assertNotFound();
+        $this->getJson('http://uddog-soft.com/online-store/catalog')->assertNotFound();
+        $this->getJson('http://unknown.uddog-soft.com/online-store/catalog')->assertNotFound();
     }
 
     public function test_checkout_creates_pending_order_at_server_price_without_touching_stock_or_recording_payment(): void
     {
         [, $product] = $this->records();
         $data = $this->checkout($product);
-        $response = $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $data)->assertCreated()->assertJsonPath('status', 'pending')->assertJsonMissingPath('customer_name');
+        $response = $this->postJson('http://liton.uddog-soft.com/online-store/orders', $data)->assertCreated()->assertJsonPath('status', 'pending')->assertJsonMissingPath('customer_name');
         $this->assertDatabaseHas('ecommerce_orders', ['number' => $response->json('number'), 'total' => 50, 'customer_name' => 'Online Customer']);
         $this->assertSame('20.000', $product->fresh()->quantity_on_hand);
         $this->assertDatabaseCount('documents', 0);
         $this->assertDatabaseCount('sale_payments', 0);
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $data)->assertCreated()->assertJsonPath('number', $response->json('number'));
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $data)->assertCreated()->assertJsonPath('number', $response->json('number'));
         $this->assertDatabaseCount('ecommerce_orders', 1);
     }
 
@@ -96,7 +123,7 @@ class EcommerceTest extends TestCase
         } else {
             $payload['items'][0][$field] = $value;
         }
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $payload)->assertUnprocessable();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $payload)->assertUnprocessable();
         $this->assertDatabaseCount('ecommerce_orders', 0);
         $this->assertSame('20.000', $product->fresh()->quantity_on_hand);
     }
@@ -105,10 +132,10 @@ class EcommerceTest extends TestCase
     {
         [$owner, $product] = $this->records();
         $product->update(['ecommerce_visible' => false]);
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertUnprocessable();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertUnprocessable();
         $other = User::factory()->admin()->create();
         $product->update(['ecommerce_visible' => true, 'organization_id' => $other->organization_id]);
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertUnprocessable();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertUnprocessable();
         $this->assertDatabaseCount('ecommerce_orders', 0);
     }
 
@@ -116,7 +143,7 @@ class EcommerceTest extends TestCase
     {
         [$owner, $product] = $this->records();
         $this->actingAs($owner)->putJson('/api/products/'.$product->id.'/ecommerce', ['ecommerce_visible' => false])->assertOk()->assertJsonPath('ecommerce_visible', false);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonCount(0, 'products');
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(0, 'products');
         $owner->organization->update(['ecommerce_enabled' => false]);
         $this->putJson('/api/products/'.$product->id.'/ecommerce', ['ecommerce_visible' => true])->assertNotFound();
         $this->assertFalse($product->fresh()->ecommerce_visible);
@@ -125,7 +152,7 @@ class EcommerceTest extends TestCase
     public function test_owner_accepts_order_once_and_creates_due_sale_with_stock_deduction(): void
     {
         [$owner, $product] = $this->records();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertCreated();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
         $order = EcommerceOrder::firstOrFail();
         $this->actingAs($owner)->getJson('/api/ecommerce/orders')->assertOk()->assertJsonPath('data.0.id', $order->id);
         $this->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'accept'])->assertOk()->assertJsonPath('status', 'accepted');
@@ -142,17 +169,102 @@ class EcommerceTest extends TestCase
     public function test_cancelled_order_does_not_affect_stock(): void
     {
         [$owner, $product] = $this->records();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertCreated();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
         $order = EcommerceOrder::firstOrFail();
         $this->actingAs($owner)->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'cancel'])->assertOk()->assertJsonPath('status', 'cancelled');
         $this->assertSame('20.000', $product->fresh()->quantity_on_hand);
         $this->assertDatabaseCount('documents', 0);
     }
 
+    public function test_customer_tracks_order_and_cannot_cancel_after_confirmation(): void
+    {
+        [$owner, $product] = $this->records();
+        $payload = $this->checkout($product);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $payload)->assertCreated();
+        $order = EcommerceOrder::firstOrFail();
+        $tracking = ['number' => $order->number, 'token' => $payload['checkout_token']];
+        $url = 'http://liton.uddog-soft.com/online-store/order-status';
+        $this->getJson($url.'?'.http_build_query($tracking))->assertOk()->assertJsonPath('status', 'pending')->assertJsonMissingPath('phone');
+        $this->getJson($url.'?'.http_build_query(['search' => $payload['phone']]))->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.number', $order->number)->assertJsonMissingPath('data.0.checkout_token')->assertJsonMissingPath('data.0.address');
+        $this->getJson($url.'?'.http_build_query(['search' => $order->number]))->assertOk()->assertJsonPath('data.0.status', 'pending');
+        $this->getJson($url.'?'.http_build_query(['search' => $order->number]))->assertOk()->assertJsonPath('data.0.items.0.name', $product->name)->assertJsonPath('data.0.items.0.quantity', 2)->assertJsonPath('data.0.items.0.line_total', '50.00')->assertJsonPath('data.0.total', '50.00');
+        $this->getJson($url.'?'.http_build_query(['search' => '01999999999']))->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson($url.'?'.http_build_query([...$tracking, 'token' => (string) Str::uuid()]))->assertNotFound();
+        $this->actingAs($owner)->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'accept'])->assertOk();
+        $this->postJson($url, $tracking)->assertUnprocessable();
+        $this->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'deliver'])->assertUnprocessable();
+        $this->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'place'])->assertOk()->assertJsonPath('status', 'placed');
+        $this->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'deliver'])->assertOk()->assertJsonPath('status', 'delivered');
+        $this->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'receive'])->assertOk()->assertJsonPath('status', 'money_received');
+        $this->assertDatabaseHas('sale_payments', ['document_id' => $order->fresh()->document_id, 'amount' => 50, 'payment_method' => 'cash']);
+        $this->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'receive'])->assertUnprocessable();
+        $this->assertDatabaseCount('sale_payments', 1);
+        $this->assertDatabaseCount('documents', 1);
+    }
+
+    public function test_customer_can_cancel_a_pending_order(): void
+    {
+        [, $product] = $this->records();
+        $payload = $this->checkout($product);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $payload)->assertCreated();
+        $order = EcommerceOrder::firstOrFail();
+        $this->postJson('http://liton.uddog-soft.com/online-store/order-status', ['number' => $order->number, 'token' => $payload['checkout_token']])->assertOk()->assertJsonPath('status', 'cancelled');
+        $this->assertDatabaseCount('documents', 0);
+    }
+
+    public function test_tracking_matches_local_and_country_code_phone_formats(): void
+    {
+        [, $product] = $this->records();
+        $payload = $this->checkout($product);
+        $payload['phone'] = '+8801812345678';
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $payload)->assertCreated();
+        foreach (['01812345678', '+8801812345678', '8801812345678', '008801812345678', '+880 1812-345678'] as $phone) {
+            $this->getJson('http://liton.uddog-soft.com/online-store/order-status?'.http_build_query(['search' => $phone]))->assertOk()->assertJsonCount(1, 'data');
+        }
+        EcommerceOrder::query()->update(['phone' => '01812345678']);
+        $this->getJson('http://liton.uddog-soft.com/online-store/order-status?'.http_build_query(['search' => '+8801812345678']))->assertOk()->assertJsonCount(1, 'data');
+    }
+
+    public function test_pending_orders_reserve_stock_and_cancellation_releases_it(): void
+    {
+        [$owner, $product] = $this->records();
+        ProductStock::where('product_id', $product->id)->update(['quantity_on_hand' => 3]);
+        $payload = $this->checkout($product);
+        $payload['items'][0]['quantity'] = 3;
+        $payload['expected_total'] = '75.00';
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $payload)->assertCreated();
+        $order = EcommerceOrder::firstOrFail();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertJsonPath('products.0.available_quantity', 0)->assertJsonPath('products.0.in_stock', false);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$payload, 'checkout_token' => (string) Str::uuid()])->assertUnprocessable();
+        $this->actingAs($owner)->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'cancel'])->assertOk();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertJsonPath('products.0.available_quantity', 3);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$payload, 'checkout_token' => (string) Str::uuid()])->assertCreated();
+        $next = EcommerceOrder::latest('id')->firstOrFail();
+        $this->postJson('/api/ecommerce/orders/'.$next->id.'/process', ['action' => 'accept'])->assertOk();
+        $this->assertSame('0.000', ProductStock::where('product_id', $product->id)->value('quantity_on_hand'));
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertJsonPath('products.0.available_quantity', 0);
+    }
+
+    public function test_pending_reservation_expires_after_twelve_hours(): void
+    {
+        [$owner, $product] = $this->records();
+        $payload = $this->checkout($product);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $payload)->assertCreated();
+        $order = EcommerceOrder::firstOrFail();
+        $this->travel(11)->hours();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertJsonPath('products.0.available_quantity', 18);
+        $this->travel(1)->hours();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertJsonPath('products.0.available_quantity', 20);
+        $this->assertSame('expired', $order->fresh()->status);
+        $this->actingAs($owner)->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'accept'])->assertUnprocessable();
+        $this->assertDatabaseCount('documents', 0);
+        $this->travelBack();
+    }
+
     public function test_insufficient_stock_at_confirmation_rolls_back_sale_and_leaves_order_pending(): void
     {
         [$owner, $product] = $this->records();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertCreated();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
         $product->update(['quantity_on_hand' => 1]);
         ProductStock::where('product_id', $product->id)->update(['quantity_on_hand' => 1]);
         $order = EcommerceOrder::firstOrFail();
@@ -166,7 +278,7 @@ class EcommerceTest extends TestCase
     {
         [$owner, $product] = $this->records();
         $this->getJson('/api/ecommerce/orders')->assertUnauthorized();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertCreated();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
         $order = EcommerceOrder::firstOrFail();
         $staff = User::factory()->create(['organization_id' => $owner->organization_id]);
         $this->actingAs($staff)->getJson('/api/ecommerce/orders')->assertForbidden();
@@ -181,12 +293,13 @@ class EcommerceTest extends TestCase
     {
         [$owner, $product] = $this->records();
         $variant = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Shared stock listing', 'unit' => 'pc', 'cost_price' => 0, 'sale_price' => 30, 'ecommerce_visible' => true, 'stock_source_product_id' => $product->id, 'stock_source_quantity' => 2]);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonCount(1, 'products');
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(1, 'products');
         $owner->organization->update(['shared_stock_sales' => true]);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonCount(2, 'products')->assertJsonPath('products.1.in_stock', true);
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(2, 'products')
+            ->assertJsonPath('products.1.in_stock', true)->assertJsonPath('products.1.available_quantity', 10);
         $product->update(['is_gold_item' => true]);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonPath('products.0.price', null)->assertJsonPath('products.0.requires_quote', true);
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertUnprocessable();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonPath('products.0.price', null)->assertJsonPath('products.0.requires_quote', true);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertUnprocessable();
     }
 
     public function test_only_superadmin_can_enable_ecommerce_and_owner_cannot_enable_it_through_product_save(): void
@@ -206,27 +319,27 @@ class EcommerceTest extends TestCase
         $superadmin = User::factory()->superadmin()->create();
         $payload = ['name' => $company->name, 'subdomain' => 'liton', 'subscription_status' => 'active', 'owner_name' => $owner->name, 'owner_email' => $owner->email, 'owner_active' => true, 'ecommerce_enabled' => false];
         $this->actingAs($superadmin)->putJson('/api/clients/'.$company->id, $payload)->assertOk()->assertJsonPath('ecommerce_enabled', false);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertNotFound();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertNotFound();
         $this->assertTrue($product->fresh()->ecommerce_visible);
         $this->putJson('/api/clients/'.$company->id, [...$payload, 'ecommerce_enabled' => true])->assertOk()->assertJsonPath('ecommerce_enabled', true);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonPath('products.0.id', $product->id);
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonPath('products.0.id', $product->id);
         $this->actingAs($owner)->putJson('/api/clients/'.$company->id, $payload)->assertForbidden();
     }
 
     public function test_checkout_requires_customer_delivery_details_and_does_not_accept_duplicate_items(): void
     {
         [, $product] = $this->records();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', [])->assertUnprocessable()->assertJsonValidationErrors(['customer_name', 'phone', 'address', 'items', 'checkout_token']);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [])->assertUnprocessable()->assertJsonValidationErrors(['customer_name', 'phone', 'address', 'items', 'checkout_token']);
         $data = $this->checkout($product);
         $data['items'][] = $data['items'][0];
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $data)->assertUnprocessable()->assertJsonValidationErrors('items.0.product_id');
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $data)->assertUnprocessable()->assertJsonValidationErrors('items.0.product_id');
         $this->assertDatabaseCount('ecommerce_orders', 0);
     }
 
     public function test_hidden_product_cannot_be_accepted_and_customer_records_roll_back_on_failure(): void
     {
         [$owner, $product] = $this->records();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertCreated();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
         $product->update(['ecommerce_visible' => false]);
         $order = EcommerceOrder::firstOrFail();
         $this->actingAs($owner)->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'accept'])->assertUnprocessable();
@@ -241,15 +354,16 @@ class EcommerceTest extends TestCase
         ProductStock::where('product_id', $product->id)->update(['quantity_on_hand' => 0]);
         $otherBranch = Branch::create(['organization_id' => $owner->organization_id, 'name' => 'Second branch', 'code' => 'SECOND', 'active' => true]);
         ProductStock::create(['organization_id' => $owner->organization_id, 'branch_id' => $otherBranch->id, 'product_id' => $product->id, 'quantity_on_hand' => 20]);
-        $this->getJson('http://liton.uddog-soft.com/ecomm/catalog')->assertOk()->assertJsonPath('products.0.in_stock', false);
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertUnprocessable();
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()
+            ->assertJsonPath('products.0.in_stock', false)->assertJsonPath('products.0.available_quantity', 0);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertUnprocessable();
         $this->assertDatabaseCount('ecommerce_orders', 0);
     }
 
     public function test_order_cannot_be_accepted_after_superadmin_disables_ecommerce(): void
     {
         [$owner, $product] = $this->records();
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $this->checkout($product))->assertCreated();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
         $order = EcommerceOrder::firstOrFail();
         $owner->organization->update(['ecommerce_enabled' => false]);
         $this->actingAs($owner)->postJson('/api/ecommerce/orders/'.$order->id.'/process', ['action' => 'accept'])->assertNotFound();
@@ -265,7 +379,7 @@ class EcommerceTest extends TestCase
         ProductStock::where('product_id', $product->id)->update(['quantity_on_hand' => 1000000]);
         $data = $this->checkout($product);
         $data['items'][0]['quantity'] = 999999;
-        $this->postJson('http://liton.uddog-soft.com/ecomm/orders', $data)->assertUnprocessable()->assertJsonPath('errors.items.0', 'The order total exceeds the supported range.');
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $data)->assertUnprocessable()->assertJsonPath('errors.items.0', 'The order total exceeds the supported range.');
         $this->assertDatabaseCount('ecommerce_orders', 0);
     }
 }
