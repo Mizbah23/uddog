@@ -12,6 +12,7 @@ import ProductPicker from './ProductPicker.vue';
 import ContactPicker from './ContactPicker.vue';
 import { saveProfitLossImage, saveProfitLossPdf } from './profitLossExport';
 import { saveProductLedgerImage, saveProductLedgerPdf } from './productLedgerExport';
+import { saveStandardReport } from './reportExport';
 import { prepareProductImage, maxProductImages, maxProductImageBytes } from './productImageUpload';
 import { saveInvoicePdf } from './invoiceExport';
 import '../css/invoice-responsive.css';
@@ -238,6 +239,7 @@ const salePaymentForm = ref({ amount: '', payment_method: 'cash', payment_date: 
 const reportKinds = [
   { id: 'sales', label: 'Sales', abilities: ['sales', 'resales', 'sales_returns'], description: 'Sales, returns, collections and customer balances.' },
   { id: 'purchases', label: 'Purchases', abilities: ['purchases', 'purchase_returns'], description: 'Purchases and supplier returns for the selected period.' },
+  { id: 'expenses', label: 'Expense report', abilities: ['expenses'], description: 'Operating expenses, payment methods and recorded users for the selected period.' },
   { id: 'profit_loss', label: 'Profit & loss', abilities: ['expenses'], description: 'Gross profit less recorded operating expenses for the selected period.' },
   { id: 'product_ledger', label: 'Product wise Profit-Loss', abilities: ['sales', 'resales'], description: 'Product-wise sales quantities, costs and profit for the selected period.' },
   { id: 'product_lifecycle_ledger', label: 'Product Ledger Report', abilities: ['purchases', 'sales', 'resales'], description: 'Trace purchase lots, sales, returns, FIFO costs and running stock for one product.' },
@@ -260,6 +262,7 @@ const reportKinds = [
 const reportVisuals = {
   sales: { icon: ReceiptText, tone: 'violet' },
   purchases: { icon: ShoppingBag, tone: 'orange' },
+  expenses: { icon: ReceiptText, tone: 'orange' },
   profit_loss: { icon: ChartNoAxesCombined, tone: 'green' },
   product_ledger: { icon: Package, tone: 'violet' },
   product_lifecycle_ledger: { icon: ClipboardList, tone: 'blue' },
@@ -920,15 +923,28 @@ function printReport() {
   window.print();
 }
 async function saveReportFile(format) {
-  if (!isReportView.value || !['profit_loss', 'product_ledger'].includes(reportKind.value) || !reportCanExport.value || reportSaveBusy.value) return;
+  if (!isReportView.value || !reportCanExport.value || reportSaveBusy.value) return;
   reportSaveBusy.value = true;
   error.value = '';
   try {
     if (reportKind.value === 'profit_loss') {
       if (format === 'pdf') saveProfitLossPdf(profitLossExportData(), profitLossFilename());
       else await saveProfitLossImage(profitLossExportData(), profitLossFilename());
-    } else if (format === 'pdf') saveProductLedgerPdf(productLedgerExportData(), productLedgerFilename());
-    else await saveProductLedgerImage(productLedgerExportData(), productLedgerFilename());
+    } else if (reportKind.value === 'product_ledger') {
+      if (format === 'pdf') saveProductLedgerPdf(productLedgerExportData(), productLedgerFilename());
+      else await saveProductLedgerImage(productLedgerExportData(), productLedgerFilename());
+    } else {
+      await saveStandardReport({
+        root: document.querySelector('.report-detail'),
+        company: session.value?.user?.organization?.name || 'Company / store',
+        title: translate(activeReport.value.label, language.value),
+        subtitle: `${reportPeriod.value} · ${translate(reportBranchName.value, language.value)}`,
+        summary: Object.entries(reportResult.value.summary || {}).map(([key, value]) => `${translate(reportSummaryLabel(key), language.value)}: ${reportSummaryValue(key, value)}`),
+        generated: reportGeneratedLabel.value,
+        filename: `${reportKind.value}-${reportExportContext.value.filters.date_from || 'all'}-to-${reportExportContext.value.filters.date_to || 'all'}-${reportExportContext.value.branchId}`,
+        format,
+      });
+    }
   } catch (exception) { error.value = exception.message || 'Could not save this report.'; }
   finally { reportSaveBusy.value = false; }
 }
@@ -940,7 +956,7 @@ function reportCell(column, value) {
   if (column === 'Recorded at') return value === '—' ? value : `${date(String(value).slice(0, 10))} · ${time(String(value).replace(' ', 'T'))}`;
   if (column === 'Recorded time') return time(value);
   if (/count|units sold|^products$|^invoices$|^entries$|^total purchases$|^total sales$|^actual stock$|^damaged stock$|^good stock$/i.test(column)) return qty(value);
-  if (/total|paid|due|price|value|sales|purchases|returns|returned|payable|collected|debit|credit|balance|cash in|cash out|transfer|advance sent|products received|^rate$/i.test(column) && !/count/i.test(column)) return money(value);
+  if (/amount|total|paid|due|price|value|sales|purchases|returns|returned|payable|collected|debit|credit|balance|cash in|cash out|transfer|advance sent|products received|^rate$/i.test(column) && !/count/i.test(column)) return money(value);
   if (/quantity|stock|change|reorder|units|on hand/i.test(column) && !/status/i.test(column)) return qty(value);
   return value;
 }
@@ -2269,7 +2285,14 @@ async function stopSupportSession() {
           </section>
           <div v-if="reportDetailOpen || isReportView" class="report-detail">
           <button v-if="!isReportView" type="button" class="reports-catalog-back" @click="reportDetailOpen = false"><ArrowLeft :size="17" /> All reports</button>
-          <div v-if="isReportView" class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ reportBranchName }}</p></div><div v-if="isReportView && !reportLoading && reportCanExport" class="report-action-group" aria-label="Report actions"><button type="button" class="report-icon-action" title="Print" aria-label="Print" data-tooltip="Print" @click="printReport"><Printer :size="19" /></button><template v-if="['profit_loss', 'product_ledger'].includes(reportKind)"><button type="button" class="report-icon-action" title="Save as PDF" aria-label="Save as PDF" data-tooltip="Save as PDF" :disabled="reportSaveBusy" @click="saveReportFile('pdf')"><FileText :size="19" /></button><button type="button" class="report-icon-action" title="Save as image" aria-label="Save as image" data-tooltip="Save as image" :disabled="reportSaveBusy" @click="saveReportFile('image')"><ImageIcon :size="19" /></button></template><button v-else type="button" class="report-icon-action" title="Export CSV" aria-label="Export CSV" data-tooltip="Export CSV" @click="exportReportCsv"><ArrowDownRight :size="19" /></button></div></div>
+          <div v-if="isReportView" class="page-heading"><div><span class="eyebrow">BUSINESS INSIGHTS</span><h1>{{ activeReport.label }}</h1><p>{{ activeReport.description }} · {{ reportBranchName }}</p></div>
+            <div v-if="!reportLoading && reportCanExport" class="report-action-group" aria-label="Report actions">
+              <button type="button" class="report-icon-action" title="Print" aria-label="Print" data-tooltip="Print" @click="printReport"><Printer :size="19" /></button>
+              <button type="button" class="report-icon-action" title="Save as PDF" aria-label="Save as PDF" data-tooltip="Save as PDF" :disabled="reportSaveBusy" @click="saveReportFile('pdf')"><FileText :size="19" /></button>
+              <button type="button" class="report-icon-action" title="Save as image" aria-label="Save as image" data-tooltip="Save as image" :disabled="reportSaveBusy" @click="saveReportFile('image')"><ImageIcon :size="19" /></button>
+              <button v-if="!['profit_loss', 'product_ledger'].includes(reportKind)" type="button" class="report-icon-action" title="Export CSV" aria-label="Export CSV" data-tooltip="Export CSV" @click="exportReportCsv"><ArrowDownRight :size="19" /></button>
+            </div>
+          </div>
           <section v-if="!isReportView" class="panel report-filter-panel">
             <div class="report-filter-grid" :class="{ 'ledger-filter-grid': reportKind === 'general_ledger', 'product-ledger-filter-grid': ['product_ledger', 'product_lifecycle_ledger'].includes(reportKind) }">
               <div class="report-current"><span>Report</span><strong>{{ activeReport.label }}</strong></div>
