@@ -239,7 +239,7 @@ const salePaymentForm = ref({ amount: '', payment_method: 'cash', payment_date: 
 const reportKinds = [
   { id: 'sales', label: 'Sales', abilities: ['sales', 'resales', 'sales_returns'], description: 'Sales, returns, collections and customer balances.' },
   { id: 'purchases', label: 'Purchases', abilities: ['purchases', 'purchase_returns'], description: 'Purchases and supplier returns for the selected period.' },
-  { id: 'expenses', label: 'Expense report', abilities: ['expenses'], description: 'Operating expenses, payment methods and recorded users for the selected period.' },
+  { id: 'expenses', label: 'Expense', abilities: ['expenses'], description: 'Operating expenses, payment methods and recorded users for the selected period.' },
   { id: 'profit_loss', label: 'Profit & loss', abilities: ['expenses'], description: 'Gross profit less recorded operating expenses for the selected period.' },
   { id: 'product_ledger', label: 'Product wise Profit-Loss', abilities: ['sales', 'resales'], description: 'Product-wise sales quantities, costs and profit for the selected period.' },
   { id: 'product_lifecycle_ledger', label: 'Product Ledger Report', abilities: ['purchases', 'sales', 'resales'], description: 'Trace purchase lots, sales, returns, FIFO costs and running stock for one product.' },
