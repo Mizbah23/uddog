@@ -11,6 +11,7 @@ use App\Http\Controllers\GoldStoreController;
 use App\Http\Controllers\PasswordRecoveryController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProductDamageController;
+use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SalesTargetController;
@@ -29,9 +30,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(ResolveTenant::class)->group(function () {
-    Route::get('/ecomm', [EcommerceController::class, 'show'])->name('ecommerce.storefront');
+    Route::get('/online-store', [EcommerceController::class, 'show'])->name('ecommerce.storefront');
+    Route::get('/ecomm', fn (Request $request) => redirect('/online-store'.($request->getQueryString() ? '?'.$request->getQueryString() : ''), 301));
     Route::get('/ecomm/catalog', [EcommerceController::class, 'catalog']);
     Route::post('/ecomm/orders', [EcommerceController::class, 'checkout'])->middleware('throttle:5,1');
+    Route::get('/online-store/catalog', [EcommerceController::class, 'catalog']);
+    Route::get('/online-store/order-status', [EcommerceController::class, 'track'])->middleware('throttle:30,1');
+    Route::post('/online-store/order-status', [EcommerceController::class, 'track'])->middleware('throttle:10,1');
+    Route::get('/online-store/products/{product}', [EcommerceController::class, 'product'])->whereNumber('product')->name('ecommerce.products.show');
+    Route::get('/online-store/products/{product}/images/{image}', [EcommerceController::class, 'image'])->where('image', '[a-zA-Z0-9.-]+');
+    Route::post('/online-store/orders', [EcommerceController::class, 'checkout'])->middleware('throttle:5,1');
 });
 
 Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
@@ -50,6 +58,8 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
             Route::get('ecommerce/orders', [EcommerceController::class, 'orders'])->middleware(['role:admin', 'permission:sales']);
             Route::post('ecommerce/orders/{order}/process', [EcommerceController::class, 'process'])->middleware(['role:admin', 'permission:sales']);
             Route::put('products/{product}/ecommerce', [EcommerceController::class, 'visibility'])->middleware('permission:products');
+            Route::post('products/{product}/images', [ProductImageController::class, 'store'])->middleware('permission:products');
+            Route::get('products/{product}/images/{image}', [ProductImageController::class, 'show'])->middleware('permission:products')->where('image', '[a-zA-Z0-9.-]+');
             Route::get('branches', [BranchController::class, 'index']);
             Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('permission:branches');
             Route::get('overview', [WorkspaceController::class, 'overview'])->middleware('permission:dashboard');

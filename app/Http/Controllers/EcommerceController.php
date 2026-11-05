@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\BranchAccess;
 use App\Models\Branch;
 use App\Models\Contact;
+use App\Models\Document;
 use App\Models\EcommerceOrder;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Services\InventoryService;
 use App\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EcommerceController extends Controller
 {
@@ -33,6 +36,7 @@ class EcommerceController extends Controller
             $organization = Organization::query()->where('subdomain', $label)->firstOrFail();
         }
         abort_unless($organization?->ecommerce_enabled && $organization->canUseWorkspace(), 404);
+        $this->expireReservations($organization->id);
 
         return $organization;
     }
@@ -41,8 +45,16 @@ class EcommerceController extends Controller
     {
         $organization = $request->user()->organization()->firstOrFail();
         abort_unless($organization->ecommerce_enabled, 404);
+        $this->expireReservations($organization->id);
 
         return $organization;
+    }
+
+    private function expireReservations(int $organizationId): void
+    {
+        EcommerceOrder::query()->where('organization_id', $organizationId)->where('status', 'pending')
+            ->where('created_at', '<=', now()->subHours(12))
+            ->update(['status' => 'expired', 'processed_at' => now()]);
     }
 
     private function storefrontBranch(Organization $organization): Branch
@@ -57,8 +69,30 @@ class EcommerceController extends Controller
         $quantity = (float) ProductStock::query()->where('organization_id', $product->organization_id)
             ->where('branch_id', $branchId)->where('product_id', $sourceId)->value('quantity_on_hand');
         $ratio = $product->stock_source_product_id ? (float) $product->stock_source_quantity : 1;
+        $quantity -= $this->reservedStock($product->organization_id, $branchId)[$sourceId] ?? 0;
 
-        return $ratio > 0 ? floor($quantity / $ratio * 1000) / 1000 : 0;
+        return $ratio > 0 ? max(0, floor($quantity / $ratio * 1000) / 1000) : 0;
+    }
+
+    private function reservedStock(int $organizationId, int $branchId): array
+    {
+        $orders = EcommerceOrder::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('status', 'pending')->where('created_at', '>', now()->subHours(12))->get(['items']);
+        $ids = $orders->flatMap(fn ($order) => array_column($order->items, 'product_id'))->unique();
+        $products = Product::query()->where('organization_id', $organizationId)->whereIn('id', $ids)->get()->keyBy('id');
+        $reserved = [];
+        foreach ($orders as $order) {
+            foreach ($order->items as $item) {
+                $product = $products->get($item['product_id']);
+                if (! $product) {
+                    continue;
+                }
+                $source = $item['stock_source_id'] ?? ($product->stock_source_product_id ?: $product->id);
+                $ratio = $item['stock_ratio'] ?? ($product->stock_source_product_id ? (float) $product->stock_source_quantity : 1);
+                $reserved[$source] = ($reserved[$source] ?? 0) + (float) $item['quantity'] * $ratio;
+            }
+        }
+
+        return $reserved;
     }
 
     public function show(Request $request): View
@@ -67,6 +101,30 @@ class EcommerceController extends Controller
         $this->storefrontBranch($organization);
 
         return view('ecommerce', ['storeName' => $organization->name]);
+    }
+
+    public function product(Request $request, int $product): View|JsonResponse
+    {
+        $organization = $this->publicStore($request);
+        $branch = $this->storefrontBranch($organization);
+        $record = $this->publicProduct($organization, $product)->with('category:id,name')->firstOrFail();
+
+        if (! $request->expectsJson()) {
+            return view('ecommerce', ['storeName' => $organization->name]);
+        }
+
+        return response()->json([
+            'store' => $this->storeData($organization, $branch),
+            'product' => $this->productData($record, $this->available($record, $branch->id), true),
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    public function image(Request $request, int $product, string $image): StreamedResponse
+    {
+        $organization = $this->publicStore($request);
+        $record = $this->publicProduct($organization, $product)->firstOrFail();
+
+        return app(ProductImageController::class)->image($record, $image);
     }
 
     public function catalog(Request $request): JsonResponse
@@ -79,23 +137,58 @@ class EcommerceController extends Controller
         $stocks = ProductStock::query()->where('organization_id', $organization->id)->where('branch_id', $branch->id)
             ->whereIn('product_id', $products->map(fn (Product $product) => $product->stock_source_product_id ?: $product->id))
             ->pluck('quantity_on_hand', 'product_id');
-        $items = $products->map(function (Product $product) use ($stocks): array {
-            $stock = (float) ($stocks[$product->stock_source_product_id ?: $product->id] ?? 0);
+        $reserved = $this->reservedStock($organization->id, $branch->id);
+        $items = $products->map(function (Product $product) use ($stocks, $reserved): array {
+            $source = $product->stock_source_product_id ?: $product->id;
+            $stock = (float) ($stocks[$source] ?? 0) - ($reserved[$source] ?? 0);
             $ratio = $product->stock_source_product_id ? (float) $product->stock_source_quantity : 1;
-            $minimum = $product->usesWholePieces() ? 1 : 0.001;
+            $available = $ratio > 0 ? max(0, floor($stock / $ratio * 1000) / 1000) : 0;
 
-            return [
-                'id' => $product->id, 'name' => $product->name, 'unit' => $product->unit,
-                'category' => $product->category?->name ?? 'Everyday essentials',
-                'price' => $product->is_gold_item ? null : $product->sale_price,
-                'description' => $product->ecommerce_description, 'image_url' => $product->ecommerce_image_url,
-                'in_stock' => $ratio > 0 && $stock / $ratio >= $minimum,
-                'quantity_step' => $minimum, 'requires_quote' => $product->is_gold_item,
-            ];
+            return $this->productData($product, $available);
         });
 
-        return response()->json(['store' => ['name' => $organization->name, 'phone' => $organization->phone ?: $branch->phone, 'address' => $organization->address ?: $branch->address], 'products' => $items])
+        return response()->json(['store' => $this->storeData($organization, $branch), 'products' => $items])
             ->header('Cache-Control', 'no-store');
+    }
+
+    private function publicProduct(Organization $organization, int $product): Builder
+    {
+        return Product::query()->whereKey($product)->where('organization_id', $organization->id)
+            ->where('active', true)->where('ecommerce_visible', true)
+            ->when(! $organization->shared_stock_sales, fn ($query) => $query->whereNull('stock_source_product_id'));
+    }
+
+    private function storeData(Organization $organization, Branch $branch): array
+    {
+        return [
+            'name' => $organization->name,
+            'phone' => $organization->phone ?: $branch->phone,
+            'address' => $organization->address ?: $branch->address,
+        ];
+    }
+
+    private function productData(Product $product, float $available, bool $withDescription = false): array
+    {
+        $minimum = $product->usesWholePieces() ? 1 : 0.001;
+        $data = [
+            'id' => $product->id,
+            'name' => $product->name,
+            'unit' => $product->unit,
+            'category' => $product->category?->name ?? 'Everyday essentials',
+            'price' => $product->is_gold_item ? null : $product->sale_price,
+            'images' => array_map(fn ($path) => '/online-store/products/'.$product->id.'/images/'.basename($path), $product->ecommerce_images ?? []),
+            'image_url' => ! empty($product->ecommerce_images) ? '/online-store/products/'.$product->id.'/images/'.basename($product->ecommerce_images[0]) : $product->ecommerce_image_url,
+            'available_quantity' => $available,
+            'in_stock' => $available >= $minimum,
+            'quantity_step' => $minimum,
+            'requires_quote' => $product->is_gold_item,
+        ];
+
+        if ($withDescription) {
+            $data['description'] = $product->ecommerce_description;
+        }
+
+        return $data;
     }
 
     public function checkout(Request $request): JsonResponse
@@ -116,6 +209,7 @@ class EcommerceController extends Controller
                 return $existing;
             }
             $items = [];
+            $requestedStock = [];
             $total = 0;
             foreach ($data['items'] as $item) {
                 $product = Product::query()->where('organization_id', $organization->id)->where('active', true)
@@ -124,9 +218,13 @@ class EcommerceController extends Controller
                     throw ValidationException::withMessages(['items' => 'A product is no longer available online. Refresh the store and review your cart.']);
                 }
                 $quantity = (float) $item['quantity'];
-                if (($product->usesWholePieces() && $quantity !== floor($quantity)) || $quantity > $this->available($product, $branch->id)) {
+                $source = $product->stock_source_product_id ?: $product->id;
+                $ratio = $product->stock_source_product_id ? (float) $product->stock_source_quantity : 1;
+                $alreadyRequested = $requestedStock[$source] ?? 0;
+                if (($product->usesWholePieces() && $quantity !== floor($quantity)) || $quantity + ($ratio > 0 ? $alreadyRequested / $ratio : 0) > $this->available($product, $branch->id)) {
                     throw ValidationException::withMessages(['items' => "Please review the available quantity for {$product->name}."]);
                 }
+                $requestedStock[$source] = $alreadyRequested + $quantity * $ratio;
                 $lineAmount = round($quantity * (float) $product->sale_price * 100);
                 if (! is_finite($lineAmount) || $lineAmount < 0 || $lineAmount > 99999999999999) {
                     throw ValidationException::withMessages(['items' => 'The order total exceeds the supported range.']);
@@ -136,21 +234,60 @@ class EcommerceController extends Controller
                 if ($total > 99999999999999) {
                     throw ValidationException::withMessages(['items' => 'The order total exceeds the supported range.']);
                 }
-                $items[] = ['product_id' => $product->id, 'name' => $product->name, 'unit' => $product->unit, 'quantity' => $quantity, 'unit_price' => $product->sale_price, 'line_total' => number_format($lineTotal / 100, 2, '.', '')];
+                $items[] = ['product_id' => $product->id, 'stock_source_id' => $source, 'stock_ratio' => $ratio, 'name' => $product->name, 'unit' => $product->unit, 'quantity' => $quantity, 'unit_price' => $product->sale_price, 'line_total' => number_format($lineTotal / 100, 2, '.', '')];
             }
             if ($total !== (int) round((float) $data['expected_total'] * 100)) {
                 throw ValidationException::withMessages(['items' => 'Prices have changed. Refresh the store and review your cart before ordering.']);
             }
 
+            do {
+                $number = strtoupper(Str::random(5));
+            } while (EcommerceOrder::query()->where('number', $number)->exists());
+
             return EcommerceOrder::create([
                 'organization_id' => $organization->id, 'branch_id' => $branch->id, 'checkout_token' => $data['checkout_token'],
-                'number' => 'WEB-'.strtoupper(Str::random(12)), 'customer_name' => $data['customer_name'], 'phone' => $data['phone'],
+                'number' => $number, 'customer_name' => $data['customer_name'], 'phone' => $data['phone'],
                 'address' => $data['address'], 'notes' => $data['notes'] ?? null, 'items' => $items,
                 'total' => number_format($total / 100, 2, '.', ''), 'status' => 'pending',
             ]);
         });
 
         return response()->json(['number' => $order->number, 'status' => $order->status], 201)->header('Cache-Control', 'no-store');
+    }
+
+    public function track(Request $request): JsonResponse
+    {
+        $organization = $this->publicStore($request);
+        if ($request->isMethod('get') && $request->filled('search')) {
+            $data = $request->validate(['search' => ['required', 'string', 'max:100']]);
+            $search = trim($data['search']);
+            $phones = [$search];
+            $digits = preg_replace('/[\s()+-]/', '', $search);
+            if (preg_match('/^(?:00880|880|0)?(1[3-9][0-9]{8})$/', $digits, $matches)) {
+                $national = $matches[1];
+                $phones = array_unique([$search, '0'.$national, '880'.$national, '+880'.$national, '00880'.$national, $national]);
+            }
+            $orders = EcommerceOrder::query()->where('organization_id', $organization->id)
+                ->where(function ($query) use ($search, $phones): void {
+                    $query->where('number', strtoupper($search))->orWhereIn('phone', $phones);
+                })->latest()->paginate(20, ['number', 'status', 'total', 'items', 'created_at']);
+
+            return response()->json($orders)->header('Cache-Control', 'no-store');
+        }
+        $data = $request->validate(['number' => ['required', 'string', 'max:100'], 'token' => ['required', 'uuid']]);
+        $order = EcommerceOrder::query()->where('organization_id', $organization->id)->where('number', $data['number'])->where('checkout_token', $data['token'])->firstOrFail();
+        if ($request->isMethod('post')) {
+            DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($order): void {
+                $locked = EcommerceOrder::query()->lockForUpdate()->findOrFail($order->id);
+                if ($locked->status !== 'pending') {
+                    throw ValidationException::withMessages(['order' => 'Only pending orders can be cancelled.']);
+                }
+                $locked->update(['status' => 'cancelled', 'processed_at' => now()]);
+            });
+            $order->refresh();
+        }
+
+        return response()->json(['number' => $order->number, 'status' => $order->status, 'total' => $order->total])->header('Cache-Control', 'no-store');
     }
 
     public function visibility(Request $request, int $product): JsonResponse
@@ -166,18 +303,29 @@ class EcommerceController extends Controller
     public function orders(Request $request): JsonResponse
     {
         $organization = $this->ownerStore($request);
+        if ($request->boolean('count_only')) {
+            return response()->json(['count' => EcommerceOrder::query()->where('organization_id', $organization->id)->whereNull('processed_by')->count()]);
+        }
 
-        return response()->json(EcommerceOrder::query()->where('organization_id', $organization->id)->latest('id')->paginate(30));
+        return response()->json(EcommerceOrder::query()->where('organization_id', $organization->id)->latest('id')->paginate(100));
     }
 
     public function process(Request $request, int $order, InventoryService $inventory): JsonResponse
     {
         $organization = $this->ownerStore($request);
-        $data = $request->validate(['action' => ['required', Rule::in(['accept', 'cancel'])]]);
+        $data = $request->validate(['action' => ['required', Rule::in(['accept', 'cancel', 'reject', 'place', 'deliver', 'receive'])]]);
         $saved = DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($order, $organization, $request, $inventory, $data): EcommerceOrder {
+            DB::connection(app(TenantContext::class)->connectionName())->table('organizations')->where('id', $organization->id)->lockForUpdate()->first();
             $saved = EcommerceOrder::query()->where('organization_id', $organization->id)->lockForUpdate()->findOrFail($order);
+            if ($saved->status === 'pending' && $saved->created_at->lte(now()->subHours(12))) {
+                throw ValidationException::withMessages(['order' => 'This order reservation has expired. Ask the customer to place a new order.']);
+            }
             app(BranchAccess::class)->ensure($request->user(), $organization->id, $saved->branch_id);
-            if ($saved->status !== 'pending') {
+            $allowed = match ($saved->status) {
+                'expired', 'cancelled' => $saved->processed_by === null ? ['cancel'] : [],
+                'pending' => ['accept', 'cancel', 'reject'], 'accepted' => ['place'], 'placed' => ['deliver'], 'delivered' => ['receive'], default => []
+            };
+            if (! in_array($data['action'], $allowed, true)) {
                 throw ValidationException::withMessages(['order' => 'This order has already been processed.']);
             }
             if ($data['action'] === 'accept') {
@@ -201,7 +349,16 @@ class EcommerceController extends Controller
                 ], $request->user()->id, $organization->id, $branch->id);
                 $saved->document_id = $sale->id;
             }
-            $saved->status = $data['action'] === 'accept' ? 'accepted' : 'cancelled';
+            if ($data['action'] === 'receive') {
+                $sale = Document::query()->where('organization_id', $organization->id)->lockForUpdate()->findOrFail($saved->document_id);
+                $balance = round((float) $sale->total - (float) $sale->amount_paid, 2);
+                if ($balance > 0) {
+                    $inventory->recordSalePayment($sale, ['amount' => $balance, 'payment_method' => 'cash', 'payment_date' => now('Asia/Dhaka')->toDateString(), 'notes' => 'Cash received for online order '.$saved->number], $request->user()->id, $organization->id);
+                }
+            }
+            $saved->status = match ($data['action']) {
+                'accept' => 'accepted', 'reject' => 'rejected', 'place' => 'placed', 'deliver' => 'delivered', 'receive' => 'money_received', default => 'cancelled'
+            };
             $saved->processed_by = $request->user()->id;
             $saved->processed_at = now();
             $saved->save();

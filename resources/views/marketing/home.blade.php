@@ -202,7 +202,7 @@
                         <small>আলাদাভাবে কিনতে হবে। আপনার প্যাকেজের সঙ্গে চালু করতে যোগাযোগ করুন।</small>
                     </div>
                     <div class="marketplace-preview" aria-label="অনলাইন দোকানের উদাহরণ">
-                        <div class="marketplace-preview-bar"><span aria-hidden="true">● ● ●</span><code>apnar-dokan.uddog-soft.com/ecomm</code></div>
+                        <div class="marketplace-preview-bar"><span aria-hidden="true">● ● ●</span><code>apnar-dokan.uddog-soft.com/online-store</code></div>
                         <div class="marketplace-preview-content"><span class="marketplace-preview-label">আপনার নিজের অনলাইন দোকান</span><h3>আপনার পণ্য।<br>আপনার পরিচয়ে।</h3><p>ক্রেতার হাতের মুঠোয়, এখন আপনার দোকানও।</p><div class="marketplace-preview-products" aria-hidden="true"><div><span>▧</span><i></i><i></i></div><div><span>♧</span><i></i><i></i></div><div><span>◈</span><i></i><i></i></div></div><div class="marketplace-preview-footer"><span>পণ্য দেখুন →</span><span>ক্যাশ অন ডেলিভারি</span></div><small>নমুনা প্রদর্শন · দোকানের লিংকের উদাহরণ</small></div>
                     </div>
                 </div>
