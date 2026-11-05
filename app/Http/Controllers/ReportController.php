@@ -101,6 +101,7 @@ class ReportController extends Controller
         $result = match ($report) {
             'sales' => $this->sales($documents),
             'purchases' => $this->purchases($documents),
+            'expenses' => $this->expenseReport($organizationId, $branchId, $dateFrom, $dateTo, $search),
             'profit_loss' => $this->profitLoss($documents, $organizationId, $branchIds, $branchName, $dateFrom, $dateTo),
             'product_ledger' => $this->productLedger($documents, $branchName, $search),
             'product_lifecycle_ledger' => $productLifecycleLedger->build($organizationId, $branchIds, $branchName, $data['product_id'] ?? null, $dateFrom, $dateTo),
@@ -513,6 +514,31 @@ class ReportController extends Controller
             })->values();
 
         return $this->table(['Date', 'Invoice', 'Supplier', 'Phone', 'Total', 'Returned', 'Paid', 'Due', 'Status'], $rows, ['invoices' => $rows->count(), 'due' => $rows->sum('due')]);
+    }
+
+    private function expenseReport(int $organizationId, int $branchId, ?string $dateFrom, ?string $dateTo, string $search): array
+    {
+        $expenses = Expense::query()->with('creator:id,name')
+            ->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))
+            ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search): void {
+                $query->where('category', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%");
+            }))
+            ->orderBy('expense_date')->orderBy('id')->get();
+
+        return $this->table(['Date', 'Category', 'Description', 'Payment method', 'Recorded by', 'Notes', 'Amount'],
+            $expenses->map(fn (Expense $expense) => [
+                'date' => $expense->expense_date->format('Y-m-d'),
+                'category' => $expense->category,
+                'description' => $expense->description,
+                'payment_method' => ucwords(str_replace('_', ' ', $expense->payment_method)),
+                'recorded_by' => $expense->creator?->name ?? '—',
+                'notes' => $expense->notes,
+                'amount' => (float) $expense->amount,
+            ]), ['records' => $expenses->count(), 'total_expenses' => (float) $expenses->sum('amount')]);
     }
 
     private function table(array $columns, $rows, array $summary): array

@@ -6,6 +6,7 @@ enum ReportType: string
 {
     case Sales = 'sales';
     case Purchases = 'purchases';
+    case Expenses = 'expenses';
     case ProfitLoss = 'profit_loss';
     case ProductLedger = 'product_ledger';
     case ProductLifecycleLedger = 'product_lifecycle_ledger';
@@ -31,7 +32,7 @@ enum ReportType: string
         return match ($this) {
             self::Sales => [Permission::Sales, Permission::Resales, Permission::SalesReturns],
             self::Purchases => [Permission::Purchases, Permission::PurchaseReturns],
-            self::ProfitLoss => [Permission::Expenses],
+            self::ProfitLoss, self::Expenses => [Permission::Expenses],
             self::ProductLedger, self::EmployeeSales, self::BarcodeSales, self::CustomerDue => [Permission::Sales, Permission::Resales],
             self::ProductLifecycleLedger => [Permission::Purchases, Permission::Sales, Permission::Resales],
             self::SupplierDue => [Permission::Purchases, Permission::PurchaseReturns],
