@@ -315,6 +315,122 @@
   margin-top: 12px;
 }
 
+.companies-panel {
+  container-type: inline-size;
+}
+
+.companies-panel .table-toolbar {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-height: 0;
+  padding: 12px 16px;
+}
+
+.companies-panel .company-toolbar-actions {
+  flex-wrap: wrap;
+}
+
+.companies-panel .companies-table {
+  table-layout: fixed;
+  min-width: 0;
+  white-space: normal;
+}
+
+.companies-table th:nth-child(1) { width: 20%; }
+.companies-table th:nth-child(2) { width: 17%; }
+.companies-table th:nth-child(3) { width: 8%; }
+.companies-table th:nth-child(4) { width: 11%; }
+.companies-table th:nth-child(5) { width: 11%; }
+.companies-table th:nth-child(6) { width: 13%; }
+.companies-table th:nth-child(7) { width: 20%; }
+
+.companies-table th,
+.companies-table td {
+  padding: 8px 9px;
+  overflow-wrap: anywhere;
+}
+
+.companies-table .company-name-button {
+  gap: 6px;
+  max-width: 100%;
+  text-align: left;
+}
+
+.companies-table .product-avatar {
+  width: 26px;
+  height: 26px;
+}
+
+.companies-table .stock-pill {
+  max-width: 100%;
+  padding: 4px 6px;
+}
+
+.companies-table .row-actions {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.companies-table .row-actions .btn-secondary-app {
+  max-width: 100%;
+  white-space: normal;
+  padding-inline: 7px;
+}
+
+.companies-table .row-actions .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.companies-cell-label {
+  display: none;
+}
+
+@container (max-width: 680px) {
+  .companies-table,
+  .companies-table tbody {
+    display: block;
+  }
+
+  .companies-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .companies-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    padding: 10px 12px;
+    border-top: 1px solid #f2f1f5;
+  }
+
+  .companies-table tbody td {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .companies-table tbody td:first-child,
+  .companies-table tbody td:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .companies-table .row-actions {
+    justify-content: flex-start;
+  }
+
+  .companies-cell-label {
+    display: block;
+    color: #696e80;
+    font-size: 10px;
+    font-weight: 700;
+  }
+}
+
 @media (max-width: 560px) {
   .document-product-picker,
   .document-lines-footer > button {
