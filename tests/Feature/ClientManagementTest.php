@@ -19,6 +19,23 @@ class ClientManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_clients_list_exposes_latest_successful_company_login(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $superadmin = User::factory()->superadmin()->create();
+        $loginAt = CarbonImmutable::parse('2026-11-09 10:30:00');
+        $this->travelTo($loginAt);
+
+        $this->postJson('/api/login', ['email' => $owner->email, 'password' => 'password'])->assertOk();
+        $this->postJson('/api/logout')->assertOk();
+        $this->travelTo($loginAt->addHour());
+        $this->postJson('/api/login', ['email' => $owner->email, 'password' => 'wrong'])->assertUnprocessable();
+
+        $this->actingAs($superadmin)->getJson('/api/clients')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $owner->organization_id, 'last_login_at' => $loginAt->toISOString()]);
+    }
+
     public function test_new_company_has_one_default_walk_in_customer(): void
     {
         $superadmin = User::factory()->superadmin()->create();

@@ -33,6 +33,7 @@ class Organization extends Model
             'annual_renew_fee' => 'decimal:2',
             'package_limits' => 'array',
             'subscription_ends_at' => 'date',
+            'last_login_at' => 'datetime',
             'access_paused' => 'boolean',
             'gold_store' => 'boolean',
             'shared_stock_sales' => 'boolean',

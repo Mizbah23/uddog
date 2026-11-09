@@ -1,4 +1,6 @@
 const bangla = {
+    'Last seen': 'সর্বশেষ লগইন',
+    'No login recorded': 'লগইনের রেকর্ড নেই',
     'Expense': 'খরচ',
     'Operating expenses, payment methods and recorded users for the selected period.': 'নির্বাচিত সময়ের পরিচালন খরচ, পেমেন্ট পদ্ধতি এবং খরচ নথিভুক্তকারী ব্যবহারকারীর বিবরণ।',
     'Dashboard': 'ড্যাশবোর্ড',

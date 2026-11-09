@@ -184,7 +184,17 @@ class WorkspaceController extends Controller
         }
         $request->session()->regenerate();
 
-        return response()->json(['user' => Auth::user()->load('organization')]);
+        $user = Auth::user()->load('organization');
+        $organization = $user->organization;
+        // Keep sign-in available while a deployment's migration is pending.
+        if (! $user->isSuperadmin() && $organization && array_key_exists('last_login_at', $organization->getAttributes())) {
+            $organization->last_login_at = now();
+            $organization->newModelQuery()->whereKey($organization->id)->toBase()->update([
+                'last_login_at' => $organization->last_login_at,
+            ]);
+        }
+
+        return response()->json(['user' => $user]);
     }
 
     public function logout(Request $request): JsonResponse
