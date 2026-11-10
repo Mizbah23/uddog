@@ -265,12 +265,7 @@ class EcommerceController extends Controller
         if ($request->isMethod('get') && $request->filled('search')) {
             $data = $request->validate(['search' => ['required', 'string', 'max:100']]);
             $search = trim($data['search']);
-            $phones = [$search];
-            $digits = preg_replace('/[\s()+-]/', '', $search);
-            if (preg_match('/^(?:00880|880|0)?(1[3-9][0-9]{8})$/', $digits, $matches)) {
-                $national = $matches[1];
-                $phones = array_unique([$search, '0'.$national, '880'.$national, '+880'.$national, '00880'.$national, $national]);
-            }
+            $phones = $this->phoneVariants($search);
             $orders = EcommerceOrder::query()->where('organization_id', $organization->id)
                 ->where(function ($query) use ($search, $phones): void {
                     $query->where('number', strtoupper($search))->orWhereIn('phone', $phones);
@@ -311,7 +306,97 @@ class EcommerceController extends Controller
             return response()->json(['count' => EcommerceOrder::query()->where('organization_id', $organization->id)->whereNull('processed_by')->count()]);
         }
 
-        return response()->json(EcommerceOrder::query()->where('organization_id', $organization->id)->latest('id')->paginate(100));
+        $orders = EcommerceOrder::query()->where('organization_id', $organization->id);
+        $connection = $orders->getModel()->getConnection();
+        $flagsAvailable = $connection->getSchemaBuilder()->hasColumn('ecommerce_orders', 'flagged_at');
+        $page = (clone $orders)
+            ->when($flagsAvailable && $request->boolean('flagged_only'), fn (Builder $query) => $query->whereNotNull('flagged_at'))
+            ->latest('id')->paginate(100);
+
+        if ($flagsAvailable && $page->isNotEmpty()) {
+            $phones = $page->getCollection()->pluck('phone')->unique()->flatMap($this->phoneVariants(...))->unique()->values();
+            $counts = $orders->whereNotNull('flagged_at')->whereIn('phone', $phones)
+                ->selectRaw('phone, count(*) as flag_count')->groupBy('phone')->pluck('flag_count', 'phone');
+            $page->through(function (EcommerceOrder $order) use ($counts): EcommerceOrder {
+                $count = collect($this->phoneVariants($order->phone))->sum(fn (string $phone) => $counts->get($phone, 0));
+                $order->setAttribute('other_flagged_orders', max(0, $count - (int) ($order->flagged_at !== null)));
+
+                return $order;
+            });
+        }
+
+        return response()->json([...$page->toArray(), 'flags_available' => $flagsAvailable])->header('Cache-Control', 'no-store');
+    }
+
+    public function flaggedCustomers(Request $request): JsonResponse
+    {
+        $organization = $this->ownerStore($request);
+        $query = EcommerceOrder::query()->where('organization_id', $organization->id);
+        $available = $query->getModel()->getConnection()->getSchemaBuilder()->hasColumn('ecommerce_orders', 'flagged_at');
+        $customers = [];
+
+        if ($available) {
+            $orders = $query->whereNotNull('flagged_at')
+                ->select(['id', 'phone', 'customer_name', 'number', 'flagged_at', 'flag_reason'])->lazyById();
+            foreach ($orders as $order) {
+                $national = $this->nationalPhone($order->phone);
+                $phone = $national === null ? $order->phone : '0'.$national;
+                $entry = $customers[$phone] ?? null;
+                $count = ($entry['flag_count'] ?? 0) + 1;
+                if ($entry === null || $order->flagged_at->greaterThanOrEqualTo($entry['last_flagged_at'])) {
+                    $entry = [
+                        'phone' => $phone,
+                        'customer_name' => $order->customer_name,
+                        'last_order_number' => $order->number,
+                        'last_flagged_at' => $order->flagged_at,
+                        'last_reason' => $order->flag_reason,
+                    ];
+                }
+                $customers[$phone] = [...$entry, 'flag_count' => $count];
+            }
+        }
+
+        return response()->json([
+            'data' => collect($customers)->sortByDesc('last_flagged_at')->values(),
+            'flags_available' => $available,
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    private function nationalPhone(string $phone): ?string
+    {
+        $digits = preg_replace('/[\s()+-]/', '', $phone);
+
+        return preg_match('/^(?:00880|880|0)?(1[3-9][0-9]{8})$/', $digits, $matches) ? $matches[1] : null;
+    }
+
+    private function phoneVariants(string $phone): array
+    {
+        $national = $this->nationalPhone($phone);
+        if ($national === null) {
+            return [$phone];
+        }
+
+        return array_unique([$phone, '0'.$national, '880'.$national, '+880'.$national, '00880'.$national, $national]);
+    }
+
+    public function updateOrderFlag(Request $request, int $order): JsonResponse
+    {
+        $organization = $this->ownerStore($request);
+        $data = $request->validate([
+            'flagged' => ['required', 'boolean'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+        $saved = EcommerceOrder::query()->where('organization_id', $organization->id)->findOrFail($order);
+        abort_unless(array_key_exists('flagged_at', $saved->getAttributes()), 503, 'Apply the database update before flagging orders.');
+
+        $saved->getConnection()->transaction(function () use ($saved, $data): void {
+            $locked = $saved->newModelQuery()->whereKey($saved->id)->lockForUpdate()->firstOrFail();
+            $locked->flagged_at = $data['flagged'] ? ($locked->flagged_at ?? now()) : null;
+            $locked->flag_reason = $data['flagged'] ? ($data['reason'] ?? null) : null;
+            $locked->save();
+        });
+
+        return response()->json(['flagged' => (bool) $data['flagged']]);
     }
 
     public function courierSettings(Request $request): JsonResponse

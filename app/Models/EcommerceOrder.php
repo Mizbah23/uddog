@@ -12,6 +12,6 @@ class EcommerceOrder extends TenantModel
 
     protected function casts(): array
     {
-        return ['items' => 'array', 'total' => 'decimal:2', 'processed_at' => 'datetime', 'courier_booking' => 'array'];
+        return ['items' => 'array', 'total' => 'decimal:2', 'processed_at' => 'datetime', 'courier_booking' => 'array', 'flagged_at' => 'datetime'];
     }
 }

@@ -56,6 +56,8 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 
         Route::middleware('subscribed')->group(function () {
             Route::get('ecommerce/orders', [EcommerceController::class, 'orders'])->middleware(['role:admin', 'permission:sales']);
+            Route::get('ecommerce/flagged-customers', [EcommerceController::class, 'flaggedCustomers'])->middleware(['role:admin', 'permission:sales']);
+            Route::put('ecommerce/orders/{order}/flag', [EcommerceController::class, 'updateOrderFlag'])->whereNumber('order')->middleware(['role:admin', 'permission:sales']);
             Route::get('ecommerce/courier', [EcommerceController::class, 'courierSettings'])->middleware(['role:admin', 'permission:sales']);
             Route::put('ecommerce/courier', [EcommerceController::class, 'updateCourierSettings'])->middleware(['role:admin', 'permission:sales']);
             Route::post('ecommerce/orders/{order}/process', [EcommerceController::class, 'process'])->middleware(['role:admin', 'permission:sales']);
@@ -175,8 +177,9 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 
 Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)->name('password.reset');
 Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
+Route::permanentRedirect('/fake_orders', '/fake-orders')->middleware(ResolveTenant::class);
 Route::view('/{workspacePage}', 'app')
-    ->where('workspacePage', 'ecommerce_orders|dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
+    ->where('workspacePage', 'ecommerce_orders|fake-orders|dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
     ->middleware(ResolveTenant::class);
 
 Route::get('/', function (Request $request) {

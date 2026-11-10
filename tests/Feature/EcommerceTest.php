@@ -33,6 +33,49 @@ class EcommerceTest extends TestCase
         return ['checkout_token' => (string) Str::uuid(), 'customer_name' => 'Online Customer', 'phone' => '01812345678', 'address' => 'Dhaka delivery address', 'expected_total' => '50.00', 'items' => [['product_id' => $product->id, 'quantity' => 2]]];
     }
 
+    public function test_order_flags_are_private_and_match_phone_variants_within_the_store(): void
+    {
+        [$owner, $product] = $this->records();
+        $store = 'http://liton.uddog-soft.com/online-store';
+        $original = $this->checkout($product);
+        $this->postJson($store.'/orders', $original)->assertCreated();
+        $first = EcommerceOrder::firstOrFail();
+        $this->postJson($store.'/orders', [...$this->checkout($product), 'phone' => '+8801812345678'])->assertCreated();
+        $second = EcommerceOrder::latest('id')->firstOrFail();
+        $flagUrl = '/api/ecommerce/orders/'.$first->id.'/flag';
+
+        $this->actingAs($owner)->putJson($flagUrl, ['flagged' => true, 'reason' => 'Customer denied placing the order.'])->assertOk();
+        $this->getJson('/api/ecommerce/orders')
+            ->assertJsonPath('data.0.id', $second->id)
+            ->assertJsonPath('data.0.other_flagged_orders', 1)
+            ->assertJsonPath('data.1.other_flagged_orders', 0);
+        $this->getJson('/api/ecommerce/orders?flagged_only=1')
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.status', 'pending')
+            ->assertJsonPath('data.0.flag_reason', 'Customer denied placing the order.');
+        $this->getJson($store.'/order-status?'.http_build_query(['number' => $first->number, 'token' => $original['checkout_token']]))
+            ->assertOk()->assertJsonMissingPath('flagged_at')->assertJsonMissingPath('flag_reason');
+
+        $this->putJson('/api/ecommerce/orders/'.$second->id.'/flag', ['flagged' => true, 'reason' => 'Repeat order'])->assertOk();
+        $this->getJson('/api/ecommerce/flagged-customers')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.phone', '01812345678')
+            ->assertJsonPath('data.0.flag_count', 2)
+            ->assertJsonPath('data.0.last_order_number', $second->number)
+            ->assertJsonPath('data.0.last_reason', 'Repeat order');
+
+        $other = User::factory()->admin()->create();
+        $other->organization->update(['ecommerce_enabled' => true]);
+        $this->actingAs($other)->putJson($flagUrl, ['flagged' => false])->assertNotFound();
+        $this->getJson('/api/ecommerce/flagged-customers')->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAs($owner)->putJson($flagUrl, ['flagged' => false])->assertOk();
+        $this->getJson('/api/ecommerce/flagged-customers')->assertJsonPath('data.0.flag_count', 1);
+        $this->putJson('/api/ecommerce/orders/'.$second->id.'/flag', ['flagged' => false])->assertOk();
+        $this->getJson('/api/ecommerce/flagged-customers')->assertJsonCount(0, 'data');
+        $this->getJson('/api/ecommerce/orders?flagged_only=1')->assertJsonCount(0, 'data');
+        $this->getJson('/api/ecommerce/orders')->assertJsonPath('data.0.other_flagged_orders', 0);
+    }
+
     #[TestWith([false])]
     #[TestWith([true])]
     public function test_placing_a_courier_enabled_order_books_once_or_requires_review(bool $timeout): void
