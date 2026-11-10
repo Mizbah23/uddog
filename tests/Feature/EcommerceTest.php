@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
@@ -29,6 +31,48 @@ class EcommerceTest extends TestCase
     private function checkout(Product $product): array
     {
         return ['checkout_token' => (string) Str::uuid(), 'customer_name' => 'Online Customer', 'phone' => '01812345678', 'address' => 'Dhaka delivery address', 'expected_total' => '50.00', 'items' => [['product_id' => $product->id, 'quantity' => 2]]];
+    }
+
+    #[TestWith([false])]
+    #[TestWith([true])]
+    public function test_placing_a_courier_enabled_order_books_once_or_requires_review(bool $timeout): void
+    {
+        [$owner, $product] = $this->records();
+        $courierUrl = 'https://portal.packzy.com/api/v1/create_order';
+        Http::preventStrayRequests();
+        Http::fake([$courierUrl => $timeout
+            ? Http::failedConnection()
+            : Http::response(['consignment' => ['consignment_id' => 42, 'tracking_code' => 'SFR-42']])]);
+
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
+        $order = EcommerceOrder::firstOrFail();
+        $url = '/api/ecommerce/orders/'.$order->id.'/process';
+        $this->actingAs($owner)->putJson('/api/ecommerce/courier', [
+            'enabled' => true, 'api_key' => 'test-api-key', 'secret_key' => 'test-secret-key',
+        ])->assertOk()->assertExactJson(['enabled' => true, 'configured' => true]);
+        $this->getJson('/api/ecommerce/courier')->assertExactJson(['enabled' => true, 'configured' => true]);
+        $this->assertStringNotContainsString('test-secret-key', $owner->organization->fresh()->getRawOriginal('courier_settings'));
+        $this->postJson($url, ['action' => 'accept'])->assertOk();
+
+        $response = $this->postJson($url, ['action' => 'place'])->assertOk();
+        if ($timeout) {
+            $response->assertJsonPath('status', 'accepted')->assertJsonPath('courier_booking.state', 'review');
+        } else {
+            $response->assertJsonPath('status', 'placed')->assertJsonPath('courier_booking.tracking_code', 'SFR-42');
+        }
+        $this->postJson($url, ['action' => 'place'])->assertUnprocessable();
+        Http::assertSentCount(1);
+        Http::assertSent(fn (Request $request) => $request->url() === $courierUrl
+            && $request->hasHeader('Api-Key', 'test-api-key')
+            && $request['recipient_phone'] === '01812345678'
+            && $request['cod_amount'] === '50.00');
+        $this->assertDatabaseCount('sale_payments', 0);
+
+        if ($timeout) {
+            $this->postJson($url, ['action' => 'confirm_courier', 'tracking_code' => 'SFR-42'])
+                ->assertOk()->assertJsonPath('status', 'placed')->assertJsonPath('courier_booking.tracking_code', 'SFR-42');
+            Http::assertSentCount(1);
+        }
     }
 
     public function test_old_storefront_links_redirect_to_the_new_customer_facing_path(): void

@@ -26,6 +26,8 @@ class Organization extends Model
 
     protected $appends = ['subscription_active', 'effective_package_limits'];
 
+    protected $hidden = ['courier_settings'];
+
     protected function casts(): array
     {
         return [
@@ -39,6 +41,7 @@ class Organization extends Model
             'shared_stock_sales' => 'boolean',
             'ecommerce_enabled' => 'boolean',
             'system_settings' => 'array',
+            'courier_settings' => 'encrypted:array',
         ];
     }
 

@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Services\InventoryService;
+use App\Services\SteadfastCourier;
 use App\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -313,23 +314,86 @@ class EcommerceController extends Controller
         return response()->json(EcommerceOrder::query()->where('organization_id', $organization->id)->latest('id')->paginate(100));
     }
 
-    public function process(Request $request, int $order, InventoryService $inventory): JsonResponse
+    public function courierSettings(Request $request): JsonResponse
     {
         $organization = $this->ownerStore($request);
-        $data = $request->validate(['action' => ['required', Rule::in(['accept', 'cancel', 'reject', 'place', 'deliver', 'receive'])]]);
-        $saved = DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($order, $organization, $request, $inventory, $data): EcommerceOrder {
+        $settings = $organization->courier_settings ?? [];
+
+        return response()->json([
+            'enabled' => (bool) ($settings['enabled'] ?? false),
+            'configured' => isset($settings['api_key'], $settings['secret_key']),
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    public function updateCourierSettings(Request $request): JsonResponse
+    {
+        $organization = $this->ownerStore($request);
+        abort_unless(array_key_exists('courier_settings', $organization->getAttributes()), 503, 'Apply the database update before setting up courier booking.');
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'api_key' => ['nullable', 'required_with:secret_key', 'string', 'max:255', 'regex:/\A[!-~]+\z/'],
+            'secret_key' => ['nullable', 'required_with:api_key', 'string', 'max:255', 'regex:/\A[!-~]+\z/'],
+        ]);
+        $settings = $organization->courier_settings ?? [];
+        if (isset($data['api_key'], $data['secret_key'])) {
+            $settings = ['api_key' => $data['api_key'], 'secret_key' => $data['secret_key']];
+        }
+        $configured = isset($settings['api_key'], $settings['secret_key']);
+        if ($data['enabled'] && ! $configured) {
+            throw ValidationException::withMessages(['api_key' => 'Enter both Steadfast API credentials to enable booking.']);
+        }
+        $organization->courier_settings = [...$settings, 'enabled' => (bool) $data['enabled']];
+        $organization->save();
+
+        return response()->json(['enabled' => (bool) $data['enabled'], 'configured' => $configured]);
+    }
+
+    public function process(Request $request, int $order, InventoryService $inventory, SteadfastCourier $courier): JsonResponse
+    {
+        $organization = $this->ownerStore($request);
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['accept', 'cancel', 'reject', 'place', 'deliver', 'receive', 'confirm_courier', 'reset_courier'])],
+            'tracking_code' => ['required_if:action,confirm_courier', 'nullable', 'string', 'regex:/\A[A-Za-z0-9_-]{1,100}\z/'],
+        ]);
+        $settings = $organization->courier_settings ?? [];
+        $payload = null;
+        $connection = DB::connection(app(TenantContext::class)->connectionName());
+        $saved = $connection->transaction(function () use ($order, $organization, $request, $inventory, $data, $settings, $courier, &$payload): EcommerceOrder {
             DB::connection(app(TenantContext::class)->connectionName())->table('organizations')->where('id', $organization->id)->lockForUpdate()->first();
             $saved = EcommerceOrder::query()->where('organization_id', $organization->id)->lockForUpdate()->findOrFail($order);
             if ($saved->status === 'pending' && $saved->created_at->lte(now()->subHours(12))) {
                 throw ValidationException::withMessages(['order' => 'This order reservation has expired. Ask the customer to place a new order.']);
             }
             app(BranchAccess::class)->ensure($request->user(), $organization->id, $saved->branch_id);
+            $booking = $saved->courier_booking ?? [];
+            $needsReview = ($booking['state'] ?? null) === 'review'
+                || (($booking['state'] ?? null) === 'booking' && $booking['started_at'] <= now()->subMinute()->timestamp);
             $allowed = match ($saved->status) {
                 'expired', 'cancelled' => $saved->processed_by === null ? ['cancel'] : [],
-                'pending' => ['accept', 'cancel', 'reject'], 'accepted' => ['place'], 'placed' => ['deliver'], 'delivered' => ['receive'], default => []
+                'pending' => ['accept', 'cancel', 'reject'],
+                'accepted' => $needsReview ? ['confirm_courier', 'reset_courier'] : (($booking['state'] ?? null) === 'booking' ? [] : ['place']),
+                'placed' => ['deliver'], 'delivered' => ['receive'], default => []
             };
             if (! in_array($data['action'], $allowed, true)) {
                 throw ValidationException::withMessages(['order' => 'This order has already been processed.']);
+            }
+            if ($data['action'] === 'reset_courier') {
+                $saved->courier_booking = null;
+                $saved->save();
+
+                return $saved;
+            }
+            if ($data['action'] === 'confirm_courier') {
+                $saved->courier_booking = ['state' => 'booked', 'invoice' => $booking['invoice'], 'tracking_code' => $data['tracking_code']];
+            }
+            if ($data['action'] === 'place' && ($settings['enabled'] ?? false)) {
+                $sale = Document::query()->where('organization_id', $organization->id)->where('branch_id', $saved->branch_id)->findOrFail($saved->document_id);
+                $amountDue = number_format(max(0, (float) $sale->total - (float) $sale->amount_paid), 2, '.', '');
+                $payload = $courier->payload($saved, $amountDue);
+                $saved->courier_booking = ['state' => 'booking', 'invoice' => $payload['invoice'], 'started_at' => now()->timestamp, 'attempt' => (string) Str::uuid()];
+                $saved->save();
+
+                return $saved;
             }
             if ($data['action'] === 'accept') {
                 if (! $organization->setup()['sales']['allow_due_sales']) {
@@ -360,7 +424,7 @@ class EcommerceController extends Controller
                 }
             }
             $saved->status = match ($data['action']) {
-                'accept' => 'accepted', 'reject' => 'rejected', 'place' => 'placed', 'deliver' => 'delivered', 'receive' => 'money_received', default => 'cancelled'
+                'accept' => 'accepted', 'reject' => 'rejected', 'place', 'confirm_courier' => 'placed', 'deliver' => 'delivered', 'receive' => 'money_received', default => 'cancelled'
             };
             $saved->processed_by = $request->user()->id;
             $saved->processed_at = now();
@@ -368,6 +432,26 @@ class EcommerceController extends Controller
 
             return $saved;
         });
+
+        if ($payload !== null) {
+            $result = $courier->book($settings, $payload);
+            $attempt = $saved->courier_booking['attempt'];
+            $saved = $connection->transaction(function () use ($saved, $attempt, $result, $payload, $request): EcommerceOrder {
+                $locked = $saved->newQuery()->lockForUpdate()->findOrFail($saved->id);
+                if (($locked->courier_booking['attempt'] ?? null) !== $attempt) {
+                    return $locked;
+                }
+                $locked->courier_booking = [...$result, 'invoice' => $payload['invoice']];
+                if ($result['state'] === 'booked') {
+                    $locked->status = 'placed';
+                    $locked->processed_by = $request->user()->id;
+                    $locked->processed_at = now();
+                }
+                $locked->save();
+
+                return $locked;
+            });
+        }
 
         return response()->json($saved);
     }

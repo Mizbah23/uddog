@@ -4,6 +4,7 @@ import { installLocalization, translate } from './localization';
 import PosReceipt from './PosReceipt.vue';
 import SaleCorrectionForm from './SaleCorrectionForm.vue';
 import EcommerceOrders from './EcommerceOrders.vue';
+import CourierSettings from './CourierSettings.vue';
 import SaleCorrectionHistory from './SaleCorrectionHistory.vue';
 import StaffModule from './StaffModule.vue';
 import SupplierAdvances from './SupplierAdvances.vue';
@@ -2677,6 +2678,13 @@ async function stopSupportSession() {
             </div>
             <div class="setup-actions"><span>Changes take effect after you save.</span><button class="btn-primary-app" :disabled="busy" type="submit"><Check :size="17" /> {{ busy ? 'Saving...' : 'Save settings' }}</button></div>
           </form>
+          <CourierSettings
+            v-if="systemSetup && systemSetupSection === 'ecommerce' && session.ecommerce_enabled && session.user.role === 'admin' && hasAbility('sales')"
+            class="setup-courier-panel"
+            :api="api"
+            :language="language"
+            :disabled="busy"
+          />
         </template>
 
         <template v-else-if="page === 'stock_transfers'">
