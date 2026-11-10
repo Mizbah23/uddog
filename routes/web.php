@@ -56,6 +56,8 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
 
         Route::middleware('subscribed')->group(function () {
             Route::get('ecommerce/orders', [EcommerceController::class, 'orders'])->middleware(['role:admin', 'permission:sales']);
+            Route::get('ecommerce/courier', [EcommerceController::class, 'courierSettings'])->middleware(['role:admin', 'permission:sales']);
+            Route::put('ecommerce/courier', [EcommerceController::class, 'updateCourierSettings'])->middleware(['role:admin', 'permission:sales']);
             Route::post('ecommerce/orders/{order}/process', [EcommerceController::class, 'process'])->middleware(['role:admin', 'permission:sales']);
             Route::put('products/{product}/ecommerce', [EcommerceController::class, 'visibility'])->middleware('permission:products');
             Route::post('products/{product}/images', [ProductImageController::class, 'store'])->middleware('permission:products');
