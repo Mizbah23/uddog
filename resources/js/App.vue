@@ -2436,10 +2436,26 @@ async function stopSupportSession() {
               </div>
             </section>
 
-            <section class="mobile-dashboard-section mobile-activity-section" aria-labelledby="mobile-activity-title">
-              <div class="mobile-section-heading"><div><span class="mobile-section-rule"></span><h2 id="mobile-activity-title">Recent transactions</h2></div><button v-if="hasAbility('sales')" type="button" @click="navigate('sale')">View sales <ArrowUpRight :size="15" /></button></div>
-              <div class="mobile-activity-card"><div v-if="overview.recent_documents?.length" class="mobile-activity-list"><div v-for="doc in overview.recent_documents.slice(0, 3)" :key="doc.id" class="mobile-activity-row"><span class="mobile-activity-icon" :class="doc.type"><ArrowDownRight v-if="doc.type === 'purchase'" :size="18" /><ArrowUpRight v-else :size="18" /></span><div><strong>{{ doc.contact?.name || doc.number }}</strong><small>{{ label(doc.type) }} · {{ date(doc.document_date) }}</small></div><b v-if="canViewDashboardFinances">{{ money(doc.total) }}</b></div></div><div v-else class="mobile-activity-empty"><Clock3 :size="25" /><strong>No transactions yet</strong><span>Create your first sale or purchase to see activity here.</span></div></div>
-            </section>
+          <section class="panel analytics-panel product-rankings-panel">
+            <div class="panel-heading"><div><h2>Product sales ranking</h2><p>Net units sold this year · Unsold products appear in lowest selling</p></div><Package :size="19" class="analytics-heading-icon" /></div>
+            <div v-if="overview.highest_selling_products?.length || overview.lowest_selling_products?.length" class="product-rankings">
+              <div v-if="overview.highest_selling_products?.length" class="product-ranking-group">
+                <h3><ArrowUpRight :size="16" /> Highest selling</h3>
+                <div v-for="(product, index) in overview.highest_selling_products" :key="product.id" class="product-ranking-row">
+                  <span class="product-ranking-position highest">{{ index + 1 }}</span><strong :title="product.name">{{ product.name }}</strong><span>{{ qty(product.quantity) }} {{ product.unit }}</span>
+                </div>
+              </div>
+              <div class="product-ranking-group">
+                <h3><ArrowDownRight :size="16" /> Lowest selling <small>(unsold first)</small></h3>
+                <div v-for="(product, index) in overview.lowest_selling_products" :key="product.id" class="product-ranking-row">
+                  <span class="product-ranking-position lowest">{{ index + 1 }}</span><strong :title="product.name">{{ product.name }}</strong><span>{{ Number(product.quantity) ? `${qty(product.quantity)} ${product.unit}` : '0 sold' }}</span>
+                </div>
+                <p v-if="!overview.lowest_selling_products?.length" class="product-ranking-empty">No other products to compare.</p>
+              </div>
+            </div>
+            <div v-else class="empty-state compact"><Package :size="27" /><strong>No products yet</strong><span>Add products to see sales rankings here.</span></div>
+          </section>
+            <section class="panel"><div class="panel-heading"><div><h2>Stock alerts</h2><p>Items that may need attention</p></div><button v-if="hasAbility('inventory', 'stock_adjustments')" class="text-button" @click="navigate('inventory')">Inventory <ArrowUpRight :size="16" /></button></div><div v-if="overview.low_stock_products.length" class="alert-list"><div v-for="product in overview.low_stock_products" :key="product.id" class="alert-row"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><span>{{ product.sku || 'No SKU' }}</span></div><span class="stock-pill low">{{ qty(product.quantity_on_hand) }} {{ product.unit }}</span></div></div><div v-else class="empty-state compact"><Check :size="29" /><strong>All stocked up</strong><span>No products are at their reorder level.</span></div></section>
           </div>
           <div class="desktop-dashboard"><div class="page-heading"><div><span class="eyebrow">OVERVIEW</span><h1>Good to see you, {{ session.user.name.split(' ')[0] }} <span class="wave">✦</span></h1><p>Here is what is happening across your inventory today.</p></div></div>
           <div v-if="hasAbility('sales') || hasAbility('purchases')" class="dashboard-quick-actions"><button v-if="hasAbility('purchases')" class="dashboard-action-card purchase-action" @click="openDocument('purchase')"><span class="dashboard-action-icon"><ShoppingBag :size="22" /></span><span class="dashboard-action-copy"><strong>New Purchase</strong><small>Record stock and supplier payment terms</small></span><span class="dashboard-action-arrow"><ArrowUpRight :size="18" /></span></button><button v-if="hasAbility('sales')" class="dashboard-action-card sales-action" @click="openDocument('sale')"><span class="dashboard-action-icon"><ShoppingCart :size="22" /></span><span class="dashboard-action-copy"><strong>New Sale</strong><small>Sell products and record customer payment</small></span><span class="dashboard-action-arrow"><ArrowUpRight :size="18" /></span></button></div>
