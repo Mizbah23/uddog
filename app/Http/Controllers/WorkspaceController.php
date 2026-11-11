@@ -56,6 +56,9 @@ class WorkspaceController extends Controller
             ]);
         }
         $organization = $user?->organization;
+        $storefrontHost = $organization
+            ? array_search($organization->id, config('tenancy.storefront_domains', []))
+            : false;
         $expiryDate = $organization?->subscription_ends_at;
         $abilities = $user ? collect(Permission::cases())
             ->filter(fn (Permission $permission) => $user->hasPermission($permission))
@@ -67,6 +70,7 @@ class WorkspaceController extends Controller
             'user' => $user,
             'gold_store' => (bool) ($organization?->gold_store ?? false),
             'ecommerce_enabled' => (bool) ($organization?->ecommerce_enabled ?? false),
+            'storefront_url' => $storefrontHost ? 'https://'.$storefrontHost.'/' : '/online-store',
             'shared_stock_sales' => (bool) ($organization?->shared_stock_sales ?? false),
             'annual_renew_fees' => Organization::ANNUAL_RENEW_FEES,
             'package_limit_defaults' => Organization::PACKAGE_LIMITS,

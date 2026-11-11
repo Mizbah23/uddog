@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue';
 import CourierSettings from './CourierSettings.vue';
 import { translate } from './localization';
-const props = defineProps({ api: Function, money: Function, date: Function, language: String });
+const props = defineProps({ storefrontUrl: { type: String, default: '/online-store' }, api: Function, money: Function, date: Function, language: String });
 const emit = defineEmits(['updated']);
 const orders = ref([]); const currentPage = ref(1); const lastPage = ref(1); const busy = ref(false); const error = ref('');
 const courierEnabled = ref(null);
@@ -70,7 +70,7 @@ onMounted(() => load());
 </script>
 <template>
   <section class="online-orders">
-    <div class="page-heading"><div><span class="eyebrow">E-COMMERCE</span><h1>{{ t('Online orders') }}</h1><p>{{ t('Cash-on-delivery requests wait here for your confirmation. Accepting an order creates a due sale and deducts stock.') }}</p></div><a class="btn-primary-app" href="/online-store" target="_blank" rel="noopener">{{ t('Open online store') }} ↗</a></div>
+    <div class="page-heading"><div><span class="eyebrow">E-COMMERCE</span><h1>{{ t('Online orders') }}</h1><p>{{ t('Cash-on-delivery requests wait here for your confirmation. Accepting an order creates a due sale and deducts stock.') }}</p></div><a class="btn-primary-app" :href="storefrontUrl" target="_blank" rel="noopener">{{ t('Open online store') }} ↗</a></div>
     <p class="payment-plan-note">{{ t('Your storefront uses your active default branch. Set the branch phone and address so customers can contact your store. Product visibility is managed in Products.') }}</p>
     <div v-if="error" class="alert-box error" role="alert">{{ error }}</div>
     <CourierSettings :api="api" :language="language" :disabled="busy" @loaded="courierEnabled = $event" @saving="courierSaving = $event" />
