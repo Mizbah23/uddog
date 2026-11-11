@@ -638,7 +638,7 @@ async function refresh() {
       || branches.value.find(branch => branch.active);
     activeBranchId.value = selectedBranch?.id || '';
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
-    if (isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss'].includes(reportKind.value)) {
+    if (isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss', 'cash_movement'].includes(reportKind.value)) {
       if (reportKind.value === 'product_lifecycle_ledger') products.value = await api('products?lookup=1');
       return;
     }
