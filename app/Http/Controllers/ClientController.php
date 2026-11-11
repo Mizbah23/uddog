@@ -56,6 +56,8 @@ class ClientController extends Controller
 
         $this->addProvisioningDetails($organization);
 
+        $organization->workspace_host = ($organization->subdomain ?: $organization->id).'.'.config('tenancy.base_domain');
+
         if ($organization->tenant_database || ! config('tenancy.enabled')) {
             app(TenantContext::class)->run($organization, function () use ($organization): void {
                 $organization->load([
