@@ -16,6 +16,7 @@ use App\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -96,12 +97,12 @@ class EcommerceController extends Controller
         return $reserved;
     }
 
-    public function show(Request $request): View
+    public function show(Request $request): Response
     {
         $organization = $this->publicStore($request);
         $this->storefrontBranch($organization);
 
-        return view('ecommerce', ['storeName' => $organization->name]);
+        return response()->view('ecommerce', ['storeName' => $organization->name]);
     }
 
     public function product(Request $request, int $product): View|JsonResponse
