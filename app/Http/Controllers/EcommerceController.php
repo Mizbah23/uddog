@@ -103,11 +103,13 @@ class EcommerceController extends Controller
         $branch = $this->storefrontBranch($organization);
         $origin = $this->storefrontOrigin($request, $organization);
 
+        $catalog = $this->catalogData($organization, $branch);
+
         return response()->view('ecommerce', [
-            'storeName' => $this->storeData($organization, $branch)['name'],
+            'storeName' => $catalog['store']['name'],
             'storefrontUrl' => $this->storefrontUrl($origin),
-            'products' => $this->publicProducts($organization)->orderBy('name')->get(['id', 'name']),
-        ]);
+            'initialData' => $catalog,
+        ])->header('Cache-Control', 'no-store');
     }
 
     public function product(Request $request, int $product): Response|JsonResponse
@@ -201,6 +203,13 @@ class EcommerceController extends Controller
     {
         $organization = $this->publicStore($request);
         $branch = $this->storefrontBranch($organization);
+
+        return response()->json($this->catalogData($organization, $branch))
+            ->header('Cache-Control', 'no-store');
+    }
+
+    private function catalogData(Organization $organization, Branch $branch): array
+    {
         $products = $this->publicProducts($organization)->with('category:id,name')->orderBy('name')->get();
         $stocks = ProductStock::query()->where('organization_id', $organization->id)->where('branch_id', $branch->id)
             ->whereIn('product_id', $products->map(fn (Product $product) => $product->stock_source_product_id ?: $product->id))
@@ -215,8 +224,7 @@ class EcommerceController extends Controller
             return $this->productData($product, $available);
         });
 
-        return response()->json(['store' => $this->storeData($organization, $branch), 'products' => $items])
-            ->header('Cache-Control', 'no-store');
+        return ['store' => $this->storeData($organization, $branch), 'products' => $items];
     }
 
     private function publicProducts(Organization $organization): Builder

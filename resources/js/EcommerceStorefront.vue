@@ -16,7 +16,7 @@ const money = value => new Intl.NumberFormat(language.value === 'bn' ? 'bn-BD' :
 const quantity = value => new Intl.NumberFormat(language.value === 'bn' ? 'bn-BD' : 'en-BD', { maximumFractionDigits: 3 }).format(Number(value));
 const initialData = JSON.parse(document.getElementById('storefront-data')?.textContent ?? 'null');
 const store = ref(initialData?.store ?? null);
-const products = ref([]);
+const products = ref(initialData?.products ?? []);
 const detailProduct = ref(initialData?.product ?? null);
 const loading = ref(!initialData);
 const error = ref('');
