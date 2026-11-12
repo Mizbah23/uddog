@@ -133,8 +133,12 @@ class EcommerceTest extends TestCase
         $otherProduct = Product::create(['organization_id' => $other->organization_id, 'name' => 'Other tenant product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true]);
         $store = 'http://liton.uddog-soft.com/online-store';
         $this->get($store)->assertOk()->assertSee($owner->organization->name)
+            ->assertSee('<section class="shop-hero">', false)
             ->assertSee('<a href="/online-store/products/'.$product->id.'">Online product</a>', false)
-            ->assertDontSee('Hidden product')->assertDontSee('Inactive product')->assertDontSee('Other tenant product');
+            ->assertViewHas('initialData', fn (array $data) => $data['products']->pluck('id')->all() === [$product->id]
+                && $data['products']->first()['available_quantity'] === 20.0)
+            ->assertDontSee('Hidden product')->assertDontSee('Inactive product')->assertDontSee('Other tenant product')
+            ->assertDontSee('cost_price')->assertDontSee('organization_id');
 
         $this->get('http://liton.uddog-soft.com/sitemap.xml')->assertOk()
             ->assertHeader('Content-Type', 'application/xml; charset=UTF-8')
