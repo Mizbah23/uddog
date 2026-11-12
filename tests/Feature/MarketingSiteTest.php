@@ -86,7 +86,7 @@ class MarketingSiteTest extends TestCase
             ->assertRedirect('https://uddog-soft.com/');
     }
 
-    public function test_sitemap_lists_public_homepage_and_hides_it_on_tenant_hosts(): void
+    public function test_central_sitemap_lists_public_marketing_homepage(): void
     {
         config([
             'tenancy.enabled' => true,
@@ -99,8 +99,6 @@ class MarketingSiteTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'application/xml; charset=UTF-8')
             ->assertSee('<loc>https://uddog-soft.com/</loc>', false);
-
-        $this->get('http://demo.test/sitemap.xml')->assertNotFound();
     }
 
     public function test_public_robots_file_keeps_workspace_paths_out_of_crawlers(): void

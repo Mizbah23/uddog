@@ -10,6 +10,7 @@ use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
@@ -61,6 +62,7 @@ class TenantDatabaseTest extends TestCase
 
         $this->getJson('http://999.test/api/session')->assertNotFound();
         $this->getJson('http://admin.test/api/session')->assertNotFound();
+        $this->get('http://admin.test/sitemap.xml')->assertNotFound();
         $this->getJson('http://evil.example/api/session')->assertNotFound();
 
         $this->expectException(LogicException::class);
@@ -84,6 +86,39 @@ class TenantDatabaseTest extends TestCase
         $this->getJson('http://other.test/api/session')->assertForbidden();
         $this->getJson('http://unknown.test/api/session')->assertNotFound();
         $this->getJson('http://nested.demo.test/api/session')->assertNotFound();
+    }
+
+    public function test_custom_storefront_domain_is_canonical_for_its_tenant_sitemap_and_products(): void
+    {
+        $company = Organization::factory()->create(['subdomain' => 'demo', 'ecommerce_enabled' => true]);
+        $database = 'uddog_test_'.Str::random(16);
+        $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.$database.'.sqlite';
+        touch($path);
+        $this->tenantFiles[] = $path;
+        $company->update(['tenant_database' => $database]);
+        $this->configureTenancy();
+        config(['tenancy.storefront_domains' => ['shop.example' => (string) $company->id]]);
+
+        $product = app(TenantContext::class)->run($company, function () use ($company): Product {
+            $this->assertSame(0, Artisan::call('migrate', ['--database' => 'tenant', '--force' => true, '--no-interaction' => true]));
+            DB::connection('tenant')->table('organizations')->insert($company->getAttributes());
+            $company->branches()->create(['name' => 'Main Branch', 'code' => 'MAIN', 'is_default' => true, 'active' => true]);
+
+            return $company->products()->create([
+                'name' => 'Public product', 'unit' => 'pc', 'cost_price' => 10,
+                'sale_price' => 20, 'active' => true, 'ecommerce_visible' => true,
+            ]);
+        });
+
+        $productPath = '/online-store/products/'.$product->id;
+        $this->get('https://shop.example/sitemap.xml')->assertOk()
+            ->assertSee('<loc>https://shop.example/</loc>', false)
+            ->assertSee('<loc>https://shop.example'.$productPath.'</loc>', false);
+        $this->get('https://demo.test/sitemap.xml')->assertMovedPermanently()->assertRedirect('https://shop.example/sitemap.xml');
+        $this->get('https://shop.example/online-store')->assertOk()
+            ->assertSee('<link rel="canonical" href="https://shop.example/">', false);
+        $this->get('https://demo.test'.$productPath)->assertOk()
+            ->assertSee('<link rel="canonical" href="https://shop.example'.$productPath.'">', false);
     }
 
     public function test_named_company_password_recovery_uses_its_named_host(): void
