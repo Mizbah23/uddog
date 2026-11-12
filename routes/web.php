@@ -214,7 +214,11 @@ Route::get('/sitemap.xml', function (Request $request) {
         config('tenancy.base_domain'),
     ]));
 
-    abort_unless(! config('tenancy.enabled') || in_array($host, $centralHosts, true), 404);
+    if (array_key_exists($host, config('tenancy.storefront_domains', []))
+        || (! in_array($host, $centralHosts, true)
+            && (config('tenancy.enabled') || str_ends_with($host, '.'.strtolower((string) config('tenancy.base_domain')))))) {
+        return app(ResolveTenant::class)->handle($request, fn () => app(EcommerceController::class)->sitemap($request));
+    }
 
     return response()->view('marketing.sitemap', [
         'homepageUrl' => rtrim((string) config('marketing.url'), '/').'/',

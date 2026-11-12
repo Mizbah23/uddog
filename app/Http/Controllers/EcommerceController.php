@@ -15,13 +15,13 @@ use App\Services\SteadfastCourier;
 use App\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EcommerceController extends Controller
@@ -100,31 +100,99 @@ class EcommerceController extends Controller
     public function show(Request $request): Response
     {
         $organization = $this->publicStore($request);
-        $this->storefrontBranch($organization);
+        $branch = $this->storefrontBranch($organization);
+        $origin = $this->storefrontOrigin($request, $organization);
 
-        return response()->view('ecommerce', ['storeName' => $organization->name]);
+        return response()->view('ecommerce', [
+            'storeName' => $this->storeData($organization, $branch)['name'],
+            'storefrontUrl' => $this->storefrontUrl($origin),
+            'products' => $this->publicProducts($organization)->orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
-    public function product(Request $request, int $product): View|JsonResponse
+    public function product(Request $request, int $product): Response|JsonResponse
     {
         $organization = $this->publicStore($request);
         $branch = $this->storefrontBranch($organization);
-        $record = $this->publicProduct($organization, $product)->with('category:id,name')->firstOrFail();
+        $record = $this->publicProducts($organization)->whereKey($product)->with('category:id,name')->firstOrFail();
+        $store = $this->storeData($organization, $branch);
+        $detail = $this->productData($record, $this->available($record, $branch->id), true);
 
-        if (! $request->expectsJson()) {
-            return view('ecommerce', ['storeName' => $organization->name]);
+        if ($request->expectsJson()) {
+            return response()->json(['store' => $store, 'product' => $detail])->header('Cache-Control', 'no-store');
         }
 
-        return response()->json([
-            'store' => $this->storeData($organization, $branch),
-            'product' => $this->productData($record, $this->available($record, $branch->id), true),
+        $origin = $this->storefrontOrigin($request, $organization);
+        $canonicalUrl = $origin.route('ecommerce.products.show', ['product' => $record->id], false);
+        $images = array_map(
+            fn (string $image): string => str_starts_with($image, '/') ? $origin.$image : $image,
+            $detail['images'] ?: array_filter([$detail['image_url']]),
+        );
+        $structuredData = array_filter([
+            '@context' => 'https://schema.org',
+            '@type' => 'Product',
+            'name' => $detail['name'],
+            'description' => $detail['description'],
+            'image' => $images,
+            'url' => $canonicalUrl,
+            'offers' => $detail['price'] === null ? null : [
+                '@type' => 'Offer',
+                'url' => $canonicalUrl,
+                'priceCurrency' => 'BDT',
+                'price' => $detail['price'],
+                'availability' => $detail['in_stock'] ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            ],
+        ], fn ($value) => $value !== null && $value !== '' && $value !== []);
+
+        return response()->view('ecommerce', [
+            'storeName' => $store['name'],
+            'storefrontUrl' => $this->storefrontUrl($origin),
+            'canonicalUrl' => $canonicalUrl,
+            'product' => $detail,
+            'structuredData' => $structuredData,
+            'initialData' => ['store' => $store, 'product' => $detail],
         ])->header('Cache-Control', 'no-store');
+    }
+
+    public function sitemap(Request $request): Response|RedirectResponse
+    {
+        $organization = $this->publicStore($request);
+        $this->storefrontBranch($organization);
+        $origin = $this->storefrontOrigin($request, $organization);
+
+        if ($origin !== $request->getSchemeAndHttpHost()) {
+            return redirect()->away($origin.'/sitemap.xml', 301);
+        }
+
+        return response()->view('ecommerce-sitemap', [
+            'storefrontUrl' => $this->storefrontUrl($origin),
+            'origin' => $origin,
+            'productIds' => $this->publicProducts($organization)->orderBy('id')->pluck('id'),
+        ])->header('Content-Type', 'application/xml; charset=UTF-8');
+    }
+
+    private function storefrontOrigin(Request $request, Organization $organization): string
+    {
+        $host = array_search($organization->id, config('tenancy.storefront_domains'), false);
+
+        if ($host === false || $host === $request->getHost() || ! config('tenancy.enabled')) {
+            return $request->getSchemeAndHttpHost();
+        }
+
+        return $request->getScheme().'://'.$host;
+    }
+
+    private function storefrontUrl(string $origin): string
+    {
+        $host = parse_url($origin, PHP_URL_HOST);
+
+        return $origin.(array_key_exists($host, config('tenancy.storefront_domains')) ? '/' : route('ecommerce.storefront', [], false));
     }
 
     public function image(Request $request, int $product, string $image): StreamedResponse
     {
         $organization = $this->publicStore($request);
-        $record = $this->publicProduct($organization, $product)->firstOrFail();
+        $record = $this->publicProducts($organization)->whereKey($product)->firstOrFail();
 
         return app(ProductImageController::class)->image($record, $image);
     }
@@ -133,9 +201,7 @@ class EcommerceController extends Controller
     {
         $organization = $this->publicStore($request);
         $branch = $this->storefrontBranch($organization);
-        $products = Product::query()->where('organization_id', $organization->id)->where('active', true)->where('ecommerce_visible', true)
-            ->when(! $organization->shared_stock_sales, fn ($query) => $query->whereNull('stock_source_product_id'))
-            ->with('category:id,name')->orderBy('name')->get();
+        $products = $this->publicProducts($organization)->with('category:id,name')->orderBy('name')->get();
         $stocks = ProductStock::query()->where('organization_id', $organization->id)->where('branch_id', $branch->id)
             ->whereIn('product_id', $products->map(fn (Product $product) => $product->stock_source_product_id ?: $product->id))
             ->pluck('quantity_on_hand', 'product_id');
@@ -153,9 +219,9 @@ class EcommerceController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
-    private function publicProduct(Organization $organization, int $product): Builder
+    private function publicProducts(Organization $organization): Builder
     {
-        return Product::query()->whereKey($product)->where('organization_id', $organization->id)
+        return Product::query()->where('organization_id', $organization->id)
             ->where('active', true)->where('ecommerce_visible', true)
             ->when(! $organization->shared_stock_sales, fn ($query) => $query->whereNull('stock_source_product_id'));
     }

@@ -127,11 +127,22 @@ class EcommerceTest extends TestCase
     public function test_public_storefront_exposes_only_visible_active_tenant_products_and_no_private_fields(): void
     {
         [$owner, $product] = $this->records();
-        Product::create(['organization_id' => $owner->organization_id, 'name' => 'Hidden product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => false]);
-        Product::create(['organization_id' => $owner->organization_id, 'name' => 'Inactive product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true, 'active' => false]);
+        $hidden = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Hidden product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => false]);
+        $inactive = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Inactive product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true, 'active' => false]);
         $other = User::factory()->admin()->create();
-        Product::create(['organization_id' => $other->organization_id, 'name' => 'Other tenant product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true]);
-        $this->get('http://liton.uddog-soft.com/online-store')->assertOk()->assertSee($owner->organization->name);
+        $otherProduct = Product::create(['organization_id' => $other->organization_id, 'name' => 'Other tenant product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true]);
+        $store = 'http://liton.uddog-soft.com/online-store';
+        $this->get($store)->assertOk()->assertSee($owner->organization->name)
+            ->assertSee('<a href="/online-store/products/'.$product->id.'">Online product</a>', false)
+            ->assertDontSee('Hidden product')->assertDontSee('Inactive product')->assertDontSee('Other tenant product');
+
+        $this->get('http://liton.uddog-soft.com/sitemap.xml')->assertOk()
+            ->assertHeader('Content-Type', 'application/xml; charset=UTF-8')
+            ->assertSee('<loc>'.$store.'</loc>', false)
+            ->assertSee('<loc>'.$store.'/products/'.$product->id.'</loc>', false)
+            ->assertDontSee('/products/'.$hidden->id.'</loc>', false)
+            ->assertDontSee('/products/'.$inactive->id.'</loc>', false)
+            ->assertDontSee('/products/'.$otherProduct->id.'</loc>', false);
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(1, 'products')
             ->assertJsonPath('products.0.id', $product->id)->assertJsonPath('products.0.price', '25.00')
             ->assertJsonPath('products.0.in_stock', true)->assertJsonPath('products.0.available_quantity', 20)
@@ -147,16 +158,24 @@ class EcommerceTest extends TestCase
         $other = User::factory()->admin()->create();
         $otherProduct = Product::create(['organization_id' => $other->organization_id, 'name' => 'Private product', 'unit' => 'pc', 'cost_price' => 8, 'sale_price' => 20, 'ecommerce_visible' => true]);
 
-        $this->get('http://liton.uddog-soft.com/online-store/products/'.$product->id)
-            ->assertOk()->assertSee($owner->organization->name);
+        $url = 'http://liton.uddog-soft.com/online-store/products/'.$product->id;
+        $this->get($url.'?source=shared')->assertOk()
+            ->assertSee('<title>Online product | '.e($owner->organization->name).' | Online store</title>', false)
+            ->assertSee('<meta name="description" content="A full online product description.">', false)
+            ->assertSee('<link rel="canonical" href="'.$url.'">', false)
+            ->assertSee('<h1>Online product</h1>', false)
+            ->assertSee('<p>A full online product description.</p>', false)
+            ->assertSee('"priceCurrency":"BDT","price":"25.00","availability":"https://schema.org/InStock"', false);
         $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$product->id)
             ->assertOk()->assertJsonPath('product.description', 'A full online product description.')
             ->assertJsonPath('product.available_quantity', 20)
             ->assertJsonMissingPath('product.cost_price')->assertJsonMissingPath('product.organization_id');
         $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$otherProduct->id)->assertNotFound();
 
+        $this->get('http://liton.uddog-soft.com/online-store/products/'.$otherProduct->id)->assertNotFound();
         $product->update(['ecommerce_visible' => false]);
-        $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$product->id)->assertNotFound();
+        $this->get($url)->assertNotFound();
+        $this->getJson($url)->assertNotFound();
     }
 
     #[TestWith(['disabled'])]
@@ -170,6 +189,7 @@ class EcommerceTest extends TestCase
             default => ['subscription_ends_at' => now()->subDay()->toDateString()],
         });
         $this->get('http://liton.uddog-soft.com/online-store')->assertNotFound();
+        $this->get('http://liton.uddog-soft.com/sitemap.xml')->assertNotFound();
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertNotFound();
         $this->getJson('http://liton.uddog-soft.com/online-store/products/'.$product->id)->assertNotFound();
         $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertNotFound();
@@ -385,6 +405,8 @@ class EcommerceTest extends TestCase
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(2, 'products')
             ->assertJsonPath('products.1.in_stock', true)->assertJsonPath('products.1.available_quantity', 10);
         $product->update(['is_gold_item' => true]);
+        $this->get('http://liton.uddog-soft.com/online-store/products/'.$product->id)->assertOk()
+            ->assertSee('দাম জানতে যোগাযোগ করুন')->assertDontSee('"offers":', false);
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonPath('products.0.price', null)->assertJsonPath('products.0.requires_quote', true);
         $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertUnprocessable();
     }

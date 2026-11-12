@@ -14,7 +14,12 @@ const copy = {
 const t = key => copy[language.value][key];
 const money = value => new Intl.NumberFormat(language.value === 'bn' ? 'bn-BD' : 'en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 2 }).format(Number(value));
 const quantity = value => new Intl.NumberFormat(language.value === 'bn' ? 'bn-BD' : 'en-BD', { maximumFractionDigits: 3 }).format(Number(value));
-const store = ref(null); const products = ref([]); const detailProduct = ref(null); const loading = ref(true); const error = ref('');
+const initialData = JSON.parse(document.getElementById('storefront-data')?.textContent ?? 'null');
+const store = ref(initialData?.store ?? null);
+const products = ref([]);
+const detailProduct = ref(initialData?.product ?? null);
+const loading = ref(!initialData);
+const error = ref('');
 const search = ref(''); const category = ref(''); const sort = ref('name');
 const cart = ref([]); const bagOpen = ref(false); const checkoutOpen = ref(false); const busy = ref(false); const checkoutError = ref(''); const reference = ref('');
 const form = ref({ customer_name: '', phone: '', address: '', notes: '' });
@@ -123,7 +128,12 @@ async function placeOrder() {
   } catch (exception) { checkoutError.value = exception.message; }
   finally { busy.value = false; }
 }
-onMounted(() => { load(); window.addEventListener('keydown', onKey); });
+onMounted(() => {
+  if (!initialData) {
+    load();
+  }
+  window.addEventListener('keydown', onKey);
+});
 onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; });
 </script>
 
