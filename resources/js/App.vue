@@ -2641,7 +2641,53 @@ async function stopSupportSession() {
           <form v-if="systemSetup" class="setup-layout" :class="`setup-section-${systemSetupSection}`" @submit.prevent="saveSystemSetup">
             <div class="setup-intro"><div class="setup-intro-icon"><Settings2 :size="22" /></div><div><strong>How your workspace works</strong><p>Company details and preferences apply across your workspace. Manage each team member’s access on the Users page.</p></div><button type="button" class="btn-secondary-app" @click="navigate('users')"><UserCog :size="16" /> Manage users</button></div>
             <div class="setup-section-tabs" role="tablist" aria-label="Settings sections"><button v-for="section in [{ id: 'company', label: 'Company details', icon: Building2 }, { id: 'sales', label: 'Sales', icon: ShoppingCart }, { id: 'purchases', label: 'Purchases', icon: ShoppingBag }, { id: 'store', label: 'Store & stock', icon: Boxes }, ...(session.ecommerce_enabled ? [{ id: 'ecommerce', label: 'E-commerce', icon: ShoppingBag }] : [])]" :key="section.id" type="button" role="tab" :aria-selected="systemSetupSection === section.id" :class="{ active: systemSetupSection === section.id }" @click="systemSetupSection = section.id"><component :is="section.icon" :size="17" />{{ section.label }}</button></div>
-            <section v-if="systemSetupSection === 'ecommerce'" class="panel" style="padding:24px"><div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><h2>E-commerce appearance</h2><button type="button" class="btn-secondary-app" @click="systemSetup.ecommerce = {name:'',hero:'',subtitle:'',primary_color:'#173e36',hero_color:'#f0eee4',accent_color:'#b7794a'}">Reset to default</button></div><p>Customize your online store. Leave text blank to use the default.</p><div class="form-grid" style="margin-top:20px"><label>Store name<input v-model="systemSetup.ecommerce.name" maxlength="100"></label><label>Hero heading<input v-model="systemSetup.ecommerce.hero" maxlength="200"></label><label class="full">Sub-hero description<textarea v-model="systemSetup.ecommerce.subtitle" maxlength="600" rows="3"></textarea></label><label>Primary color<input v-model="systemSetup.ecommerce.primary_color" type="color"></label><label>Hero background<input v-model="systemSetup.ecommerce.hero_color" type="color"></label><label>Accent color<input v-model="systemSetup.ecommerce.accent_color" type="color"></label></div><div :style="{background:systemSetup.ecommerce.hero_color,color:systemSetup.ecommerce.primary_color,padding:'24px',borderRadius:'8px',marginTop:'20px'}"><small>{{ systemSetup.ecommerce.name || systemSetup.company.name }}</small><h2>{{ systemSetup.ecommerce.hero || 'Good things. Close to home.' }}</h2><p>{{ systemSetup.ecommerce.subtitle || 'Discover your local store’s collection.' }}</p><span :style="{background:systemSetup.ecommerce.accent_color,display:'inline-block',padding:'10px',marginTop:'12px',borderRadius:'4px'}">Store accent preview</span></div></section>
+            <section v-if="systemSetupSection === 'ecommerce'" class="panel setup-panel setup-ecommerce">
+              <div class="setup-panel-heading setup-ecommerce-heading">
+                <span class="setup-section-icon"><ShoppingBag :size="20" /></span>
+                <div>
+                  <h2>E-commerce appearance</h2>
+                  <p>Customize your online store. Leave text blank to use the default.</p>
+                </div>
+                <button type="button" class="btn-secondary-app" @click="systemSetup.ecommerce = { name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4', accent_color: '#b7794a' }">Reset to default</button>
+              </div>
+              <div class="setup-company-fields setup-ecommerce-fields">
+                <label class="field">
+                  <span>Store name</span>
+                  <input v-model="systemSetup.ecommerce.name" maxlength="100" :placeholder="systemSetup.company.name">
+                </label>
+                <label class="field">
+                  <span>Hero heading</span>
+                  <input v-model="systemSetup.ecommerce.hero" maxlength="200" placeholder="Good things. Close to home.">
+                </label>
+                <label class="field setup-company-address">
+                  <span>Sub-hero description</span>
+                  <textarea v-model="systemSetup.ecommerce.subtitle" maxlength="600" rows="3" placeholder="Discover your local store’s collection."></textarea>
+                </label>
+              </div>
+              <fieldset class="setup-ecommerce-palette">
+                <legend>Store colors</legend>
+                <div class="setup-ecommerce-colors">
+                  <label v-for="color in [{ key: 'primary_color', label: 'Primary color' }, { key: 'hero_color', label: 'Hero background' }, { key: 'accent_color', label: 'Accent color' }]" :key="color.key" class="field">
+                    <span :id="`store-${color.key}`">{{ color.label }}</span>
+                    <span class="setup-color-control">
+                      <input v-model="systemSetup.ecommerce[color.key]" type="color" :aria-labelledby="`store-${color.key}`">
+                      <i :style="{ background: systemSetup.ecommerce[color.key] }" aria-hidden="true"></i>
+                      <code>{{ systemSetup.ecommerce[color.key] }}</code>
+                      <ChevronDown :size="15" aria-hidden="true" />
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+              <div class="setup-ecommerce-preview">
+                <h3>Store preview</h3>
+                <div class="setup-ecommerce-preview-card" :style="{ background: systemSetup.ecommerce.hero_color, color: systemSetup.ecommerce.primary_color }">
+                  <small>{{ systemSetup.ecommerce.name || systemSetup.company.name }}</small>
+                  <h4>{{ systemSetup.ecommerce.hero || 'Good things. Close to home.' }}</h4>
+                  <p>{{ systemSetup.ecommerce.subtitle || 'Discover your local store’s collection.' }}</p>
+                  <span class="setup-ecommerce-preview-accent"><i :style="{ background: systemSetup.ecommerce.accent_color }" aria-hidden="true"></i> Accent color</span>
+                </div>
+              </div>
+            </section>
             <section class="panel setup-panel setup-company">
               <div class="setup-panel-heading"><span class="setup-section-icon company"><Building2 :size="20" /></span><div><h2>Company details</h2><p>Edit your business name and contact information</p></div></div>
               <div class="setup-company-fields">
