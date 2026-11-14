@@ -129,7 +129,8 @@ class InventoryService
             if ($discountCents > $subtotalCents) {
                 throw ValidationException::withMessages(['discount' => 'Discount cannot exceed the subtotal.']);
             }
-            $totalCents = $subtotalCents - $discountCents + $taxCents;
+            $deliveryCents = self::scaled($data['delivery_cost'] ?? 0, 2);
+            $totalCents = $subtotalCents - $discountCents + $taxCents + $deliveryCents;
             $saleChannel = $data['sale_channel'] ?? 'standard';
             $exchange = $this->goldExchange($data, $type, $organization->gold_store, $organizationId, $branchId);
             if ($exchange['value'] > $totalCents) {
@@ -151,6 +152,7 @@ class InventoryService
                 'subtotal' => self::money($subtotalCents),
                 'discount' => self::money($discountCents),
                 'tax' => self::money($taxCents),
+                'delivery_cost' => self::money($deliveryCents),
                 'total' => self::money($totalCents),
                 'interest_rate' => $paymentTerms['interest_rate'] ?? 0,
                 'interest_amount' => self::money($paymentTerms['interest_amount'] ?? 0),

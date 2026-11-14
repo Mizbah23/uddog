@@ -87,8 +87,26 @@ class EcommerceTest extends TestCase
             ? Http::failedConnection()
             : Http::response(['consignment' => ['consignment_id' => 42, 'tracking_code' => 'SFR-42']])]);
 
-        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $this->checkout($product))->assertCreated();
+        $setup = $owner->organization->setup();
+        $setup['ecommerce']['delivery_cost'] = 60.25;
+        $this->actingAs($owner)->putJson('/api/system-setup', $setup)
+            ->assertOk()->assertJsonPath('ecommerce.delivery_cost', 60.25);
+        $this->getJson('http://liton.uddog-soft.com/online-store/catalog')
+            ->assertOk()->assertJsonPath('store.appearance.delivery_cost', 60.25);
+
+        $checkout = $this->checkout($product);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', $checkout)
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$checkout, 'expected_total' => '110.25'])
+            ->assertCreated();
         $order = EcommerceOrder::firstOrFail();
+        $this->assertSame('60.25', $order->delivery_cost);
+        $this->assertSame('110.25', $order->total);
+
+        $setup['ecommerce']['delivery_cost'] = 80;
+        $this->putJson('/api/system-setup', $setup)->assertOk();
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$checkout, 'expected_total' => '110.25'])
+            ->assertCreated()->assertJsonPath('number', $order->number);
         $url = '/api/ecommerce/orders/'.$order->id.'/process';
         $this->actingAs($owner)->putJson('/api/ecommerce/courier', [
             'enabled' => true, 'api_key' => 'test-api-key', 'secret_key' => 'test-secret-key',
@@ -96,6 +114,7 @@ class EcommerceTest extends TestCase
         $this->getJson('/api/ecommerce/courier')->assertExactJson(['enabled' => true, 'configured' => true]);
         $this->assertStringNotContainsString('test-secret-key', $owner->organization->fresh()->getRawOriginal('courier_settings'));
         $this->postJson($url, ['action' => 'accept'])->assertOk();
+        $this->assertDatabaseHas('documents', ['id' => $order->fresh()->document_id, 'delivery_cost' => 60.25, 'total' => 110.25]);
 
         $response = $this->postJson($url, ['action' => 'place'])->assertOk();
         if ($timeout) {
@@ -108,7 +127,7 @@ class EcommerceTest extends TestCase
         Http::assertSent(fn (Request $request) => $request->url() === $courierUrl
             && $request->hasHeader('Api-Key', 'test-api-key')
             && $request['recipient_phone'] === '01812345678'
-            && $request['cod_amount'] === '50.00');
+            && $request['cod_amount'] === '110.25');
         $this->assertDatabaseCount('sale_payments', 0);
 
         if ($timeout) {

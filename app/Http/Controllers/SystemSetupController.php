@@ -30,9 +30,10 @@ class SystemSetupController extends Controller
 
         $data = $request->validate([
             'logo_file' => ['sometimes', 'required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048', 'dimensions:max_width=2048,max_height=2048'],
-            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url'],
+            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url,delivery_cost'],
             'ecommerce.logo_url' => ['nullable', 'url:https', 'max:2048'],
             'ecommerce.favicon_url' => ['nullable', 'url:https', 'max:2048'],
+            'ecommerce.delivery_cost' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999.99', 'decimal:0,2'],
             'ecommerce.name' => ['nullable', 'string', 'max:100'],
             'ecommerce.hero' => ['nullable', 'string', 'max:200'],
             'ecommerce.subtitle' => ['nullable', 'string', 'max:600'],

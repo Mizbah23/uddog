@@ -117,7 +117,7 @@ onMounted(() => load());
           </form>
         </details>
       </div>
-      <div class="online-order-actions"><strong>{{ t('Total') }}: {{ money(order.total) }}</strong><span v-if="order.document_id">{{ t('Sale') }} #{{ order.document_id }}</span><template v-if="order.status === 'pending'"><button class="btn-secondary-app small" :disabled="busy" @click="process(order, 'cancel')">{{ t('Cancel order') }}</button><button class="btn-primary-app small" :disabled="busy" @click="process(order, 'accept')">{{ t('Accept and create sale') }}</button></template></div>
+      <div class="online-order-actions"><span v-if="Number(order.delivery_cost) > 0">{{ t('Delivery cost') }}: {{ money(order.delivery_cost) }}</span><strong>{{ t('Total') }}: {{ money(order.total) }}</strong><span v-if="order.document_id">{{ t('Sale') }} #{{ order.document_id }}</span><template v-if="order.status === 'pending'"><button class="btn-secondary-app small" :disabled="busy" @click="process(order, 'cancel')">{{ t('Cancel order') }}</button><button class="btn-primary-app small" :disabled="busy" @click="process(order, 'accept')">{{ t('Accept and create sale') }}</button></template></div>
     </article>
     <div v-if="lastPage > 1" class="online-order-actions"><button class="btn-secondary-app small" :disabled="busy || currentPage <= 1" @click="load(currentPage - 1)">←</button><span>{{ currentPage }} / {{ lastPage }}</span><button class="btn-secondary-app small" :disabled="busy || currentPage >= lastPage" @click="load(currentPage + 1)">→</button></div>
   </section>
