@@ -954,3 +954,21 @@ body {
   color: #5348b7;
   cursor: pointer;
 }
+
+.setup-hero-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 12px;
+}
+
+.setup-hero-previews:not(:empty) { margin-top: 12px; }
+.setup-hero-previews img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: contain;
+  background: #faf9fd;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  margin-bottom: 6px;
+}

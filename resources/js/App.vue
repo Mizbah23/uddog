@@ -350,6 +350,30 @@ const systemSetup = ref(null);
 const systemSetupSection = ref('company');
 const logoFile = ref(null);
 const logoPreview = ref(null);
+const heroUploads = ref([]);
+const removedHeroImages = ref([]);
+const savedHeroImages = computed(() => (systemSetup.value?.ecommerce?.hero_images ?? []).filter(url => !removedHeroImages.value.includes(url)));
+
+function selectHeroFiles(event) {
+  const remaining = 5 - savedHeroImages.value.length - heroUploads.value.length;
+  for (const file of Array.from(event.target.files).slice(0, remaining)) {
+    heroUploads.value.push({ file, preview: URL.createObjectURL(file) });
+  }
+  event.target.value = '';
+}
+
+function removeHeroUpload(index) {
+  URL.revokeObjectURL(heroUploads.value[index].preview);
+  heroUploads.value.splice(index, 1);
+}
+
+function clearHeroChanges() {
+  heroUploads.value.forEach(({ preview }) => URL.revokeObjectURL(preview));
+  heroUploads.value = [];
+  removedHeroImages.value = [];
+}
+
+onUnmounted(clearHeroChanges);
 
 function clearLogoPreview() {
   if (logoPreview.value) URL.revokeObjectURL(logoPreview.value);
@@ -369,6 +393,9 @@ function selectLogoFile(event) {
 
 function resetEcommerceAppearance() {
   clearLogoPreview();
+  heroUploads.value.forEach(({ preview }) => URL.revokeObjectURL(preview));
+  heroUploads.value = [];
+  removedHeroImages.value = [...new Set([...(systemSetup.value.ecommerce.hero_images ?? []), ...removedHeroImages.value])];
   systemSetup.value.ecommerce = {
     name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4',
     accent_color: '#b7794a', logo_url: null, delivery_cost: systemSetup.value.ecommerce.delivery_cost ?? 0,
@@ -2177,17 +2204,21 @@ async function saveSystemSetup() {
     if (!systemSetup.value.store.units.length) throw new Error('Add at least one product unit.');
     const settings = { ...systemSetup.value, ecommerce: { ...systemSetup.value.ecommerce } };
     delete settings.ecommerce.favicon_url;
+    delete settings.ecommerce.hero_images;
+    if (removedHeroImages.value.length) settings.remove_hero_images = removedHeroImages.value;
     if (settings.ecommerce.logo_url) delete settings.ecommerce.logo_url;
-    if (logoFile.value) {
+    if (logoFile.value || heroUploads.value.length) {
       const form = new FormData();
       form.append('_method', 'PUT');
       form.append('settings', JSON.stringify(settings));
-      form.append('logo_file', logoFile.value);
+      if (logoFile.value) form.append('logo_file', logoFile.value);
+      for (const { file } of heroUploads.value) form.append('hero_files[]', file);
       systemSetup.value = await api('system-setup', { method: 'POST', body: form });
       clearLogoPreview();
     } else {
       systemSetup.value = await api('system-setup', { method: 'PUT', body: settings });
     }
+    clearHeroChanges();
     session.value = await api('session');
     session.value.operational_setup = { sales: systemSetup.value.sales, purchases: systemSetup.value.purchases, supplier_advances: systemSetup.value.supplier_advances, store: systemSetup.value.store };
     if (session.value.user.organization) Object.assign(session.value.user.organization, systemSetup.value.company);
@@ -2729,6 +2760,25 @@ async function stopSupportSession() {
                   <small>Charged once per order. Set to 0 for free delivery.</small>
                 </label>
               </div>
+              <fieldset class="setup-ecommerce-palette">
+                <legend>Hero carousel</legend>
+                <label class="field setup-hero-upload">
+                  <span>Upload banner images</span>
+                  <input type="file" multiple accept="image/png,image/jpeg,image/webp"
+                    :disabled="busy || savedHeroImages.length + heroUploads.length >= 5" @change="selectHeroFiles">
+                  <small>Up to five PNG, JPG or WebP images, 2 MB each. Wide images work best.</small>
+                </label>
+                <div class="setup-hero-previews">
+                  <div v-for="(url, index) in savedHeroImages" :key="url">
+                    <img :src="url" :alt="`Saved banner ${index + 1}`">
+                    <button type="button" class="btn-secondary-app" :disabled="busy" @click="removedHeroImages.push(url)">Remove</button>
+                  </div>
+                  <div v-for="({ preview, file }, index) in heroUploads" :key="preview">
+                    <img :src="preview" :alt="file.name">
+                    <button type="button" class="btn-secondary-app" :disabled="busy" @click="removeHeroUpload(index)">Remove</button>
+                  </div>
+                </div>
+              </fieldset>
               <fieldset class="setup-ecommerce-palette">
                 <legend>Store colors</legend>
                 <div class="setup-ecommerce-colors">

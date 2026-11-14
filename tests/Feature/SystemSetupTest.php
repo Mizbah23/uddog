@@ -77,6 +77,32 @@ class SystemSetupTest extends TestCase
         Storage::disk('local')->assertMissing('store-branding/'.$owner->organization_id.'/'.basename($logo));
     }
 
+    public function test_storefront_banners_can_be_uploaded_and_removed(): void
+    {
+        Storage::fake('local');
+        config(['tenancy.base_domain' => 'uddog-soft.com']);
+        $owner = User::factory()->admin()->create();
+        $owner->organization->update(['subdomain' => 'branded', 'ecommerce_enabled' => true]);
+
+        $response = $this->actingAs($owner)->post('/api/system-setup', [
+            '_method' => 'PUT',
+            'settings' => json_encode($this->settings()),
+            'hero_files' => [UploadedFile::fake()->image('banner.png', 800, 400)],
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonCount(1, 'ecommerce.hero_images');
+
+        $banner = $response->json('ecommerce.hero_images.0');
+        $origin = 'http://branded.uddog-soft.com';
+        $this->get($origin.'/online-store')->assertSee('class="shop-banner-carousel"', false)
+            ->assertSee('<img src="'.$banner.'"', false)->assertDontSee('class="shop-hero"', false);
+        $this->get($origin.$banner)->assertOk();
+
+        $this->putJson('/api/system-setup', [...$this->settings(), 'remove_hero_images' => [$banner]])
+            ->assertOk()->assertJsonCount(0, 'ecommerce.hero_images');
+        $this->get($origin.'/online-store')->assertSee('class="shop-hero"', false);
+        $this->get($origin.$banner)->assertNotFound();
+        Storage::disk('local')->assertMissing('store-branding/'.$owner->organization_id.'/'.basename($banner));
+    }
+
     public function test_storefront_branding_rejects_unsupported_logo_files(): void
     {
         $owner = User::factory()->admin()->create();
