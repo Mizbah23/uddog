@@ -22,7 +22,9 @@ class SystemSetupController extends Controller
     {
         $organization = $this->organization($request);
         $data = $request->validate([
-            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color'],
+            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url'],
+            'ecommerce.logo_url' => ['nullable', 'url:https', 'max:2048'],
+            'ecommerce.favicon_url' => ['nullable', 'url:https', 'max:2048'],
             'ecommerce.name' => ['nullable', 'string', 'max:100'],
             'ecommerce.hero' => ['nullable', 'string', 'max:200'],
             'ecommerce.subtitle' => ['nullable', 'string', 'max:600'],

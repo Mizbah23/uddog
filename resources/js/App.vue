@@ -2648,7 +2648,7 @@ async function stopSupportSession() {
                   <h2>E-commerce appearance</h2>
                   <p>Customize your online store. Leave text blank to use the default.</p>
                 </div>
-                <button type="button" class="btn-secondary-app" @click="systemSetup.ecommerce = { name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4', accent_color: '#b7794a' }">Reset to default</button>
+                <button type="button" class="btn-secondary-app" @click="systemSetup.ecommerce = { name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4', accent_color: '#b7794a', logo_url: null, favicon_url: null }">Reset to default</button>
               </div>
               <div class="setup-company-fields setup-ecommerce-fields">
                 <label class="field">
@@ -2662,6 +2662,18 @@ async function stopSupportSession() {
                 <label class="field setup-company-address">
                   <span>Sub-hero description</span>
                   <textarea v-model="systemSetup.ecommerce.subtitle" maxlength="600" rows="3" placeholder="Discover your local store’s collection."></textarea>
+                </label>
+              </div>
+              <div class="setup-company-fields setup-ecommerce-fields">
+                <label class="field">
+                  <span>Store logo URL</span>
+                  <input v-model.trim="systemSetup.ecommerce.logo_url" type="url" placeholder="https://example.com/logo.png" maxlength="2048">
+                  <small>Use a public HTTPS image. The logo fits inside the existing header icon.</small>
+                </label>
+                <label class="field">
+                  <span>Favicon URL</span>
+                  <input v-model.trim="systemSetup.ecommerce.favicon_url" type="url" placeholder="https://example.com/favicon.png" maxlength="2048">
+                  <small>Use a public HTTPS image. A square PNG works well in browser tabs.</small>
                 </label>
               </div>
               <fieldset class="setup-ecommerce-palette">

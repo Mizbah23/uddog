@@ -12,6 +12,9 @@
         <script type="application/ld+json">{!! \Illuminate\Support\Js::encode($structuredData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}</script>
     @endisset
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    @if ($initialData['store']['appearance']['favicon_url'])
+        <link rel="icon" href="{{ $initialData['store']['appearance']['favicon_url'] }}" referrerpolicy="no-referrer">
+    @endif
     @vite(['resources/css/ecommerce.css', 'resources/js/ecommerce.js'])
 </head>
 <body>
@@ -32,6 +35,9 @@
                         <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z M3 6h18 M16 10a4 4 0 0 1-8 0"/>
                         </svg>
+                        @if ($appearance['logo_url'])
+                            <img class="shop-brand-logo" src="{{ $appearance['logo_url'] }}" alt="" referrerpolicy="no-referrer" onload="this.classList.add('is-loaded')">
+                        @endif
                     </span>
                     <span>{{ $storeName }}<small>LOCAL FINDS, EVERYDAY GOOD</small></span>
                 </a>
