@@ -348,6 +348,35 @@ const accessCompanyFilter = ref('all');
 const users = ref([]);
 const systemSetup = ref(null);
 const systemSetupSection = ref('company');
+const brandingFields = [{ key: 'logo', label: 'Store logo', limit: '2 MB' }, { key: 'favicon', label: 'Favicon', limit: '512 KB' }];
+const brandingFiles = ref({});
+const brandingPreviews = ref({});
+
+function clearBrandingPreview(key) {
+  if (brandingPreviews.value[key]) URL.revokeObjectURL(brandingPreviews.value[key]);
+  delete brandingPreviews.value[key];
+  delete brandingFiles.value[key];
+}
+
+function selectBrandingFile(key, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  clearBrandingPreview(key);
+  brandingFiles.value[key] = file;
+  brandingPreviews.value[key] = URL.createObjectURL(file);
+  event.target.value = '';
+}
+
+function resetEcommerceAppearance() {
+  brandingFields.forEach(({ key }) => clearBrandingPreview(key));
+  systemSetup.value.ecommerce = {
+    name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4',
+    accent_color: '#b7794a', logo_url: null, favicon_url: null,
+  };
+}
+
+onUnmounted(() => brandingFields.forEach(({ key }) => clearBrandingPreview(key)));
 const unitPickerOpen = ref(false);
 const unitQuery = ref('');
 const profileMenuOpen = ref(false);
@@ -2146,7 +2175,21 @@ async function saveSystemSetup() {
   error.value = ''; busy.value = true;
   try {
     if (!systemSetup.value.store.units.length) throw new Error('Add at least one product unit.');
-    systemSetup.value = await api('system-setup', { method: 'PUT', body: systemSetup.value });
+    const settings = { ...systemSetup.value, ecommerce: { ...systemSetup.value.ecommerce } };
+    for (const { key } of brandingFields) {
+      const urlKey = `${key}_url`;
+      if (settings.ecommerce[urlKey]) delete settings.ecommerce[urlKey];
+    }
+    if (Object.keys(brandingFiles.value).length) {
+      const form = new FormData();
+      form.append('_method', 'PUT');
+      form.append('settings', JSON.stringify(settings));
+      for (const [key, file] of Object.entries(brandingFiles.value)) form.append(`${key}_file`, file);
+      systemSetup.value = await api('system-setup', { method: 'POST', body: form });
+      brandingFields.forEach(({ key }) => clearBrandingPreview(key));
+    } else {
+      systemSetup.value = await api('system-setup', { method: 'PUT', body: settings });
+    }
     session.value = await api('session');
     session.value.operational_setup = { sales: systemSetup.value.sales, purchases: systemSetup.value.purchases, supplier_advances: systemSetup.value.supplier_advances, store: systemSetup.value.store };
     if (session.value.user.organization) Object.assign(session.value.user.organization, systemSetup.value.company);
@@ -2648,7 +2691,7 @@ async function stopSupportSession() {
                   <h2>E-commerce appearance</h2>
                   <p>Customize your online store. Leave text blank to use the default.</p>
                 </div>
-                <button type="button" class="btn-secondary-app" @click="systemSetup.ecommerce = { name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4', accent_color: '#b7794a', logo_url: null, favicon_url: null }">Reset to default</button>
+                <button type="button" class="btn-secondary-app" @click="resetEcommerceAppearance">Reset to default</button>
               </div>
               <div class="setup-company-fields setup-ecommerce-fields">
                 <label class="field">
@@ -2665,16 +2708,21 @@ async function stopSupportSession() {
                 </label>
               </div>
               <div class="setup-company-fields setup-ecommerce-fields">
-                <label class="field">
-                  <span>Store logo URL</span>
-                  <input v-model.trim="systemSetup.ecommerce.logo_url" type="url" placeholder="https://example.com/logo.png" maxlength="2048">
-                  <small>Use a public HTTPS image. The logo fits inside the existing header icon.</small>
-                </label>
-                <label class="field">
-                  <span>Favicon URL</span>
-                  <input v-model.trim="systemSetup.ecommerce.favicon_url" type="url" placeholder="https://example.com/favicon.png" maxlength="2048">
-                  <small>Use a public HTTPS image. A square PNG works well in browser tabs.</small>
-                </label>
+                <div v-for="{ key, label, limit } in brandingFields" :key="key" class="field">
+                  <label :for="`store-${key}-upload`">{{ label }}</label>
+                  <div class="setup-branding-control">
+                    <span class="setup-branding-preview">
+                      <img v-if="brandingPreviews[key] || systemSetup.ecommerce[`${key}_url`]"
+                        :src="brandingPreviews[key] || systemSetup.ecommerce[`${key}_url`]"
+                        :alt="`${label} preview`" referrerpolicy="no-referrer">
+                      <ShoppingBag v-else :size="20" aria-hidden="true" />
+                    </span>
+                    <input :id="`store-${key}-upload`" type="file" accept="image/png,image/jpeg,image/webp" :disabled="busy" @change="selectBrandingFile(key, $event)">
+                    <button v-if="brandingPreviews[key] || systemSetup.ecommerce[`${key}_url`]" type="button" class="btn-secondary-app" :disabled="busy"
+                      @click="clearBrandingPreview(key); systemSetup.ecommerce[`${key}_url`] = null">Remove</button>
+                  </div>
+                  <small>{{ brandingFiles[key]?.name || `PNG, JPG or WebP · Up to ${limit}` }}</small>
+                </div>
               </div>
               <fieldset class="setup-ecommerce-palette">
                 <legend>Store colors</legend>

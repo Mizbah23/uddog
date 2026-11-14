@@ -34,6 +34,8 @@ Route::middleware(ResolveTenant::class)->group(function () {
     Route::get('/ecomm', fn (Request $request) => redirect('/online-store'.($request->getQueryString() ? '?'.$request->getQueryString() : ''), 301));
     Route::get('/ecomm/catalog', [EcommerceController::class, 'catalog']);
     Route::post('/ecomm/orders', [EcommerceController::class, 'checkout'])->middleware('throttle:5,1');
+    Route::get('/online-store/branding/{image}', [EcommerceController::class, 'branding'])
+        ->where('image', '[a-zA-Z0-9]+\.(?:png|jpe?g|webp)')->name('ecommerce.branding');
     Route::get('/online-store/catalog', [EcommerceController::class, 'catalog']);
     Route::get('/online-store/order-status', [EcommerceController::class, 'track'])->middleware('throttle:30,1');
     Route::post('/online-store/order-status', [EcommerceController::class, 'track'])->middleware('throttle:10,1');
