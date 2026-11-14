@@ -11,9 +11,10 @@
     @isset($structuredData)
         <script type="application/ld+json">{!! \Illuminate\Support\Js::encode($structuredData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}</script>
     @endisset
-    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
-    @if ($initialData['store']['appearance']['favicon_url'])
-        <link rel="icon" href="{{ $initialData['store']['appearance']['favicon_url'] }}" referrerpolicy="no-referrer">
+    @if ($initialData['store']['appearance']['logo_url'])
+        <link rel="icon" href="{{ $initialData['store']['appearance']['logo_url'] }}" referrerpolicy="no-referrer">
+    @else
+        <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     @endif
     @vite(['resources/css/ecommerce.css', 'resources/js/ecommerce.js'])
 </head>

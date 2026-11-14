@@ -41,7 +41,7 @@ class SystemSetupTest extends TestCase
         $storefront = 'http://branded.uddog-soft.com/online-store';
         $this->get($storefront)
             ->assertSee('class="shop-brand-logo" src="'.$branding['logo_url'].'"', false)
-            ->assertSee('<link rel="icon" href="'.$branding['favicon_url'].'"', false);
+            ->assertSee('<link rel="icon" href="'.$branding['logo_url'].'"', false);
         $this->get('http://other.uddog-soft.com/online-store')
             ->assertDontSee($branding['logo_url'])->assertDontSee($branding['favicon_url']);
 
@@ -64,22 +64,20 @@ class SystemSetupTest extends TestCase
             '_method' => 'PUT',
             'settings' => json_encode($this->settings()),
             'logo_file' => UploadedFile::fake()->image('logo.png', 300, 80),
-            'favicon_file' => UploadedFile::fake()->image('favicon.png', 32, 32),
         ], ['Accept' => 'application/json'])->assertOk();
 
         $logo = $upload->json('ecommerce.logo_url');
-        $favicon = $upload->json('ecommerce.favicon_url');
+        $this->get('http://branded.uddog-soft.com/online-store')->assertSee('<link rel="icon" href="'.$logo.'"', false);
         $this->get('http://branded.uddog-soft.com'.$logo)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
-        $this->get('http://branded.uddog-soft.com'.$favicon)->assertOk();
         $this->get('http://other.uddog-soft.com'.$logo)->assertNotFound();
 
         $this->putJson('/api/system-setup', [...$this->settings(), 'ecommerce' => ['logo_url' => null]])
-            ->assertOk()->assertJsonPath('ecommerce.logo_url', null)->assertJsonPath('ecommerce.favicon_url', $favicon);
+            ->assertOk()->assertJsonPath('ecommerce.logo_url', null);
         $this->get('http://branded.uddog-soft.com'.$logo)->assertNotFound();
         Storage::disk('local')->assertMissing('store-branding/'.$owner->organization_id.'/'.basename($logo));
     }
 
-    public function test_storefront_branding_rejects_unsupported_files_and_oversized_favicons(): void
+    public function test_storefront_branding_rejects_unsupported_logo_files(): void
     {
         $owner = User::factory()->admin()->create();
         $owner->organization->update(['ecommerce_enabled' => true]);
@@ -88,9 +86,8 @@ class SystemSetupTest extends TestCase
             '_method' => 'PUT',
             'settings' => json_encode($this->settings()),
             'logo_file' => UploadedFile::fake()->create('logo.svg', 5, 'image/svg+xml'),
-            'favicon_file' => UploadedFile::fake()->image('favicon.png', 513, 513),
         ], ['Accept' => 'application/json'])->assertUnprocessable()
-            ->assertJsonValidationErrors(['logo_file', 'favicon_file']);
+            ->assertJsonValidationErrors(['logo_file']);
     }
 
     public function test_store_branding_requires_https_urls(): void
