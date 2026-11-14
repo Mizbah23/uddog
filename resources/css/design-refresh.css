@@ -972,3 +972,10 @@ body {
   border-radius: 10px;
   margin-bottom: 6px;
 }
+
+.setup-ecommerce .shop-banner-carousel.setup-hero-carousel {
+  width: min(100%, 420px);
+  height: auto;
+  --banner-height: clamp(120px, 35vw, 210px);
+  margin-top: 12px;
+}

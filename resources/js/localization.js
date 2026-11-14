@@ -194,6 +194,7 @@ const bangla = {
     'Quantity': 'পরিমাণ',
     'Unit price': 'একক মূল্য',
     'Amount': 'পরিমাণ',
+    'Carousel preview': 'ক্যারোসেল প্রিভিউ',
     'Subtotal': 'উপমোট',
     'Delivery cost': 'ডেলিভারি চার্জ',
     'Delivery cost (BDT)': 'ডেলিভারি চার্জ (টাকা)',
