@@ -23,6 +23,42 @@ class SystemSetupTest extends TestCase
         ];
     }
 
+    public function test_storefront_uses_its_company_branding_and_can_restore_defaults(): void
+    {
+        config(['tenancy.base_domain' => 'uddog-soft.com']);
+        $owner = User::factory()->admin()->create();
+        $owner->organization->update(['subdomain' => 'branded', 'ecommerce_enabled' => true]);
+        $other = User::factory()->admin()->create();
+        $other->organization->update(['subdomain' => 'other', 'ecommerce_enabled' => true]);
+        $branding = ['logo_url' => 'https://images.example.com/logo.png', 'favicon_url' => 'https://images.example.com/favicon.png'];
+
+        $this->actingAs($owner)->putJson('/api/system-setup', [...$this->settings(), 'ecommerce' => $branding])
+            ->assertOk()->assertJsonPath('ecommerce.logo_url', $branding['logo_url'])
+            ->assertJsonPath('ecommerce.favicon_url', $branding['favicon_url']);
+
+        $storefront = 'http://branded.uddog-soft.com/online-store';
+        $this->get($storefront)
+            ->assertSee('class="shop-brand-logo" src="'.$branding['logo_url'].'"', false)
+            ->assertSee('<link rel="icon" href="'.$branding['favicon_url'].'"', false);
+        $this->get('http://other.uddog-soft.com/online-store')
+            ->assertDontSee($branding['logo_url'])->assertDontSee($branding['favicon_url']);
+
+        $this->putJson('/api/system-setup', [...$this->settings(), 'ecommerce' => ['logo_url' => null, 'favicon_url' => null]])
+            ->assertOk()->assertJsonPath('ecommerce.logo_url', null)->assertJsonPath('ecommerce.favicon_url', null);
+        $this->get($storefront)->assertDontSee('class="shop-brand-logo"', false)
+            ->assertSee('<link rel="icon" type="image/svg+xml"', false);
+    }
+
+    public function test_store_branding_requires_https_urls(): void
+    {
+        $owner = User::factory()->admin()->create();
+
+        $this->actingAs($owner)->putJson('/api/system-setup', [
+            ...$this->settings(),
+            'ecommerce' => ['logo_url' => 'http://example.com/logo.png', 'favicon_url' => 'javascript:alert(1)'],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['ecommerce.logo_url', 'ecommerce.favicon_url']);
+    }
+
     public function test_owner_can_save_company_settings_without_changing_existing_staff(): void
     {
         $owner = User::factory()->admin()->create();
