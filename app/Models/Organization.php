@@ -69,7 +69,7 @@ class Organization extends Model
             'purchases' => ['allow_purchase_returns' => $saved['purchases']['allow_purchase_returns'] ?? true],
             'supplier_advances' => array_replace(['enabled' => false], $saved['supplier_advances'] ?? []),
             'store' => $store,
-            'ecommerce' => array_replace(['name' => '', 'hero' => '', 'subtitle' => '', 'primary_color' => '#173e36', 'hero_color' => '#f0eee4', 'accent_color' => '#b7794a', 'logo_url' => null, 'favicon_url' => null, 'delivery_cost' => 0], $saved['ecommerce'] ?? []),
+            'ecommerce' => array_replace(['name' => '', 'hero' => '', 'subtitle' => '', 'primary_color' => '#173e36', 'hero_color' => '#f0eee4', 'accent_color' => '#b7794a', 'logo_url' => null, 'favicon_url' => null, 'delivery_cost' => 0, 'hero_images' => []], $saved['ecommerce'] ?? []),
         ];
     }
 

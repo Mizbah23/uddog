@@ -79,6 +79,31 @@
                 </main>
             @else
                 <main>
+                    @php
+                        $selectedCategory = request()->query('category');
+                        $selectedCategory = $initialData['categories']->contains('name', $selectedCategory) ? $selectedCategory : null;
+                    @endphp
+                    @if (count($initialData['categories']))
+                        <nav class="shop-category-tiles" aria-label="পণ্যের বিভাগ">
+                            @foreach ($initialData['categories'] as $categoryTile)
+                                <a href="?{{ http_build_query(['category' => $categoryTile['name']]) }}#collection">
+                                    <span>
+                                        @if ($categoryTile['image'])
+                                            <img src="{{ $categoryTile['image'] }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                                        @else
+                                            <span aria-hidden="true">◇</span>
+                                        @endif
+                                    </span>
+                                    {{ $categoryTile['name'] }}
+                                </a>
+                            @endforeach
+                        </nav>
+                    @endif
+                    @if ($appearance['hero_images'])
+                        <section class="shop-banner-carousel" aria-label="দোকানের ব্যানার">
+                            <img src="{{ $appearance['hero_images'][0] }}" alt="{{ $storeName }}" fetchpriority="high">
+                        </section>
+                    @else
                     <section class="shop-hero">
                         <div class="shop-hero-copy">
                             <span class="shop-eyebrow"><span></span>আপনার চেনা দোকানের সংগ্রহ</span>
@@ -101,10 +126,11 @@
                             <span class="shop-art-star">✳</span>
                         </div>
                     </section>
+                    @endif
                     <section id="collection" class="shop-collection">
                         <div class="shop-section-title"><h2>সব পণ্য</h2></div>
                         <div class="shop-product-grid">
-                            @forelse ($initialData['products'] as $item)
+                            @forelse ($initialData['products']->filter(fn ($item) => ! $selectedCategory || $item['category'] === $selectedCategory) as $item)
                                 @php($productUrl = route('ecommerce.products.show', ['product' => $item['id']], false))
                                 <article class="shop-product">
                                     <div class="shop-product-visual">

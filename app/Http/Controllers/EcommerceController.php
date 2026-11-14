@@ -197,7 +197,7 @@ class EcommerceController extends Controller
         $organization = $this->publicStore($request);
         $settings = $organization->setup()['ecommerce'];
         $url = route('ecommerce.branding', ['image' => $image], false);
-        abort_unless(in_array($url, [$settings['logo_url'], $settings['favicon_url']], true), 404);
+        abort_unless(in_array($url, [$settings['logo_url'], $settings['favicon_url'], ...$settings['hero_images']], true), 404);
 
         $disk = Storage::disk('local');
         $path = 'store-branding/'.$organization->id.'/'.$image;
@@ -242,7 +242,12 @@ class EcommerceController extends Controller
             return $this->productData($product, $available);
         });
 
-        return ['store' => $this->storeData($organization, $branch), 'products' => $items];
+        $categories = $items->groupBy('category')->map(fn ($products, $name): array => [
+            'name' => (string) $name,
+            'image' => $products->first(fn (array $product): bool => ! empty($product['image_url']))['image_url'] ?? null,
+        ])->values();
+
+        return ['store' => $this->storeData($organization, $branch), 'products' => $items, 'categories' => $categories];
     }
 
     private function publicProducts(Organization $organization): Builder

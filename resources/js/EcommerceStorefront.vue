@@ -20,7 +20,8 @@ const products = ref(initialData?.products ?? []);
 const detailProduct = ref(initialData?.product ?? null);
 const loading = ref(!initialData);
 const error = ref('');
-const search = ref(''); const category = ref(''); const sort = ref('name');
+const requestedCategory = new URLSearchParams(location.search).get('category');
+const search = ref(''); const category = ref(initialData?.categories?.some(tile => tile.name === requestedCategory) ? requestedCategory : ''); const sort = ref('name');
 const cart = ref([]); const bagOpen = ref(false); const checkoutOpen = ref(false); const busy = ref(false); const checkoutError = ref(''); const reference = ref('');
 const form = ref({ customer_name: '', phone: '', address: '', notes: '' });
 let checkoutToken = crypto.randomUUID();
@@ -66,6 +67,19 @@ const failedImages = ref(new Set());
 const logoUrl = computed(() => store.value?.appearance?.logo_url);
 const loadedLogo = ref(null);
 const categories = computed(() => [...new Set(products.value.map(product => product.category))]);
+const categoryTiles = computed(() => {
+  const images = new Map();
+  for (const product of products.value) {
+    if (!images.get(product.category)) images.set(product.category, productPhoto(product));
+  }
+  return [...images].map(([name, image]) => ({ name, image }));
+});
+const heroIndex = ref(0);
+const heroImages = computed(() => (store.value?.appearance?.hero_images ?? []).filter(url => !failedImages.value.has(url)));
+const activeHero = computed(() => heroImages.value[heroIndex.value % (heroImages.value.length || 1)]);
+function moveHero(offset) {
+  heroIndex.value = (heroIndex.value % heroImages.value.length + offset + heroImages.value.length) % heroImages.value.length;
+}
 const visible = computed(() => products.value.filter(product => (!category.value || product.category === category.value) && product.name.toLocaleLowerCase().includes(search.value.toLocaleLowerCase())).sort((a, b) => sort.value === 'low' ? Number(a.price ?? Infinity) - Number(b.price ?? Infinity) : sort.value === 'high' ? Number(b.price ?? -1) - Number(a.price ?? -1) : a.name.localeCompare(b.name)));
 const subtotal = computed(() => cart.value.reduce((sum, item) => sum + Math.round(item.quantity * Number(item.price) * 100), 0) / 100);
 const deliveryCost = computed(() => Number(store.value?.appearance?.delivery_cost ?? 0));
@@ -169,9 +183,26 @@ onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.
       </article>
     </main>
     <main v-else>
-      <section class="shop-hero"><div class="shop-hero-copy"><span class="shop-eyebrow"><span></span>{{ t('curated') }}</span><h1>{{ store.appearance?.hero || t('intro') }}</h1><p>{{ store.appearance?.subtitle || t('subtitle') }}</p><div class="shop-hero-actions"><a href="#collection" class="shop-primary">{{ t('browse') }}<ArrowRight :size="18" /></a><a v-if="phoneLink" :href="phoneLink" class="shop-hero-contact"><Phone :size="16" />{{ t('contact') }}</a></div><div class="shop-hero-caption"><span class="shop-mini-icon"><Package :size="18" /></span><span>{{ products.length }} {{ t('products') }} · {{ categories.length }} {{ t('categoryCount') }}</span></div></div><div class="shop-hero-art" aria-hidden="true"><span class="shop-art-ring"></span><div class="shop-art-label">THE EVERYDAY EDIT <span>✦</span></div><div class="shop-art-bag"><ShoppingBag :size="114" stroke-width="1" /><span>{{ store.name }}</span></div><span class="shop-art-note">A little local.<br>A lot to love.</span><span class="shop-art-star">✳</span></div></section>
+      <nav v-if="categoryTiles.length" class="shop-category-tiles" :aria-label="t('categoryCount')">
+        <a v-for="tile in categoryTiles" :key="tile.name"
+          :href="`?category=${encodeURIComponent(tile.name)}#collection`"
+          :aria-current="category === tile.name ? 'true' : undefined"
+          @click.prevent="category = tile.name; search = ''; $nextTick(() => $refs.collection.scrollIntoView())">
+          <span><img v-if="tile.image" :src="tile.image" alt="" loading="lazy" referrerpolicy="no-referrer" @error="failedImages.add(tile.image)"><Package v-else :size="26" aria-hidden="true" /></span>
+          {{ tile.name }}
+        </a>
+      </nav>
+      <section v-if="activeHero" class="shop-banner-carousel" :aria-label="language === 'bn' ? 'দোকানের ব্যানার' : 'Store banners'">
+        <img :key="activeHero" :src="activeHero" :alt="store.name" @error="failedImages.add($event.currentTarget.getAttribute('src'))">
+        <div v-if="heroImages.length > 1" class="shop-banner-controls">
+          <button type="button" :aria-label="language === 'bn' ? 'আগের ব্যানার' : 'Previous banner'" @click="moveHero(-1)">‹</button>
+          <span aria-live="polite">{{ heroIndex % heroImages.length + 1 }} / {{ heroImages.length }}</span>
+          <button type="button" :aria-label="language === 'bn' ? 'পরের ব্যানার' : 'Next banner'" @click="moveHero(1)">›</button>
+        </div>
+      </section>
+      <section v-else class="shop-hero"><div class="shop-hero-copy"><span class="shop-eyebrow"><span></span>{{ t('curated') }}</span><h1>{{ store.appearance?.hero || t('intro') }}</h1><p>{{ store.appearance?.subtitle || t('subtitle') }}</p><div class="shop-hero-actions"><a href="#collection" class="shop-primary">{{ t('browse') }}<ArrowRight :size="18" /></a><a v-if="phoneLink" :href="phoneLink" class="shop-hero-contact"><Phone :size="16" />{{ t('contact') }}</a></div><div class="shop-hero-caption"><span class="shop-mini-icon"><Package :size="18" /></span><span>{{ products.length }} {{ t('products') }} · {{ categories.length }} {{ t('categoryCount') }}</span></div></div><div class="shop-hero-art" aria-hidden="true"><span class="shop-art-ring"></span><div class="shop-art-label">THE EVERYDAY EDIT <span>✦</span></div><div class="shop-art-bag"><ShoppingBag :size="114" stroke-width="1" /><span>{{ store.name }}</span></div><span class="shop-art-note">A little local.<br>A lot to love.</span><span class="shop-art-star">✳</span></div></section>
       <div class="shop-promises"><span><Package :size="19" />{{ t('curated') }}</span><span><Truck :size="19" />{{ t('delivery') }}</span><span><ShieldCheck :size="19" />{{ t('safe') }}</span></div>
-      <section id="collection" class="shop-collection"><div class="shop-section-title"><div><span class="shop-eyebrow">{{ t('collections') }}</span><h2>{{ category || t('all') }}<span>{{ visible.length }}</span></h2></div><div class="shop-filters"><label class="shop-search"><Search :size="18" /><input v-model="search" :placeholder="t('search')" :aria-label="t('search')"></label><label class="shop-sort"><SlidersHorizontal :size="16" /><select v-model="sort" :aria-label="t('sort')"><option value="name">{{ t('name') }}</option><option value="low">{{ t('low') }}</option><option value="high">{{ t('high') }}</option></select></label></div></div>
+      <section id="collection" ref="collection" class="shop-collection"><div class="shop-section-title"><div><span class="shop-eyebrow">{{ t('collections') }}</span><h2>{{ category || t('all') }}<span>{{ visible.length }}</span></h2></div><div class="shop-filters"><label class="shop-search"><Search :size="18" /><input v-model="search" :placeholder="t('search')" :aria-label="t('search')"></label><label class="shop-sort"><SlidersHorizontal :size="16" /><select v-model="sort" :aria-label="t('sort')"><option value="name">{{ t('name') }}</option><option value="low">{{ t('low') }}</option><option value="high">{{ t('high') }}</option></select></label></div></div>
         <nav class="shop-categories" aria-label="Product categories"><button :class="{active: !category}" @click="category = ''">{{ t('all') }}</button><button v-for="name in categories" :key="name" :class="{active: category === name}" @click="category = name">{{ name }}</button></nav>
         <div v-if="!visible.length" class="shop-status"><Package :size="40" /><h3>{{ t('noResults') }}</h3><p>{{ t('noResultsHelp') }}</p><button v-if="search || category" class="shop-primary" @click="search = ''; category = ''">{{ t('reset') }}</button></div>
         <div class="shop-product-grid"><article v-for="(product, index) in visible" :key="product.id" class="shop-product"><div class="shop-product-visual" :class="`tone-${index % 4}`"><a :href="`/online-store/products/${product.id}`" class="shop-product-visual-link"><img v-if="productPhoto(product)" @error="failedImages.add($event.target.getAttribute('src'))" :src="productPhoto(product)" :alt="product.name" loading="lazy" referrerpolicy="no-referrer"><div v-else class="shop-product-placeholder" aria-hidden="true"><Package :size="64" stroke-width="0.8" /><span>{{ product.name.slice(0, 18) }}</span></div></a><div v-if="productPhotos(product).length > 1" class="shop-image-controls"><button type="button" :aria-label="language === 'bn' ? 'আগের ছবি' : 'Previous photo'" @click.stop="changePhoto(product, -1)">‹</button><span>{{ (imageIndexes[product.id] || 0) % productPhotos(product).length + 1 }} / {{ productPhotos(product).length }}</span><button type="button" :aria-label="language === 'bn' ? 'পরের ছবি' : 'Next photo'" @click.stop="changePhoto(product, 1)">›</button></div><span class="shop-stock-badge" :class="{out: !product.in_stock}"><i></i>{{ product.in_stock ? t('inStock') : t('unavailable') }}</span></div><div class="shop-product-info"><span class="shop-product-category">{{ product.category }}</span><h3><a :href="`/online-store/products/${product.id}`">{{ product.name }}</a></h3><p class="shop-product-availability" :class="{out: !product.in_stock}"><strong>{{ product.in_stock ? t('inStock') : t('unavailable') }}</strong></p><div class="shop-product-bottom"><div><strong>{{ product.requires_quote ? t('quote') : money(product.price) }}</strong><small v-if="!product.requires_quote">{{ t('per') }} {{ product.unit }}</small></div><a v-if="product.requires_quote && phoneLink" :href="phoneLink" class="shop-add" :aria-label="`${t('contact')}: ${product.name}`"><Phone :size="18" /></a><button v-else-if="!product.requires_quote" class="shop-add" :disabled="!product.in_stock" :aria-label="`${t('add')}: ${product.name}`" @click="add(product)"><Plus :size="22" /></button></div><a :href="`/online-store/products/${product.id}`" class="shop-details-link">{{ t('details') }}<ArrowRight :size="14" /></a><small v-if="product.requires_quote" class="shop-quote-help">{{ t('quoteHelp') }}</small></div></article></div>

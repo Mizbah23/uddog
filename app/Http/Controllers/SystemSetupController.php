@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class SystemSetupController extends Controller
 {
@@ -29,8 +30,13 @@ class SystemSetupController extends Controller
         }
 
         $data = $request->validate([
+            'hero_files' => ['sometimes', 'array', 'max:5'],
+            'hero_files.*' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048', 'dimensions:max_width=3840,max_height=2160'],
+            'remove_hero_images' => ['sometimes', 'array', 'max:5'],
+            'remove_hero_images.*' => ['required', 'string', 'max:100'],
             'logo_file' => ['sometimes', 'required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048', 'dimensions:max_width=2048,max_height=2048'],
-            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url,delivery_cost'],
+            'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url,delivery_cost,hero_images'],
+            'ecommerce.hero_images' => ['exclude'],
             'ecommerce.logo_url' => ['nullable', 'url:https', 'max:2048'],
             'ecommerce.favicon_url' => ['nullable', 'url:https', 'max:2048'],
             'ecommerce.delivery_cost' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999.99', 'decimal:0,2'],
@@ -76,6 +82,7 @@ class SystemSetupController extends Controller
         foreach (array_unique([...array_keys(Organization::defaultUnitConversions()), ...$data['store']['units']]) as $unit) {
             $data['store']['unit_conversions'][$unit] = $unit === 'pc' ? 1 : (int) ($submittedConversions[$unit] ?? $existingConversions[$unit] ?? 1);
         }
+        $newHeroImages = [];
         $uploaded = [];
         $disk = Storage::disk('local');
         try {
@@ -87,18 +94,34 @@ class SystemSetupController extends Controller
                 $data['ecommerce']['logo_url'] = route('ecommerce.branding', ['image' => basename($path)], false);
             }
 
-            $replaced = $organization->getConnection()->transaction(function () use ($organization, $data): array {
+            foreach ($data['hero_files'] ?? [] as $file) {
+                abort_unless($organization->ecommerce_enabled, 403);
+                $path = $file->store('store-branding/'.$organization->id, 'local');
+                abort_if($path === false, 500, 'The storefront image could not be saved.');
+                $uploaded[] = $path;
+                $newHeroImages[] = route('ecommerce.branding', ['image' => basename($path)], false);
+            }
+
+            $replaced = $organization->getConnection()->transaction(function () use ($organization, $data, $newHeroImages): array {
                 $current = Organization::query()->lockForUpdate()->findOrFail($organization->id);
                 $oldBranding = $current->setup()['ecommerce'];
                 $branding = array_replace($oldBranding, $data['ecommerce'] ?? []);
+                $branding['hero_images'] = [
+                    ...array_diff($oldBranding['hero_images'], $data['remove_hero_images'] ?? []),
+                    ...$newHeroImages,
+                ];
+                if (count($branding['hero_images']) > 5) {
+                    throw ValidationException::withMessages(['hero_files' => 'You can save up to five hero banners.']);
+                }
+
                 $current->update([
                     ...($data['company'] ?? []),
                     'system_settings' => [...collect($data)->only(['sales', 'purchases', 'supplier_advances', 'store'])->all(), 'ecommerce' => $branding],
                 ]);
 
                 return array_diff(
-                    array_intersect_key($oldBranding, array_flip(['logo_url', 'favicon_url'])),
-                    array_intersect_key($branding, array_flip(['logo_url', 'favicon_url'])),
+                    [$oldBranding['logo_url'], $oldBranding['favicon_url'], ...$oldBranding['hero_images']],
+                    [$branding['logo_url'], $branding['favicon_url'], ...$branding['hero_images']],
                 );
             });
         } catch (\Throwable $exception) {
