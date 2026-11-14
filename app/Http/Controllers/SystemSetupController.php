@@ -7,6 +7,7 @@ use App\Models\SupportImpersonation;
 use App\Services\TenantProvisioner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class SystemSetupController extends Controller
@@ -21,7 +22,15 @@ class SystemSetupController extends Controller
     public function update(Request $request, TenantProvisioner $provisioner): JsonResponse
     {
         $organization = $this->organization($request);
+        if (is_string($request->input('settings'))) {
+            $settings = json_decode($request->input('settings'), true);
+            abort_unless(is_array($settings), 422, 'Invalid system settings.');
+            $request->merge($settings);
+        }
+
         $data = $request->validate([
+            'logo_file' => ['sometimes', 'required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048', 'dimensions:max_width=2048,max_height=2048'],
+            'favicon_file' => ['sometimes', 'required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:512', 'dimensions:max_width=512,max_height=512'],
             'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url'],
             'ecommerce.logo_url' => ['nullable', 'url:https', 'max:2048'],
             'ecommerce.favicon_url' => ['nullable', 'url:https', 'max:2048'],
@@ -67,10 +76,45 @@ class SystemSetupController extends Controller
         foreach (array_unique([...array_keys(Organization::defaultUnitConversions()), ...$data['store']['units']]) as $unit) {
             $data['store']['unit_conversions'][$unit] = $unit === 'pc' ? 1 : (int) ($submittedConversions[$unit] ?? $existingConversions[$unit] ?? 1);
         }
-        $organization->update([
-            ...($data['company'] ?? []),
-            'system_settings' => [...collect($data)->only(['sales', 'purchases', 'supplier_advances', 'store'])->all(), 'ecommerce' => array_replace($organization->setup()['ecommerce'], $data['ecommerce'] ?? [])],
-        ]);
+        $uploaded = [];
+        $disk = Storage::disk('local');
+        try {
+            foreach (['logo', 'favicon'] as $type) {
+                if (! isset($data[$type.'_file'])) {
+                    continue;
+                }
+                abort_unless($organization->ecommerce_enabled, 403);
+                $path = $data[$type.'_file']->store('store-branding/'.$organization->id, 'local');
+                abort_if($path === false, 500, 'The storefront image could not be saved.');
+                $uploaded[] = $path;
+                $data['ecommerce'][$type.'_url'] = route('ecommerce.branding', ['image' => basename($path)], false);
+            }
+
+            $replaced = $organization->getConnection()->transaction(function () use ($organization, $data): array {
+                $current = Organization::query()->lockForUpdate()->findOrFail($organization->id);
+                $oldBranding = $current->setup()['ecommerce'];
+                $branding = array_replace($oldBranding, $data['ecommerce'] ?? []);
+                $current->update([
+                    ...($data['company'] ?? []),
+                    'system_settings' => [...collect($data)->only(['sales', 'purchases', 'supplier_advances', 'store'])->all(), 'ecommerce' => $branding],
+                ]);
+
+                return array_diff(
+                    array_intersect_key($oldBranding, array_flip(['logo_url', 'favicon_url'])),
+                    array_intersect_key($branding, array_flip(['logo_url', 'favicon_url'])),
+                );
+            });
+        } catch (\Throwable $exception) {
+            $disk->delete($uploaded);
+            throw $exception;
+        }
+
+        foreach ($replaced as $url) {
+            if (is_string($url) && preg_match('~\A/online-store/branding/([a-zA-Z0-9]+\.(?:png|jpe?g|webp))\z~', $url, $matches)) {
+                $disk->delete('store-branding/'.$organization->id.'/'.$matches[1]);
+            }
+        }
+        $organization->refresh();
         $provisioner->syncOrganizationShadow($organization);
 
         return response()->json([...$organization->fresh()->setup(), 'company' => $organization->only(['name', 'phone', 'address'])]);

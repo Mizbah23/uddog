@@ -19,6 +19,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -189,6 +190,23 @@ class EcommerceController extends Controller
         $host = parse_url($origin, PHP_URL_HOST);
 
         return $origin.(array_key_exists($host, config('tenancy.storefront_domains')) ? '/' : route('ecommerce.storefront', [], false));
+    }
+
+    public function branding(Request $request, string $image): StreamedResponse
+    {
+        $organization = $this->publicStore($request);
+        $settings = $organization->setup()['ecommerce'];
+        $url = route('ecommerce.branding', ['image' => $image], false);
+        abort_unless(in_array($url, [$settings['logo_url'], $settings['favicon_url']], true), 404);
+
+        $disk = Storage::disk('local');
+        $path = 'store-branding/'.$organization->id.'/'.$image;
+        abort_unless($disk->exists($path), 404);
+
+        return $disk->response($path, null, [
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
     }
 
     public function image(Request $request, int $product, string $image): StreamedResponse

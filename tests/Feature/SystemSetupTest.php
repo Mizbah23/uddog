@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\User;
 use App\Permission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class SystemSetupTest extends TestCase
@@ -47,6 +49,48 @@ class SystemSetupTest extends TestCase
             ->assertOk()->assertJsonPath('ecommerce.logo_url', null)->assertJsonPath('ecommerce.favicon_url', null);
         $this->get($storefront)->assertDontSee('class="shop-brand-logo"', false)
             ->assertSee('<link rel="icon" type="image/svg+xml"', false);
+    }
+
+    public function test_uploaded_branding_is_scoped_to_its_store_and_can_be_removed(): void
+    {
+        Storage::fake('local');
+        config(['tenancy.base_domain' => 'uddog-soft.com']);
+        $owner = User::factory()->admin()->create();
+        $owner->organization->update(['subdomain' => 'branded', 'ecommerce_enabled' => true]);
+        $other = User::factory()->admin()->create();
+        $other->organization->update(['subdomain' => 'other', 'ecommerce_enabled' => true]);
+
+        $upload = $this->actingAs($owner)->post('/api/system-setup', [
+            '_method' => 'PUT',
+            'settings' => json_encode($this->settings()),
+            'logo_file' => UploadedFile::fake()->image('logo.png', 300, 80),
+            'favicon_file' => UploadedFile::fake()->image('favicon.png', 32, 32),
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        $logo = $upload->json('ecommerce.logo_url');
+        $favicon = $upload->json('ecommerce.favicon_url');
+        $this->get('http://branded.uddog-soft.com'.$logo)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->get('http://branded.uddog-soft.com'.$favicon)->assertOk();
+        $this->get('http://other.uddog-soft.com'.$logo)->assertNotFound();
+
+        $this->putJson('/api/system-setup', [...$this->settings(), 'ecommerce' => ['logo_url' => null]])
+            ->assertOk()->assertJsonPath('ecommerce.logo_url', null)->assertJsonPath('ecommerce.favicon_url', $favicon);
+        $this->get('http://branded.uddog-soft.com'.$logo)->assertNotFound();
+        Storage::disk('local')->assertMissing('store-branding/'.$owner->organization_id.'/'.basename($logo));
+    }
+
+    public function test_storefront_branding_rejects_unsupported_files_and_oversized_favicons(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $owner->organization->update(['ecommerce_enabled' => true]);
+
+        $this->actingAs($owner)->post('/api/system-setup', [
+            '_method' => 'PUT',
+            'settings' => json_encode($this->settings()),
+            'logo_file' => UploadedFile::fake()->create('logo.svg', 5, 'image/svg+xml'),
+            'favicon_file' => UploadedFile::fake()->image('favicon.png', 513, 513),
+        ], ['Accept' => 'application/json'])->assertUnprocessable()
+            ->assertJsonValidationErrors(['logo_file', 'favicon_file']);
     }
 
     public function test_store_branding_requires_https_urls(): void
