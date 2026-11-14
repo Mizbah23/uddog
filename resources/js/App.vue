@@ -371,7 +371,7 @@ function resetEcommerceAppearance() {
   clearLogoPreview();
   systemSetup.value.ecommerce = {
     name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4',
-    accent_color: '#b7794a', logo_url: null,
+    accent_color: '#b7794a', logo_url: null, delivery_cost: systemSetup.value.ecommerce.delivery_cost ?? 0,
   };
 }
 
@@ -1515,6 +1515,7 @@ async function downloadInvoicePdf() {
   const t = value => translate(value, language.value);
   try {
     const totals = [[t('Subtotal'), money(invoice.subtotal)], [t('Discount'), money(invoice.discount)], [t('Tax'), money(invoice.tax)]];
+    if (Number(invoice.delivery_cost) > 0) totals.push([t('Delivery cost'), money(invoice.delivery_cost)]);
     if (Number(invoice.interest_amount) > 0) totals.push([t('Interest charge'), money(invoice.interest_amount)]);
     totals.push([t('Total'), money(invoice.total), true]);
     if (['sale', 'resale'].includes(invoice.type)) totals.push([t('Sale payment type'), salePaymentTypeLabel(invoice.payment_type)]);
@@ -2637,7 +2638,7 @@ async function stopSupportSession() {
                     </div>
                     <div v-for="item in doc.items" :key="item.id" class="detail-line"><span>{{ item.product?.name }} <small v-if="item.product?.sku">({{ item.product.sku }})</small></span><span>{{ qty(item.entered_quantity ?? item.quantity) }} {{ item.entered_unit || item.product?.unit }} × {{ money(item.entered_unit_price ?? item.unit_price) }}</span><strong>{{ money(item.line_total) }}</strong></div>
                     <SaleCorrectionHistory :sale="doc" :language="language" :money="money" :qty="qty" :date-time="value => `${date(value)} · ${time(value)}`" />
-                    <div class="detail-totals"><span>Subtotal {{ money(doc.subtotal) }} · Discount {{ money(doc.discount) }} · Tax {{ money(doc.tax) }}</span><strong>Total {{ money(doc.total) }}</strong></div>
+                    <div class="detail-totals"><span>Subtotal {{ money(doc.subtotal) }} · Discount {{ money(doc.discount) }} · Tax {{ money(doc.tax) }}<template v-if="Number(doc.delivery_cost) > 0"> · {{ t('Delivery cost') }} {{ money(doc.delivery_cost) }}</template></span><strong>Total {{ money(doc.total) }}</strong></div>
                   </div>
                 </td></tr>
               </tbody>
@@ -2720,6 +2721,13 @@ async function stopSupportSession() {
                   </div>
                   <small>{{ logoFile?.name || 'PNG, JPG or WebP · Up to 2 MB' }} · Also used as the browser tab icon.</small>
                 </div>
+              </div>
+              <div class="setup-company-fields setup-ecommerce-fields">
+                <label class="field">
+                  <span>Delivery cost (BDT)</span>
+                  <input v-model.number="systemSetup.ecommerce.delivery_cost" type="number" min="0" max="999999.99" step="0.01" required>
+                  <small>Charged once per order. Set to 0 for free delivery.</small>
+                </label>
               </div>
               <fieldset class="setup-ecommerce-palette">
                 <legend>Store colors</legend>

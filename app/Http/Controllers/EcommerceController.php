@@ -307,7 +307,8 @@ class EcommerceController extends Controller
             }
             $items = [];
             $requestedStock = [];
-            $total = 0;
+            $deliveryCost = Organization::query()->findOrFail($organization->id)->setup()['ecommerce']['delivery_cost'];
+            $total = (int) round((float) $deliveryCost * 100);
             foreach ($data['items'] as $item) {
                 $product = Product::query()->where('organization_id', $organization->id)->where('active', true)
                     ->where('ecommerce_visible', true)->lockForUpdate()->find($item['product_id']);
@@ -334,7 +335,7 @@ class EcommerceController extends Controller
                 $items[] = ['product_id' => $product->id, 'stock_source_id' => $source, 'stock_ratio' => $ratio, 'name' => $product->name, 'unit' => $product->unit, 'quantity' => $quantity, 'unit_price' => $product->sale_price, 'line_total' => number_format($lineTotal / 100, 2, '.', '')];
             }
             if ($total !== (int) round((float) $data['expected_total'] * 100)) {
-                throw ValidationException::withMessages(['items' => 'Prices have changed. Refresh the store and review your cart before ordering.']);
+                throw ValidationException::withMessages(['items' => 'Prices or delivery costs have changed. Refresh the store and review your cart before ordering.']);
             }
 
             do {
@@ -345,7 +346,7 @@ class EcommerceController extends Controller
                 'organization_id' => $organization->id, 'branch_id' => $branch->id, 'checkout_token' => $data['checkout_token'],
                 'number' => $number, 'customer_name' => $data['customer_name'], 'phone' => $data['phone'],
                 'address' => $data['address'], 'notes' => $data['notes'] ?? null, 'items' => $items,
-                'total' => number_format($total / 100, 2, '.', ''), 'status' => 'pending',
+                'delivery_cost' => $deliveryCost, 'total' => number_format($total / 100, 2, '.', ''), 'status' => 'pending',
             ]);
         });
 
@@ -362,7 +363,7 @@ class EcommerceController extends Controller
             $orders = EcommerceOrder::query()->where('organization_id', $organization->id)
                 ->where(function ($query) use ($search, $phones): void {
                     $query->where('number', strtoupper($search))->orWhereIn('phone', $phones);
-                })->latest()->paginate(20, ['number', 'status', 'total', 'items', 'created_at']);
+                })->latest()->paginate(20, ['number', 'status', 'total', 'delivery_cost', 'items', 'created_at']);
 
             return response()->json($orders)->header('Cache-Control', 'no-store');
         }
@@ -588,7 +589,7 @@ class EcommerceController extends Controller
                 $customer ??= Contact::create(['organization_id' => $organization->id, 'type' => 'customer', 'name' => $saved->customer_name, 'phone' => $saved->phone, 'address' => $saved->address]);
                 $sale = $inventory->createDocument([
                     'type' => 'sale', 'contact_id' => $customer->id, 'document_date' => now('Asia/Dhaka')->toDateString(),
-                    'payment_type' => 'due', 'payment_method' => 'credit', 'discount' => 0, 'tax' => 0,
+                    'payment_type' => 'due', 'payment_method' => 'credit', 'discount' => 0, 'tax' => 0, 'delivery_cost' => $saved->delivery_cost,
                     'notes' => 'Online order '.$saved->number,
                     'items' => array_map(fn (array $item): array => ['product_id' => $item['product_id'], 'quantity' => $item['quantity'], 'unit' => $item['unit'], 'unit_price' => $item['unit_price']], $saved->items),
                 ], $request->user()->id, $organization->id, $branch->id);
