@@ -1,4 +1,5 @@
 <script setup>
+import BannerCarousel from './BannerCarousel.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { installLocalization, translate } from './localization';
 import PosReceipt from './PosReceipt.vue';
@@ -353,6 +354,8 @@ const logoPreview = ref(null);
 const heroUploads = ref([]);
 const removedHeroImages = ref([]);
 const savedHeroImages = computed(() => (systemSetup.value?.ecommerce?.hero_images ?? []).filter(url => !removedHeroImages.value.includes(url)));
+
+const heroPreviewImages = computed(() => [...savedHeroImages.value, ...heroUploads.value.map(({ preview }) => preview)]);
 
 function selectHeroFiles(event) {
   const remaining = 5 - savedHeroImages.value.length - heroUploads.value.length;
@@ -2768,6 +2771,8 @@ async function stopSupportSession() {
                     :disabled="busy || savedHeroImages.length + heroUploads.length >= 5" @change="selectHeroFiles">
                   <small>Up to five PNG, JPG or WebP images, 2 MB each. Wide images work best.</small>
                 </label>
+                <BannerCarousel v-if="heroPreviewImages.length" class="setup-hero-carousel"
+                  :images="heroPreviewImages" :language="language" :label="translate('Carousel preview', language)" />
                 <div class="setup-hero-previews">
                   <div v-for="(url, index) in savedHeroImages" :key="url">
                     <img :src="url" :alt="`Saved banner ${index + 1}`">
