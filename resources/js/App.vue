@@ -348,35 +348,34 @@ const accessCompanyFilter = ref('all');
 const users = ref([]);
 const systemSetup = ref(null);
 const systemSetupSection = ref('company');
-const brandingFields = [{ key: 'logo', label: 'Store logo', limit: '2 MB' }, { key: 'favicon', label: 'Favicon', limit: '512 KB' }];
-const brandingFiles = ref({});
-const brandingPreviews = ref({});
+const logoFile = ref(null);
+const logoPreview = ref(null);
 
-function clearBrandingPreview(key) {
-  if (brandingPreviews.value[key]) URL.revokeObjectURL(brandingPreviews.value[key]);
-  delete brandingPreviews.value[key];
-  delete brandingFiles.value[key];
+function clearLogoPreview() {
+  if (logoPreview.value) URL.revokeObjectURL(logoPreview.value);
+  logoPreview.value = null;
+  logoFile.value = null;
 }
 
-function selectBrandingFile(key, event) {
+function selectLogoFile(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  clearBrandingPreview(key);
-  brandingFiles.value[key] = file;
-  brandingPreviews.value[key] = URL.createObjectURL(file);
+  clearLogoPreview();
+  logoFile.value = file;
+  logoPreview.value = URL.createObjectURL(file);
   event.target.value = '';
 }
 
 function resetEcommerceAppearance() {
-  brandingFields.forEach(({ key }) => clearBrandingPreview(key));
+  clearLogoPreview();
   systemSetup.value.ecommerce = {
     name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4',
-    accent_color: '#b7794a', logo_url: null, favicon_url: null,
+    accent_color: '#b7794a', logo_url: null,
   };
 }
 
-onUnmounted(() => brandingFields.forEach(({ key }) => clearBrandingPreview(key)));
+onUnmounted(clearLogoPreview);
 const unitPickerOpen = ref(false);
 const unitQuery = ref('');
 const profileMenuOpen = ref(false);
@@ -2176,17 +2175,15 @@ async function saveSystemSetup() {
   try {
     if (!systemSetup.value.store.units.length) throw new Error('Add at least one product unit.');
     const settings = { ...systemSetup.value, ecommerce: { ...systemSetup.value.ecommerce } };
-    for (const { key } of brandingFields) {
-      const urlKey = `${key}_url`;
-      if (settings.ecommerce[urlKey]) delete settings.ecommerce[urlKey];
-    }
-    if (Object.keys(brandingFiles.value).length) {
+    delete settings.ecommerce.favicon_url;
+    if (settings.ecommerce.logo_url) delete settings.ecommerce.logo_url;
+    if (logoFile.value) {
       const form = new FormData();
       form.append('_method', 'PUT');
       form.append('settings', JSON.stringify(settings));
-      for (const [key, file] of Object.entries(brandingFiles.value)) form.append(`${key}_file`, file);
+      form.append('logo_file', logoFile.value);
       systemSetup.value = await api('system-setup', { method: 'POST', body: form });
-      brandingFields.forEach(({ key }) => clearBrandingPreview(key));
+      clearLogoPreview();
     } else {
       systemSetup.value = await api('system-setup', { method: 'PUT', body: settings });
     }
@@ -2708,20 +2705,20 @@ async function stopSupportSession() {
                 </label>
               </div>
               <div class="setup-company-fields setup-ecommerce-fields">
-                <div v-for="{ key, label, limit } in brandingFields" :key="key" class="field">
-                  <label :for="`store-${key}-upload`">{{ label }}</label>
+                <div class="field">
+                  <label for="store-logo-upload">Store logo</label>
                   <div class="setup-branding-control">
                     <span class="setup-branding-preview">
-                      <img v-if="brandingPreviews[key] || systemSetup.ecommerce[`${key}_url`]"
-                        :src="brandingPreviews[key] || systemSetup.ecommerce[`${key}_url`]"
-                        :alt="`${label} preview`" referrerpolicy="no-referrer">
+                      <img v-if="logoPreview || systemSetup.ecommerce.logo_url"
+                        :src="logoPreview || systemSetup.ecommerce.logo_url"
+                        alt="Store logo preview" referrerpolicy="no-referrer">
                       <ShoppingBag v-else :size="20" aria-hidden="true" />
                     </span>
-                    <input :id="`store-${key}-upload`" type="file" accept="image/png,image/jpeg,image/webp" :disabled="busy" @change="selectBrandingFile(key, $event)">
-                    <button v-if="brandingPreviews[key] || systemSetup.ecommerce[`${key}_url`]" type="button" class="btn-secondary-app" :disabled="busy"
-                      @click="clearBrandingPreview(key); systemSetup.ecommerce[`${key}_url`] = null">Remove</button>
+                    <input id="store-logo-upload" type="file" accept="image/png,image/jpeg,image/webp" :disabled="busy" @change="selectLogoFile">
+                    <button v-if="logoPreview || systemSetup.ecommerce.logo_url" type="button" class="btn-secondary-app" :disabled="busy"
+                      @click="clearLogoPreview(); systemSetup.ecommerce.logo_url = null">Remove</button>
                   </div>
-                  <small>{{ brandingFiles[key]?.name || `PNG, JPG or WebP · Up to ${limit}` }}</small>
+                  <small>{{ logoFile?.name || 'PNG, JPG or WebP · Up to 2 MB' }} · Also used as the browser tab icon.</small>
                 </div>
               </div>
               <fieldset class="setup-ecommerce-palette">

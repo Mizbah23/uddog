@@ -30,7 +30,6 @@ class SystemSetupController extends Controller
 
         $data = $request->validate([
             'logo_file' => ['sometimes', 'required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048', 'dimensions:max_width=2048,max_height=2048'],
-            'favicon_file' => ['sometimes', 'required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:512', 'dimensions:max_width=512,max_height=512'],
             'ecommerce' => ['sometimes', 'array:name,hero,subtitle,primary_color,hero_color,accent_color,logo_url,favicon_url'],
             'ecommerce.logo_url' => ['nullable', 'url:https', 'max:2048'],
             'ecommerce.favicon_url' => ['nullable', 'url:https', 'max:2048'],
@@ -79,15 +78,12 @@ class SystemSetupController extends Controller
         $uploaded = [];
         $disk = Storage::disk('local');
         try {
-            foreach (['logo', 'favicon'] as $type) {
-                if (! isset($data[$type.'_file'])) {
-                    continue;
-                }
+            if (isset($data['logo_file'])) {
                 abort_unless($organization->ecommerce_enabled, 403);
-                $path = $data[$type.'_file']->store('store-branding/'.$organization->id, 'local');
+                $path = $data['logo_file']->store('store-branding/'.$organization->id, 'local');
                 abort_if($path === false, 500, 'The storefront image could not be saved.');
                 $uploaded[] = $path;
-                $data['ecommerce'][$type.'_url'] = route('ecommerce.branding', ['image' => basename($path)], false);
+                $data['ecommerce']['logo_url'] = route('ecommerce.branding', ['image' => basename($path)], false);
             }
 
             $replaced = $organization->getConnection()->transaction(function () use ($organization, $data): array {
