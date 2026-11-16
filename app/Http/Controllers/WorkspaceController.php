@@ -449,13 +449,14 @@ class WorkspaceController extends Controller
             'hallmark_code' => ['nullable', 'string', 'max:80'],
             'ecommerce_visible' => ['sometimes', 'boolean'],
             'ecommerce_description' => ['nullable', 'string', 'max:2000'],
+            'ecommerce_pack_group' => ['nullable', 'string', 'max:100'],
             'ecommerce_image_url' => ['nullable', 'url:https', 'max:2048'],
             'active' => ['boolean'],
             'stock_source_product_id' => ['nullable', Rule::exists(app(TenantContext::class)->validationTable('products'), 'id')->where('organization_id', $organizationId)],
             'stock_source_quantity' => ['required_with:stock_source_product_id', 'numeric', 'gt:0', 'decimal:0,3'],
         ]);
         if (! Auth::user()->organization()->firstOrFail()->ecommerce_enabled) {
-            foreach (['ecommerce_visible', 'ecommerce_description', 'ecommerce_image_url'] as $field) {
+            foreach (['ecommerce_visible', 'ecommerce_description', 'ecommerce_pack_group', 'ecommerce_image_url'] as $field) {
                 if (array_key_exists($field, $data) && (string) ($data[$field] ?? '') !== (string) ($savedProduct?->{$field} ?? '')) {
                     throw ValidationException::withMessages([$field => 'E-commerce is not enabled for this company.']);
                 }

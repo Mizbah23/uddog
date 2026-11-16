@@ -121,11 +121,11 @@ class EcommerceController extends Controller
         $store = $this->storeData($organization, $branch);
         $detail = $this->productData($record, $this->available($record, $branch->id), true);
 
-        if ($organization->shared_stock_sales) {
-            $sourceId = $record->stock_source_product_id ?: $record->id;
+        if ($organization->ecommerce_pack_sizes && filled($record->ecommerce_pack_group) && ! $record->stock_source_product_id) {
             $detail['pack_sizes'] = $this->publicProducts($organization)
                 ->whereKeyNot($record->id)
-                ->where(fn (Builder $query) => $query->whereKey($sourceId)->orWhere('stock_source_product_id', $sourceId))
+                ->whereNull('stock_source_product_id')
+                ->where('ecommerce_pack_group', $record->ecommerce_pack_group)
                 ->orderBy('name')
                 ->get(['id', 'name'])
                 ->map(fn (Product $pack): array => [
