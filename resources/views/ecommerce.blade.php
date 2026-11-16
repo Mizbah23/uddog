@@ -41,7 +41,7 @@
                                 <img class="shop-brand-logo" src="{{ $appearance['logo_url'] }}" alt="" referrerpolicy="no-referrer" onload="this.classList.add('is-loaded')">
                             @endif
                         </span>
-                        <span>{{ $storeName }}<small>LOCAL FINDS, EVERYDAY GOOD</small></span>
+                        <span>{{ $storeName }}<small>{{ $appearance['hero_images'] && filled($appearance['hero']) ? $appearance['hero'] : 'LOCAL FINDS, EVERYDAY GOOD' }}</small></span>
                     </a>
                 </header>
             </div>
