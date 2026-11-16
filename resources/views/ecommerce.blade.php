@@ -70,6 +70,16 @@
                             <p @class(['shop-detail-stock', 'out' => ! $product['in_stock']])>
                                 <span></span><strong>{{ $product['in_stock'] ? 'পাওয়া যাচ্ছে' : 'স্টকে নেই' }}</strong>
                             </p>
+                            @if (! empty($product['pack_sizes']))
+                                <nav class="shop-pack-sizes" aria-label="অন্যান্য প্যাকের আকার">
+                                    <strong>অন্যান্য প্যাকের আকার</strong>
+                                    <div>
+                                        @foreach ($product['pack_sizes'] as $pack)
+                                            <a href="{{ $pack['url'] }}">{{ $pack['name'] }}</a>
+                                        @endforeach
+                                    </div>
+                                </nav>
+                            @endif
                         </div>
                         @if ($product['description'])
                             <section class="shop-detail-description" id="product-description">

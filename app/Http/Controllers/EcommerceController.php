@@ -121,6 +121,19 @@ class EcommerceController extends Controller
         $store = $this->storeData($organization, $branch);
         $detail = $this->productData($record, $this->available($record, $branch->id), true);
 
+        if ($organization->shared_stock_sales) {
+            $sourceId = $record->stock_source_product_id ?: $record->id;
+            $detail['pack_sizes'] = $this->publicProducts($organization)
+                ->whereKeyNot($record->id)
+                ->where(fn (Builder $query) => $query->whereKey($sourceId)->orWhere('stock_source_product_id', $sourceId))
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Product $pack): array => [
+                    'name' => $pack->name,
+                    'url' => route('ecommerce.products.show', ['product' => $pack->id], false),
+                ])->all();
+        }
+
         if ($request->expectsJson()) {
             return response()->json(['store' => $store, 'product' => $detail])->header('Cache-Control', 'no-store');
         }

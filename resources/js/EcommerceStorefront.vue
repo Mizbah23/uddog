@@ -173,6 +173,11 @@ onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.
           <h1>{{ detailProduct.name }}</h1>
           <div class="shop-detail-price"><strong>{{ detailProduct.requires_quote ? t('quote') : money(detailProduct.price) }}</strong><small v-if="!detailProduct.requires_quote">{{ t('per') }} {{ detailProduct.unit }}</small></div>
           <p class="shop-detail-stock" :class="{out: !detailProduct.in_stock}"><span></span><strong>{{ detailProduct.in_stock ? t('inStock') : t('unavailable') }}</strong></p>
+          <nav v-if="detailProduct.pack_sizes?.length" class="shop-pack-sizes"
+            :aria-label="language === 'bn' ? 'অন্যান্য প্যাকের আকার' : 'Other pack sizes'">
+            <strong>{{ language === 'bn' ? 'অন্যান্য প্যাকের আকার' : 'Other pack sizes' }}</strong>
+            <div><a v-for="pack in detailProduct.pack_sizes" :key="pack.url" :href="pack.url">{{ pack.name }}</a></div>
+          </nav>
           <a v-if="detailProduct.requires_quote && phoneLink" :href="phoneLink" class="shop-primary"><Phone :size="18" />{{ t('contact') }}</a>
           <button v-else-if="!detailProduct.requires_quote" class="shop-primary" :disabled="!detailProduct.in_stock" @click="add(detailProduct)"><Plus :size="19" />{{ t('add') }}</button>
           <a v-if="detailProduct.description" href="#product-description" class="shop-description-jump">{{ language === 'bn' ? 'পণ্যের বিস্তারিত পড়ুন' : 'Read product details' }} ↓</a>
