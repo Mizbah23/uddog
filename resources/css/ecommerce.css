@@ -174,3 +174,22 @@
   overflow-wrap: anywhere;
 }
 .shop-pack-sizes a:hover { border-color: var(--store-primary, #173e36); }
+
+@media (max-width: 700px) {
+  .shop-pack-sizes { margin-bottom: 12px; }
+
+  .shop-pack-sizes > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .shop-pack-sizes a {
+    min-width: 0;
+    justify-content: center;
+    padding: 5px 7px;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+  }
+}
