@@ -42,6 +42,7 @@ class UpdateClientRequest extends FormRequest
             'subscription_status' => ['required', Rule::enum(SubscriptionStatus::class)],
             'subscription_ends_at' => ['nullable', 'date'],
             'gold_store' => ['sometimes', 'boolean'],
+            'ecommerce_pack_sizes' => ['sometimes', 'boolean'],
             'shared_stock_sales' => ['sometimes', 'boolean'],
             'ecommerce_enabled' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
