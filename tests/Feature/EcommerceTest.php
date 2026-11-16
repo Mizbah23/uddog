@@ -424,9 +424,17 @@ class EcommerceTest extends TestCase
         [$owner, $product] = $this->records();
         $variant = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Shared stock listing', 'unit' => 'pc', 'cost_price' => 0, 'sale_price' => 30, 'ecommerce_visible' => true, 'stock_source_product_id' => $product->id, 'stock_source_quantity' => 2]);
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(1, 'products');
+        $baseUrl = 'http://liton.uddog-soft.com/online-store/products/';
+        $this->getJson($baseUrl.$product->id)->assertJsonMissingPath('product.pack_sizes');
+        $this->getJson($baseUrl.$variant->id)->assertNotFound();
         $owner->organization->update(['shared_stock_sales' => true]);
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')->assertOk()->assertJsonCount(2, 'products')
             ->assertJsonPath('products.1.in_stock', true)->assertJsonPath('products.1.available_quantity', 10);
+        $this->get($baseUrl.$product->id)->assertSee('<a href="/online-store/products/'.$variant->id.'">Shared stock listing</a>', false);
+        $this->getJson($baseUrl.$variant->id)->assertJsonPath('product.pack_sizes.0.url', '/online-store/products/'.$product->id);
+        $variant->update(['ecommerce_visible' => false]);
+        $this->getJson($baseUrl.$product->id)->assertJsonCount(0, 'product.pack_sizes');
+        $variant->update(['ecommerce_visible' => true]);
         $product->update(['is_gold_item' => true]);
         $this->get('http://liton.uddog-soft.com/online-store/products/'.$product->id)->assertOk()
             ->assertSee('দাম জানতে যোগাযোগ করুন')->assertDontSee('"offers":', false);

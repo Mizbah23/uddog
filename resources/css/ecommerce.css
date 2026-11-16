@@ -157,3 +157,20 @@
   border-bottom: 1px solid color-mix(in srgb, var(--store-accent, #b7794a) 35%, #fcfbf8);
   margin-bottom: 12px;
 }
+
+.shop-pack-sizes { margin: 0 0 16px; }
+.shop-pack-sizes > strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.shop-pack-sizes > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.shop-pack-sizes a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid #dedfd7;
+  border-radius: 24px;
+  background: #fff;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.shop-pack-sizes a:hover { border-color: var(--store-primary, #173e36); }
