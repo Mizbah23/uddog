@@ -48,6 +48,7 @@ defineProps({
       <div class="receipt-grand-total"><span>Total</span><strong>{{ money(document.total) }}</strong></div>
       <div><span>Sale payment type</span><strong>{{ paymentTypeLabel(document.payment_type) }}</strong></div>
       <div v-if="Number(document.gold_exchange_value) > 0"><span>Old gold exchange</span><strong>{{ money(document.gold_exchange_value) }}</strong></div>
+      <div v-if="document.sale_returns?.length"><span>Sales return amount</span><strong>{{ money(document.sale_returns.reduce((sum, returned) => sum + Math.round(Number(returned.total) * 100), 0) / 100) }}</strong></div>
       <div><span>Paid</span><strong>{{ money(document.amount_paid) }}</strong></div>
       <div class="receipt-balance"><span>Balance due</span><strong>{{ money(document.balance_due) }}</strong></div>
       <div><span>Payment method</span><strong>{{ paymentLabel(document.payment_method) }}</strong></div>
