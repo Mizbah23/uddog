@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Contact;
+use App\Models\Document;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -21,6 +22,38 @@ class DuePartialPaymentTest extends TestCase
         $this->actingAs($owner);
 
         return ['type' => $type, 'contact_id' => $contact->id, 'document_date' => now('Asia/Dhaka')->toDateString(), 'payment_type' => 'due', 'payment_method' => 'bank_transfer', 'amount_paid' => $paid, 'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 100]]];
+    }
+
+    #[TestWith(['credit'])]
+    #[TestWith(['cash'])]
+    public function test_returns_adjust_previous_dues_only_when_retained_as_credit(string $method): void
+    {
+        $payload = $this->payload('sale', 0);
+        $contact = Contact::findOrFail($payload['contact_id']);
+        $contact->update(['opening_due' => 50]);
+        $older = $this->postJson('/api/documents', $payload)->assertCreated()->json();
+        $paid = $this->postJson('/api/documents', [...$payload, 'amount_paid' => 100])->assertCreated()->json();
+
+        $this->postJson('/api/documents', [
+            ...$payload, 'type' => 'sale_return', 'sale_id' => $paid['id'],
+            'payment_method' => $method,
+        ])->assertCreated();
+
+        $returned = Document::where('type', 'sale_return')->firstOrFail();
+        $original = $this->getJson('/api/documents?type=sale')->assertOk()->json();
+        $original = collect($original)->firstWhere('id', $paid['id']);
+        $this->assertSame($returned->number, $original['sale_returns'][0]['number']);
+        $this->assertSame('100.00', $original['sale_returns'][0]['total']);
+
+        $expectedInvoiceDue = $method === 'credit' ? '0.00' : '100.00';
+        $expectedCustomerDue = $method === 'credit' ? '50.00' : '150.00';
+        $this->assertSame($expectedInvoiceDue, Document::findOrFail($older['id'])->balance_due);
+        $this->getJson('/api/customers')->assertOk()->assertJsonPath('0.balance_total', $expectedCustomerDue);
+        if ($method === 'credit') {
+            $this->postJson('/api/documents/'.$older['id'].'/payments', [
+                'amount' => 1, 'payment_method' => 'cash', 'payment_date' => now('Asia/Dhaka')->toDateString(),
+            ])->assertUnprocessable();
+        }
     }
 
     #[TestWith(['sale', 0])]

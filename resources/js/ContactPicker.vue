@@ -8,8 +8,11 @@ const props = defineProps({
   kind: { type: String, default: 'customer' },
   language: { type: String, default: 'en' },
   disabled: { type: Boolean, default: false },
+  placeholderText: { type: String, default: '' },
+  listLabel: { type: String, default: '' },
+  required: { type: Boolean, default: false },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'select']);
 const inputId = `contact-picker-${getCurrentInstance().uid}`;
 const searchText = ref('');
 const open = ref(false);
@@ -22,9 +25,9 @@ const matches = computed(() => {
   return props.contacts.filter(contact => !query || [contact.name, contact.company, contact.phone, contact.email]
     .some(value => String(value || '').toLocaleLowerCase().includes(query))).slice(0, 80);
 });
-const placeholder = computed(() => props.language === 'bn'
+const placeholder = computed(() => props.placeholderText || (props.language === 'bn'
   ? (props.kind === 'supplier' ? 'সরবরাহকারী খুঁজুন' : 'ক্রেতা খুঁজুন')
-  : `Search ${props.kind} by name or phone`);
+  : `Search ${props.kind} by name or phone`));
 
 watch(selectedContact, contact => {
   if (!open.value) searchText.value = contact?.name || '';
@@ -56,6 +59,7 @@ function updateSearch(event) {
 }
 function selectContact(contact) {
   emit('update:modelValue', contact.id);
+  emit('select', contact.id);
   searchText.value = contact.name;
   open.value = false;
 }
@@ -78,14 +82,14 @@ function handleKeydown(event) {
   <div class="contact-picker" @focusout="closeOnBlur">
     <div class="contact-picker-input">
       <Search :size="17" aria-hidden="true" />
-      <input :id="inputId" :value="searchText" :disabled="disabled" type="search" autocomplete="off"
+      <input :id="inputId" :value="searchText" :disabled="disabled" :required="required" type="search" autocomplete="off"
         role="combobox" :aria-expanded="open" :aria-controls="`${inputId}-options`"
         :aria-activedescendant="open && matches.length ? `${inputId}-option-${activeIndex}` : undefined"
         aria-autocomplete="list" :aria-label="placeholder" :placeholder="placeholder"
         @focus="showOptions" @input="updateSearch" @keydown="handleKeydown">
       <ChevronDown :size="17" aria-hidden="true" />
     </div>
-    <div v-if="open" :id="`${inputId}-options`" class="contact-picker-options" role="listbox" :aria-label="kind === 'supplier' ? 'Suppliers' : 'Customers'">
+    <div v-if="open" :id="`${inputId}-options`" class="contact-picker-options" role="listbox" :aria-label="listLabel || (kind === 'supplier' ? 'Suppliers' : 'Customers')">
       <button v-for="(contact, index) in matches" :id="`${inputId}-option-${index}`" :key="contact.id"
         type="button" role="option" class="contact-picker-option" :class="{ active: index === activeIndex }"
         :aria-selected="Number(modelValue) === contact.id" @mousedown.prevent @click="selectContact(contact)">
@@ -99,14 +103,15 @@ function handleKeydown(event) {
 </template>
 
 <style scoped>
-.contact-picker { position: relative; flex: 1 1 0; min-width: 0; }
+.contact-picker { width: 100%; max-width: 100%; position: relative; flex: 1 1 0; min-width: 0; }
 .contact-picker-input { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 10px; border: 1px solid #dedde8; border-radius: 7px; background: #fff; color: #8b88a3; }
+.contact-picker-input > svg { flex-shrink: 0; }
 .contact-picker-input:focus-within { border-color: #9a8df5; box-shadow: 0 0 0 3px rgba(115, 103, 240, .12); }
 .contact-picker-input input { min-width: 0; width: 100%; height: 36px; padding: 0; border: 0; outline: 0; box-shadow: none; background: transparent; color: #3b4253; font-size: 14px; }
 .contact-picker-input input:focus { border: 0; outline: 0; box-shadow: none; }
 .contact-picker-input input:disabled { cursor: not-allowed; }
 .contact-picker-options { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; max-height: 260px; overflow-y: auto; border: 1px solid #dedaf4; border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(42, 38, 79, .16); }
-.contact-picker-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 9px 12px; border: 0; border-bottom: 1px solid #f1eff7; background: #fff; color: #3b4253; text-align: left; font-size: 13px; white-space: normal; }
+.contact-picker-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 9px 12px; border: 0; border-bottom: 1px solid #f1eff7; background: #fff; color: #3b4253; text-align: left; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
 .contact-picker-option:last-of-type { border-bottom: 0; }
 .contact-picker-option:hover, .contact-picker-option.active { background: #f1efff; color: #5e54c8; }
 .contact-picker-option small, .contact-picker-empty, .contact-picker-more { color: #8c8fa0; font-size: 11px; }

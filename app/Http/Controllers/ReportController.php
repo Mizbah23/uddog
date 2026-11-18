@@ -154,7 +154,7 @@ class ReportController extends Controller
             ->whereHas('contact', fn ($query) => $query->whereIn('type', $contactTypes))
             ->findOrFail($document);
 
-        return response()->json($invoice->load('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total'));
+        return response()->json($invoice->load('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total', 'saleReturns:id,sale_id,number,document_date,total,payment_method'));
     }
 
     private function sales(Builder $documents): array
@@ -425,13 +425,15 @@ class ReportController extends Controller
 
     private function customers(int $organizationId, int $branchId): array
     {
-        $salesByContact = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->whereIn('type', ['sale', 'resale'])
-            ->get(['contact_id', 'total', 'amount_paid'])->groupBy('contact_id');
+        $salesByContact = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->whereIn('type', ['sale', 'resale', 'sale_return'])
+            ->get()->groupBy('contact_id');
         $rows = Contact::query()->where('organization_id', $organizationId)->whereIn('type', ['customer', 'both'])->orderBy('name')->get()
             ->map(function (Contact $contact) use ($salesByContact) {
-                $sales = $salesByContact->get($contact->id, collect());
+                $entries = $salesByContact->get($contact->id, collect());
+                $sales = $entries->whereIn('type', ['sale', 'resale']);
+                $creditReturns = $entries->where('type', 'sale_return')->filter(fn (Document $entry) => ! $entry->payment_method || $entry->payment_method === 'credit')->sum('total');
 
-                return ['customer' => $contact->name, 'phone' => $contact->phone ?? '—', 'sales_count' => $sales->count(), 'sales' => $sales->sum(fn ($document) => (float) $document->total), 'paid' => $sales->sum(fn ($document) => (float) $document->amount_paid), 'due' => $sales->sum(fn ($document) => (float) $document->balance_due) + (float) $contact->opening_due, 'credit_limit' => (float) $contact->credit_limit];
+                return ['customer' => $contact->name, 'phone' => $contact->phone ?? '—', 'sales_count' => $sales->count(), 'sales' => $sales->sum(fn ($document) => (float) $document->total), 'paid' => $sales->sum(fn ($document) => (float) $document->amount_paid), 'due' => $sales->sum(fn ($document) => (float) $document->total - (float) $document->amount_paid) - $creditReturns + (float) $contact->opening_due, 'credit_limit' => (float) $contact->credit_limit];
             })->values();
 
         return $this->table(['Customer', 'Phone', 'Sales count', 'Sales', 'Paid', 'Due', 'Credit limit'], $rows, ['sales' => $rows->sum('sales'), 'paid' => $rows->sum('paid'), 'due' => $rows->sum('due')]);
@@ -444,7 +446,7 @@ class ReportController extends Controller
         }
         $rows = (clone $documents)->whereIn('type', ['sale', 'resale', 'sale_return'])->whereHas('contact', fn ($query) => $query->whereIn('type', ['customer', 'both']))
             ->when($contactId, fn ($query) => $query->where('contact_id', $contactId))->with('contact:id,name')->orderBy('document_date')->get()
-            ->map(fn (Document $document) => ['date' => $document->document_date, 'customer' => $document->contact?->name ?? '—', 'reference' => $document->number, 'type' => $document->type, 'debit' => $document->type === 'sale_return' ? 0 : (float) $document->total, 'credit' => $document->type === 'sale_return' ? (float) $document->total : (float) $document->amount_paid, 'balance' => (float) $document->balance_due, 'document_id' => $document->id]);
+            ->map(fn (Document $document) => ['date' => $document->document_date, 'customer' => $document->contact?->name ?? '—', 'reference' => $document->number, 'type' => $document->type, 'debit' => $document->type === 'sale_return' ? 0 : (float) $document->total, 'credit' => $document->type === 'sale_return' ? ((! $document->payment_method || $document->payment_method === 'credit') ? (float) $document->total : 0) : (float) $document->amount_paid, 'balance' => $document->type === 'sale_return' ? 0 : (float) $document->balance_due, 'document_id' => $document->id]);
 
         return $this->table(['Date', 'Customer', 'Reference', 'Type', 'Debit', 'Credit', 'Open balance'], $rows, ['debit' => $rows->sum('debit'), 'credit' => $rows->sum('credit'), 'balance' => $rows->sum('balance')]);
     }
@@ -452,6 +454,7 @@ class ReportController extends Controller
     private function customerDue(Builder $documents): array
     {
         $rows = (clone $documents)->whereIn('type', ['sale', 'resale'])->whereRaw('(total - amount_paid) > 0')->with('contact:id,name,phone')->orderByDesc('document_date')->get()
+            ->filter(fn (Document $document) => (float) $document->balance_due > 0)->values()
             ->map(fn (Document $document) => ['date' => $document->document_date, 'invoice' => $document->number, 'customer' => $document->contact?->name ?? '—', 'phone' => $document->contact?->phone ?? '—', 'total' => (float) $document->total, 'paid' => (float) $document->amount_paid, 'due' => (float) $document->balance_due, 'status' => $document->payment_status]);
 
         return $this->table(['Date', 'Invoice', 'Customer', 'Phone', 'Total', 'Paid', 'Due', 'Status'], $rows, ['invoices' => $rows->count(), 'due' => $rows->sum('due')]);
@@ -485,7 +488,7 @@ class ReportController extends Controller
         $rows = (clone $documents)->whereIn('type', ['purchase', 'purchase_return'])
             ->whereHas('contact', fn ($query) => $query->whereIn('type', ['supplier', 'both']))
             ->when($contactId, fn ($query) => $query->where('contact_id', $contactId))
-            ->with(['contact:id,name', 'purchaseReturns:id,purchase_id,total'])
+            ->with(['contact:id,name', 'purchaseReturns:id,purchase_id,total', 'saleReturns:id,sale_id,number,document_date,total,payment_method'])
             ->orderBy('document_date')->orderBy('id')->get()
             ->map(fn (Document $document) => [
                 'date' => $document->document_date,
@@ -505,7 +508,7 @@ class ReportController extends Controller
     {
         $rows = (clone $documents)->where('type', 'purchase')
             ->whereHas('contact', fn ($query) => $query->whereIn('type', ['supplier', 'both']))
-            ->with(['contact:id,name,phone', 'purchaseReturns:id,purchase_id,total'])
+            ->with(['contact:id,name,phone', 'purchaseReturns:id,purchase_id,total', 'saleReturns:id,sale_id,number,document_date,total,payment_method'])
             ->orderByDesc('document_date')->get()
             ->filter(fn (Document $document) => (float) $document->balance_due > 0)
             ->map(function (Document $document) {

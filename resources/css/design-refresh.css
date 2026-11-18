@@ -979,3 +979,35 @@ body {
   --banner-height: clamp(120px, 35vw, 210px);
   margin-top: 12px;
 }
+
+.invoice-return-references {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid #e5dfc9;
+  border-radius: 8px;
+  background: #fffcf2;
+  break-inside: avoid;
+}
+.invoice-return-reference {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.invoice-return-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #6257ca;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.invoice-return-link:hover { color: #42369f; }
+.invoice-return-link:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
