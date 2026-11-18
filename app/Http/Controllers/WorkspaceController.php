@@ -745,7 +745,7 @@ class WorkspaceController extends Controller
         $branchId = $this->branchId($request, $organizationId);
         $saved = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->findOrFail($document);
         $permission = $this->permissionForDocumentType($saved->type);
-        abort_unless(in_array($saved->type, ['purchase', 'sale', 'resale'], true) && Auth::user()->hasPermission($permission), 403);
+        abort_unless(in_array($saved->type, ['purchase', 'sale', 'resale', 'sale_return'], true) && Auth::user()->hasPermission($permission), 403);
         $deletion->delete($document, $organizationId, $branchId);
 
         return response()->json(['ok' => true]);

@@ -24,6 +24,46 @@ class DuePartialPaymentTest extends TestCase
         return ['type' => $type, 'contact_id' => $contact->id, 'document_date' => now('Asia/Dhaka')->toDateString(), 'payment_type' => 'due', 'payment_method' => 'bank_transfer', 'amount_paid' => $paid, 'items' => [['product_id' => $product->id, 'quantity' => 1, 'unit_price' => 100]]];
     }
 
+    public function test_only_owner_can_delete_sales_return_and_restore_stock_and_customer_due(): void
+    {
+        $payload = $this->payload('sale', 0);
+        $owner = auth()->user();
+        $sale = $this->postJson('/api/documents', $payload)->assertCreated()->json();
+        $return = $this->postJson('/api/documents', [
+            ...$payload, 'type' => 'sale_return', 'sale_id' => $sale['id'], 'payment_method' => 'credit',
+        ])->assertCreated()->json();
+        $this->getJson('/api/customers')->assertJsonPath('0.balance_total', '0.00');
+        $staff = User::factory()->staff()->for($owner->organization)->create();
+        $url = '/api/documents/'.$return['id'];
+        $this->actingAs($staff)->deleteJson($url)->assertForbidden();
+
+        $this->actingAs($owner)->deleteJson($url)->assertOk();
+        $this->assertDatabaseMissing('documents', ['id' => $return['id']]);
+        $this->assertDatabaseMissing('stock_movements', ['document_id' => $return['id']]);
+        $this->assertDatabaseMissing('document_items', ['document_id' => $return['id']]);
+        $this->assertSame('9.000', Product::findOrFail($payload['items'][0]['product_id'])->quantity_on_hand);
+        $this->assertSame('50.00', Product::findOrFail($payload['items'][0]['product_id'])->cost_price);
+        $this->assertSame('100.00', Document::findOrFail($sale['id'])->balance_due);
+        $this->getJson('/api/customers')->assertJsonPath('0.balance_total', '100.00');
+        $this->deleteJson($url)->assertNotFound();
+    }
+
+    public function test_return_deletion_is_atomic_when_later_stock_activity_exists(): void
+    {
+        $payload = $this->payload('sale', 0);
+        $sale = $this->postJson('/api/documents', $payload)->assertCreated()->json();
+        $return = $this->postJson('/api/documents', [
+            ...$payload, 'type' => 'sale_return', 'sale_id' => $sale['id'], 'payment_method' => 'credit',
+        ])->assertCreated()->json();
+        $this->postJson('/api/documents', $payload)->assertCreated();
+
+        $this->deleteJson('/api/documents/'.$return['id'])->assertUnprocessable();
+        $this->assertDatabaseHas('documents', ['id' => $return['id']]);
+        $this->assertDatabaseHas('stock_movements', ['document_id' => $return['id']]);
+        $this->assertSame('9.000', Product::findOrFail($payload['items'][0]['product_id'])->quantity_on_hand);
+        $this->getJson('/api/customers')->assertJsonPath('0.balance_total', '100.00');
+    }
+
     #[TestWith(['credit'])]
     #[TestWith(['cash'])]
     public function test_returns_adjust_previous_dues_only_when_retained_as_credit(string $method): void

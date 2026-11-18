@@ -2672,7 +2672,7 @@ async function stopSupportSession() {
                 <th>{{ ['purchase', 'purchase_return'].includes(page) ? 'SUPPLIER' : 'CUSTOMER' }}</th>
                 <th>ITEMS</th>
                 <th>TOTAL</th>
-                <th v-if="['sale', 'resale', 'purchase'].includes(page)">PAYMENT</th>
+                <th v-if="['sale', 'resale', 'purchase', 'sale_return'].includes(page)">PAYMENT</th>
                 <th>PROCESS BY</th>
                 <th>ACTIONS</th>
               </tr></thead>
@@ -2682,24 +2682,24 @@ async function stopSupportSession() {
                   <td class="history-party">{{ doc.contact?.name || '—' }}</td>
                   <td class="history-items">{{ doc.items.length }} {{ doc.items.length === 1 ? 'item' : 'items' }}</td>
                   <td class="history-total strong">{{ money(doc.total) }}</td>
-                  <td v-if="['sale', 'resale', 'purchase'].includes(page)" class="history-payment"><span class="stock-pill" :class="Number(doc.balance_due) > 0 ? 'low' : 'good'">{{ historyPaymentLabel(doc) }}</span><small v-if="Number(doc.balance_due) > 0">Due {{ money(doc.balance_due) }}</small></td>
+                  <td v-if="['sale', 'resale', 'purchase', 'sale_return'].includes(page)" class="history-payment"><span class="stock-pill" :class="Number(doc.balance_due) > 0 ? 'low' : 'good'">{{ historyPaymentLabel(doc) }}</span><small v-if="Number(doc.balance_due) > 0">Due {{ money(doc.balance_due) }}</small></td>
                   <td class="history-processor processed-by-name" :title="doc.creator?.name || ''"><small class="history-processor-label">Processed by</small>{{ doc.creator?.name?.trim() || '—' }}</td>
                   <td class="history-actions"><div class="row-actions">
                     <button class="btn-secondary-app small" title="View invoice" @click="openInvoice(doc)"><Eye :size="15" /> Invoice</button>
                     <button v-if="['sale', 'resale'].includes(page) && Number(doc.balance_due) > 0" class="btn-primary-app small" @click="openSalePayment(doc)">Collect</button>
                     <button v-if="session.user.role === 'admin' && ['sale', 'resale'].includes(page)" type="button" class="icon-button" :title="translate('Correct sale', language)" :aria-label="translate('Correct sale', language)" :disabled="busy" @click="openSaleCorrection(doc)"><Pencil :size="17" /></button>
-                    <button v-if="session.user.role === 'admin' && ['sale', 'resale', 'purchase'].includes(page)" class="icon-button danger" type="button" title="Delete transaction" :disabled="busy" @click="deleteDocument(doc)"><Trash2 :size="17" /></button>
+                    <button v-if="session.user.role === 'admin' && ['sale', 'resale', 'purchase', 'sale_return'].includes(page)" class="icon-button danger" type="button" title="Delete transaction" :disabled="busy" @click="deleteDocument(doc)"><Trash2 :size="17" /></button>
                     <button class="icon-button" :title="detailId === doc.id ? 'Hide details' : 'Show details'" :aria-expanded="detailId === doc.id" @click="detailId = detailId === doc.id ? null : doc.id"><ChevronDown :size="18" :class="{ rotated: detailId === doc.id }" /></button>
                   </div></td>
                 </tr>
-                <tr v-if="detailId === doc.id" class="detail-row history-detail"><td :colspan="['sale', 'resale', 'purchase'].includes(page) ? 7 : 6">
+                <tr v-if="detailId === doc.id" class="detail-row history-detail"><td :colspan="['sale', 'resale', 'purchase', 'sale_return'].includes(page) ? 7 : 6">
                   <div class="detail-card">
                     <div class="detail-meta">
                       <span>Invoice: <strong>{{ doc.number }}</strong></span>
                       <span>Processed by: <strong>{{ doc.creator?.name?.trim() || '—' }}</strong></span>
                       <span v-if="doc.purchase">Original purchase: <strong>{{ doc.purchase.number }}</strong></span>
                       <span v-if="doc.sale">Original sale: <strong>{{ doc.sale.number }}</strong></span>
-                      <span v-if="['sale', 'resale', 'purchase'].includes(page)">Payment: <strong>{{ historyPaymentLabel(doc) }}</strong> · Paid {{ money(doc.amount_paid) }} · Due {{ money(doc.balance_due) }}</span>
+                      <span v-if="['sale', 'resale', 'purchase', 'sale_return'].includes(page)">Payment: <strong>{{ historyPaymentLabel(doc) }}</strong> · Paid {{ money(doc.amount_paid) }} · Due {{ money(doc.balance_due) }}</span>
                       <span v-if="['sale', 'resale'].includes(page)">Stock profit: <strong>{{ money(doc.stock_profit) }}</strong> · Total profit: <strong>{{ money(doc.total_profit) }}</strong></span>
                       <span v-if="doc.notes">{{ doc.notes }}</span>
                     </div>
