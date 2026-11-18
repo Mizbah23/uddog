@@ -116,7 +116,7 @@ class DocumentDeletionService
                 $latestMovement = StockMovement::query()->where('product_id', $productId)->orderByDesc('id')->first();
                 if (! $latestMovement || $latestMovement->id !== $productMovements->last()->id
                     || (float) $stock->quantity_on_hand !== (float) $productMovements->last()->balance_after) {
-                    throw ValidationException::withMessages(['document' => 'Delete later stock transactions for these products first.']);
+                    throw ValidationException::withMessages(['document' => "Cannot delete {$document->number}: {$product->name} has later stock activity or a changed stock balance. Latest reference: ".($latestMovement?->document_id ? (Document::query()->where('organization_id', $organizationId)->find($latestMovement->document_id)?->number ?? 'document #'.$latestMovement->document_id) : 'stock movement #'.($latestMovement?->id ?? 'unknown')).'. Reverse the later activity before deleting this return.']);
                 }
                 $change = $productMovements->sum(fn (StockMovement $movement) => (int) round((float) $movement->quantity_change * 1000));
                 $branchBalance = (int) round((float) $stock->quantity_on_hand * 1000) - $change;
