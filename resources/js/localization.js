@@ -196,6 +196,7 @@ const bangla = {
     'Amount': 'পরিমাণ',
     'Carousel preview': 'ক্যারোসেল প্রিভিউ',
     'Return invoices against this sale': 'এই বিক্রয়ের বিপরীতে ফেরত ইনভয়েস',
+    'Sales return amount': 'বিক্রয় ফেরতের পরিমাণ',
     'Return invoice': 'ফেরত ইনভয়েস',
     'Subtotal': 'উপমোট',
     'Delivery cost': 'ডেলিভারি চার্জ',

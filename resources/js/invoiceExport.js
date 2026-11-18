@@ -110,6 +110,12 @@ export function renderInvoicePages(invoice) {
     right.forEach((line, n) => text(line, width - margin - 10, y + 6 + n * 24, 15, 700, emphasis ? '#7367f0' : '#3b4253', 'right'));
     y += rowHeight;
   }
+  if (invoice.returns?.length) {
+    y += 18;
+    ensure(125);
+    paragraph(invoice.returnTitle, 16, 700);
+    table(invoice.returnColumns, invoice.returns, [274, 220, 220]);
+  }
   if (invoice.notes) { y += 18; paragraph(invoice.notesLabel, 14, 700); paragraph(invoice.notes); }
   if (invoice.installments?.length) { y += 18; ensure(100); paragraph(invoice.installmentTitle, 16, 700); table(invoice.installmentColumns, invoice.installments, [40, 220, 150, 150, 154]); }
   pages.forEach((canvas, index) => {
