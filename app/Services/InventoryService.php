@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Contact;
 use App\Models\Document;
 use App\Models\GoldRate;
 use App\Models\Organization;
@@ -35,6 +36,7 @@ class InventoryService
                 }
             }
             if ($type === 'sale_return') {
+                Contact::query()->where('organization_id', $organizationId)->whereKey($data['contact_id'])->lockForUpdate()->firstOrFail();
                 $sale = Document::query()->where('organization_id', $organizationId)->lockForUpdate()->find($data['sale_id']);
                 if (! $sale || ! in_array($sale->type, ['sale', 'resale'], true) || (int) $sale->branch_id !== $branchId || (int) $sale->contact_id !== (int) $data['contact_id']) {
                     throw ValidationException::withMessages(['sale_id' => 'Select a sale for the same customer.']);
@@ -308,15 +310,16 @@ class InventoryService
                 ]);
             }
 
-            return $document->load('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'payments.receiver', 'purchaseInstallments');
+            return $document->load('saleReturns:id,sale_id,number,document_date,total,payment_method', 'branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'payments.receiver', 'purchaseInstallments');
         });
     }
 
     public function recordSalePayment(Document $document, array $data, int $userId, int $organizationId): Document
     {
         return DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($document, $data, $userId, $organizationId) {
+            Contact::query()->where('organization_id', $organizationId)->whereKey($document->contact_id)->lockForUpdate()->firstOrFail();
             $sale = Document::query()->where('organization_id', $organizationId)->lockForUpdate()->findOrFail($document->id);
-            $balanceCents = self::scaled($sale->total, 2) - self::scaled($sale->amount_paid, 2);
+            $balanceCents = self::scaled($sale->balance_due, 2);
             if (! in_array($sale->type, ['sale', 'resale'], true) || $balanceCents <= 0) {
                 throw ValidationException::withMessages(['payment' => 'Payments can only be recorded against an unpaid due or installment sale.']);
             }
@@ -358,7 +361,7 @@ class InventoryService
                 'payment_type' => in_array($sale->payment_type, ['due', 'installment'], true) ? $sale->payment_type : 'due',
             ]);
 
-            return $sale->fresh()->load('branch', 'contact', 'items.product', 'creator:id,name', 'installments', 'payments.receiver');
+            return $sale->fresh()->load('saleReturns:id,sale_id,number,document_date,total,payment_method', 'branch', 'contact', 'items.product', 'creator:id,name', 'installments', 'payments.receiver');
         });
     }
 

@@ -54,7 +54,7 @@ class ContactDirectoryController extends Controller
         $metrics = [];
 
         Document::query()
-            ->selectRaw('contact_id, type, SUM(total) as total, SUM(amount_paid) as paid')
+            ->selectRaw("contact_id, type, SUM(total) as total, SUM(amount_paid) as paid, SUM(CASE WHEN payment_method IS NOT NULL AND payment_method != 'credit' THEN total ELSE 0 END) as refunded")
             ->where('organization_id', $organizationId)
             ->whereIn('branch_id', $branchIds)
             ->whereIn('type', [...$positiveTypes, $returnType])
@@ -67,6 +67,9 @@ class ContactDirectoryController extends Controller
                     $metrics[$document->contact_id]['paid'] += (float) $document->paid;
                 } else {
                     $metrics[$document->contact_id]['returns'] += (float) $document->total;
+                    if ($document->type === 'sale_return') {
+                        $metrics[$document->contact_id]['paid'] -= (float) $document->refunded;
+                    }
                 }
             });
 

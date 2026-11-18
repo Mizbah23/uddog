@@ -333,7 +333,7 @@ class WorkspaceController extends Controller
             'highest_selling_products' => $highestSellingProducts,
             'lowest_selling_products' => $lowestSellingProducts,
             'collection_alerts' => $collectionAlerts,
-            'supplier_due_list' => $canViewPurchases ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('type', 'purchase')->whereRaw('amount_paid < total')->with('contact:id,name', 'purchaseReturns:id,purchase_id,total')->get()->map(fn (Document $purchase) => ['id' => $purchase->id, 'number' => $purchase->number, 'date' => $purchase->document_date, 'supplier' => $purchase->contact?->name, 'amount_due' => number_format(max(0, (float) $purchase->total - (float) $purchase->amount_paid - (float) $purchase->purchaseReturns->sum('total')), 2, '.', '')])->filter(fn (array $purchase) => (float) $purchase['amount_due'] > 0)->sortByDesc('amount_due')->take(8)->values() : collect(),
+            'supplier_due_list' => $canViewPurchases ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('type', 'purchase')->whereRaw('amount_paid < total')->with('contact:id,name', 'purchaseReturns:id,purchase_id,total', 'saleReturns:id,sale_id,number,document_date,total,payment_method')->get()->map(fn (Document $purchase) => ['id' => $purchase->id, 'number' => $purchase->number, 'date' => $purchase->document_date, 'supplier' => $purchase->contact?->name, 'amount_due' => number_format(max(0, (float) $purchase->total - (float) $purchase->amount_paid - (float) $purchase->purchaseReturns->sum('total')), 2, '.', '')])->filter(fn (array $purchase) => (float) $purchase['amount_due'] > 0)->sortByDesc('amount_due')->take(8)->values() : collect(),
             'customer_due_list' => $canViewSales ? Document::query()
                 ->where('organization_id', $organizationId)
                 ->where('branch_id', $branchId)
@@ -342,20 +342,18 @@ class WorkspaceController extends Controller
                     $user->hasPermission(Permission::Resales) ? 'resale' : null,
                 ])))
                 ->whereRaw('total > amount_paid')
-                ->selectRaw('contact_id, COUNT(*) as invoices_count, SUM(total - amount_paid) as amount_due, MIN(document_date) as oldest_due_date')
                 ->with('contact:id,name,phone')
-                ->groupBy('contact_id')
-                ->orderByDesc('amount_due')
-                ->limit(8)
                 ->get()
-                ->map(fn (Document $due) => [
-                    'contact_id' => $due->contact_id,
-                    'customer' => $due->contact?->name ?? 'Walk-in customer',
-                    'phone' => $due->contact?->phone,
-                    'invoices_count' => (int) $due->invoices_count,
-                    'amount_due' => number_format((float) $due->amount_due, 2, '.', ''),
-                    'oldest_due_date' => $due->oldest_due_date,
-                ]) : collect(),
+                ->filter(fn (Document $sale) => (float) $sale->balance_due > 0)
+                ->groupBy('contact_id')
+                ->map(fn ($sales) => [
+                    'contact_id' => $sales->first()->contact_id,
+                    'customer' => $sales->first()->contact?->name ?? 'Walk-in customer',
+                    'phone' => $sales->first()->contact?->phone,
+                    'invoices_count' => $sales->count(),
+                    'amount_due' => number_format($sales->sum(fn (Document $sale) => (float) $sale->balance_due), 2, '.', ''),
+                    'oldest_due_date' => $sales->min('document_date'),
+                ])->sortByDesc(fn (array $row) => (float) $row['amount_due'])->take(8)->values() : collect(),
             'overdue_customers' => $canViewSales ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->whereIn('type', array_values(array_filter([$user->hasPermission(Permission::Sales) ? 'sale' : null, $user->hasPermission(Permission::Resales) ? 'resale' : null])))->whereRaw('(total - amount_paid) > 0')->whereDate('document_date', '<=', today()->subDays(30))->with('contact:id,name,phone')->orderBy('document_date')->limit(8)->get()->map(fn (Document $sale) => ['id' => $sale->id, 'number' => $sale->number, 'date' => $sale->document_date, 'customer' => $sale->contact?->name, 'phone' => $sale->contact?->phone, 'amount_due' => $sale->balance_due, 'days_outstanding' => $sale->document_date->diffInDays(today())]) : collect(),
         ]);
     }
@@ -622,7 +620,7 @@ class WorkspaceController extends Controller
             ->where('organization_id', $this->organizationId())
             ->where('branch_id', $this->branchId($request, $this->organizationId()))
             ->whereIn('type', $readableTypes)
-            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total', 'corrections.creator:id,name')
+            ->with('branch', 'contact', 'items.product', 'purchase', 'sale', 'creator:id,name', 'installments', 'purchaseInstallments', 'payments.receiver', 'purchasePayments.receiver', 'purchaseReturns:id,purchase_id,total', 'saleReturns:id,sale_id,number,document_date,total,payment_method', 'corrections.creator:id,name')
             ->when($type, fn ($q) => $q->where('type', $type))
             ->when($filters['date_from'] ?? null, fn ($q, $date) => $q->where('document_date', '>=', $date))
             ->when($filters['date_to'] ?? null, fn ($q, $date) => $q->where('document_date', '<=', $date))

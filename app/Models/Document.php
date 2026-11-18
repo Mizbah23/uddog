@@ -81,6 +81,13 @@ class Document extends TenantModel
         return $this->hasMany(self::class, 'purchase_id')->where('type', 'purchase_return');
     }
 
+    public function saleReturns(): HasMany
+    {
+        return $this->hasMany(self::class, 'sale_id')
+            ->where('type', 'sale_return')
+            ->orderBy('document_date')->orderBy('id');
+    }
+
     public function sale()
     {
         return $this->belongsTo(self::class, 'sale_id');
@@ -114,6 +121,36 @@ class Document extends TenantModel
 
     public function getBalanceDueAttribute(): string
     {
+        if (in_array($this->type, ['sale', 'resale'], true)) {
+            $sales = self::query()->where('organization_id', $this->organization_id)
+                ->where('contact_id', $this->contact_id)->whereIn('type', ['sale', 'resale'])
+                ->orderBy('document_date')->orderBy('id')->get(['id', 'total', 'amount_paid']);
+            $balances = $sales->mapWithKeys(fn (self $sale): array => [
+                $sale->id => max(0, (int) round((float) $sale->total * 100) - (int) round((float) $sale->amount_paid * 100)),
+            ])->all();
+            $returns = self::query()->where('organization_id', $this->organization_id)
+                ->where('contact_id', $this->contact_id)->where('type', 'sale_return')
+                ->where(fn ($query) => $query->where('payment_method', 'credit')->orWhereNull('payment_method'))
+                ->get(['sale_id', 'total']);
+            $credit = 0;
+            foreach ($returns as $return) {
+                $amount = (int) round((float) $return->total * 100);
+                $applied = min($amount, $balances[$return->sale_id] ?? 0);
+                if (isset($balances[$return->sale_id])) {
+                    $balances[$return->sale_id] -= $applied;
+                }
+                $credit += $amount - $applied;
+            }
+            foreach ($balances as &$balance) {
+                $applied = min($credit, $balance);
+                $balance -= $applied;
+                $credit -= $applied;
+            }
+            unset($balance);
+
+            return number_format(($balances[$this->id] ?? 0) / 100, 2, '.', '');
+        }
+
         $purchaseReturns = $this->type === 'purchase'
             ? ($this->relationLoaded('purchaseReturns') ? $this->purchaseReturns->sum('total') : $this->purchaseReturns()->sum('total'))
             : 0;
