@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Contact;
 use App\Models\Document;
 use App\Models\EcommerceOrder;
 use App\Models\GoldJob;
@@ -69,10 +70,12 @@ class DocumentDeletionService
     public function delete(int $documentId, int $organizationId, int $branchId): void
     {
         DB::connection(app(TenantContext::class)->connectionName())->transaction(function () use ($documentId, $organizationId, $branchId): void {
+            $reference = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->findOrFail($documentId);
+            Contact::query()->where('organization_id', $organizationId)->whereKey($reference->contact_id)->lockForUpdate()->firstOrFail();
             $document = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
                 ->lockForUpdate()->findOrFail($documentId);
-            if (! in_array($document->type, ['purchase', 'sale', 'resale'], true)) {
-                throw ValidationException::withMessages(['document' => 'Only purchases and sales can be deleted here.']);
+            if (! in_array($document->type, ['purchase', 'sale', 'resale', 'sale_return'], true)) {
+                throw ValidationException::withMessages(['document' => 'Only purchases, sales and sales returns can be deleted here.']);
             }
             if (EcommerceOrder::query()->where('organization_id', $organizationId)->where('document_id', $document->id)->exists()) {
                 throw ValidationException::withMessages(['document' => 'This sale belongs to an online order and cannot be deleted. Use a sale correction instead.']);
@@ -125,6 +128,14 @@ class DocumentDeletionService
                 if ($document->type === 'purchase') {
                     $purchaseItem = $items->firstWhere('product_id', $productId);
                     $updates['cost_price'] = $purchaseItem->cost_price;
+                }
+                if ($document->type === 'sale_return') {
+                    $returnedCost = $items->filter(fn ($item) => (int) ($item->stock_product_id ?: $item->product_id) === (int) $productId)
+                        ->sum(fn ($item) => (int) round((float) $item->quantity * 1000) * (int) round((float) $item->cost_price * 100));
+                    $remainingValue = (int) round((float) $product->quantity_on_hand * 1000)
+                        * (int) round((float) $product->cost_price * 100) - $returnedCost;
+                    $cost = $totalBalance > 0 ? max(0, (int) round($remainingValue / $totalBalance)) : 0;
+                    $updates['cost_price'] = number_format($cost / 100, 2, '.', '');
                 }
                 $product->update($updates);
                 $stock->update(['quantity_on_hand' => number_format($branchBalance / 1000, 3, '.', '')]);
