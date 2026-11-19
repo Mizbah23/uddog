@@ -167,8 +167,24 @@ watch([page, search, () => documentFilters.value.date_from, () => documentFilter
   documentLoading.value = true;
   documentFilterTimer = setTimeout(() => loadDocumentHistory(1), 300);
 });
+watch(page, async next => {
+  if (next !== 'reports' || isReportView.value || !activeBranchId.value) return;
+  try {
+    const [reportContacts, reportProducts] = await Promise.all([
+      hasAbility('contacts', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns') ? api('contacts') : Promise.resolve([]),
+      hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory') ? api('products?lookup=1') : Promise.resolve([]),
+    ]);
+    if (page.value !== 'reports') return;
+    customers.value = reportContacts.filter(contact => ['customer', 'both'].includes(contact.type));
+    suppliers.value = reportContacts.filter(contact => ['supplier', 'both'].includes(contact.type));
+    products.value = reportProducts;
+  } catch (exception) {
+    if (page.value === 'reports') error.value = exception.message;
+  }
+});
 watch(page, async (next, previous) => {
   if (['sale', 'purchase'].includes(next)) documentFilters.value = defaultDocumentFilters(next);
+  if (next === 'reports') return;
   if ((!historyTypes.includes(previous) && previous !== 'products') || historyTypes.includes(next) || next === 'products' || !activeBranchId.value || !hasAbility('purchases', 'sales', 'sales_returns', 'resales', 'purchase_returns')) return;
   const branchId = activeBranchId.value;
   try {
@@ -177,6 +193,7 @@ watch(page, async (next, previous) => {
   } catch (e) { if (page.value === next && activeBranchId.value === branchId) error.value = e.message; }
 });
 watch(page, async (next, previous) => {
+  if (next === 'reports') return;
   if (!(previous === 'products' || historyTypes.includes(previous)) || next === 'products' || historyTypes.includes(next) || !activeBranchId.value || !hasAbility('dashboard')) return;
   const branchId = activeBranchId.value;
   try {
@@ -214,6 +231,7 @@ watch([page, search], () => {
   productSearchTimer = setTimeout(() => loadProductCatalog(1), 300);
 });
 watch(page, async (next, previous) => {
+  if (next === 'reports') return;
   if (previous !== 'products' || next === 'products' || !activeBranchId.value) return;
   const branchId = activeBranchId.value;
   try {
@@ -698,6 +716,16 @@ async function refresh() {
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
     if (isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss', 'cash_movement'].includes(reportKind.value)) {
       if (reportKind.value === 'product_lifecycle_ledger') products.value = await api('products?lookup=1');
+      return;
+    }
+    if (page.value === 'reports') {
+      const [reportContacts, reportProducts] = await Promise.all([
+        hasAbility('contacts', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns') ? api('contacts') : Promise.resolve([]),
+        hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory') ? api('products?lookup=1') : Promise.resolve([]),
+      ]);
+      customers.value = reportContacts.filter(contact => ['customer', 'both'].includes(contact.type));
+      suppliers.value = reportContacts.filter(contact => ['supplier', 'both'].includes(contact.type));
+      products.value = reportProducts;
       return;
     }
     const branchQuery = selectedBranch ? `?branch_id=${selectedBranch.id}` : '';
