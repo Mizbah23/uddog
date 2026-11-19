@@ -119,10 +119,11 @@ class CashBalanceService
             ->whereIn('type', ['sale', 'resale'])->where('amount_paid', '>', 0)
             ->whereDoesntHave('payments')
             ->when($userId, fn ($query) => $query->where('created_by', $userId))
-            ->cursor()->each(function (Document $document) use (&$totals): void {
-                $id = (int) $document->created_by;
-                $paid = max(0, self::cents($document->amount_paid) - self::cents($document->gold_exchange_value ?? 0));
-                $totals[$id] = ($totals[$id] ?? 0) + $paid;
+            ->selectRaw('created_by, SUM(CASE WHEN amount_paid > COALESCE(gold_exchange_value, 0) THEN amount_paid - COALESCE(gold_exchange_value, 0) ELSE 0 END) AS total')
+            ->groupBy('created_by')->toBase()->get()
+            ->each(function (object $row) use (&$totals): void {
+                $id = (int) $row->created_by;
+                $totals[$id] = ($totals[$id] ?? 0) + self::cents($row->total);
             });
 
         return $totals;
