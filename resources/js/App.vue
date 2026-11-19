@@ -74,6 +74,9 @@ const canViewDashboardFinances = computed(() => session.value?.user?.role === 'a
 const staffDocumentDatesLocked = computed(() => ['manager', 'staff'].includes(session.value?.user?.role) && !session.value?.operational_setup?.store?.allow_staff_custom_dates);
 const language = ref(localStorage.getItem('uddog-language') || 'en');
 const loading = ref(true);
+let workspaceDataBranchId = null;
+let workspaceDataRequest = null;
+function hasWorkspaceData() { return workspaceDataBranchId === String(activeBranchId.value); }
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
@@ -162,13 +165,14 @@ async function loadDocumentHistory(targetPage = 1) {
 watch([page, search, () => documentFilters.value.date_from, () => documentFilters.value.date_to], () => {
   clearTimeout(documentFilterTimer);
   if (!historyTypes.includes(page.value)) { documentRequestVersion++; documentLoading.value = false; return; }
+  if (!hasWorkspaceData()) return;
   documentRequestVersion++;
   documentHistory.value = [];
   documentLoading.value = true;
   documentFilterTimer = setTimeout(() => loadDocumentHistory(1), 300);
 });
 watch(page, async next => {
-  if (next !== 'reports' || isReportView.value || !activeBranchId.value) return;
+  if (next !== 'reports' || isReportView.value || !activeBranchId.value || !hasWorkspaceData()) return;
   try {
     const [reportContacts, reportProducts] = await Promise.all([
       hasAbility('contacts', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns') ? api('contacts') : Promise.resolve([]),
@@ -184,7 +188,7 @@ watch(page, async next => {
 });
 watch(page, async (next, previous) => {
   if (['sale', 'purchase'].includes(next)) documentFilters.value = defaultDocumentFilters(next);
-  if (next === 'reports') return;
+  if (['reports', 'dashboard'].includes(next) || !hasWorkspaceData()) return;
   if ((!historyTypes.includes(previous) && previous !== 'products') || historyTypes.includes(next) || next === 'products' || !activeBranchId.value || !hasAbility('purchases', 'sales', 'sales_returns', 'resales', 'purchase_returns')) return;
   const branchId = activeBranchId.value;
   try {
@@ -193,7 +197,7 @@ watch(page, async (next, previous) => {
   } catch (e) { if (page.value === next && activeBranchId.value === branchId) error.value = e.message; }
 });
 watch(page, async (next, previous) => {
-  if (next === 'reports') return;
+  if (['reports', 'dashboard'].includes(next) || !hasWorkspaceData()) return;
   if (!(previous === 'products' || historyTypes.includes(previous)) || next === 'products' || historyTypes.includes(next) || !activeBranchId.value || !hasAbility('dashboard')) return;
   const branchId = activeBranchId.value;
   try {
@@ -226,18 +230,29 @@ watch([page, search], () => {
   clearTimeout(productSearchTimer);
   productRequestVersion++;
   if (page.value !== 'products') { productLoading.value = false; return; }
+  if (!hasWorkspaceData()) return;
   productCatalog.value = [];
   productLoading.value = true;
   productSearchTimer = setTimeout(() => loadProductCatalog(1), 300);
 });
 watch(page, async (next, previous) => {
-  if (next === 'reports') return;
+  if (['reports', 'dashboard'].includes(next) || !hasWorkspaceData()) return;
   if (previous !== 'products' || next === 'products' || !activeBranchId.value) return;
   const branchId = activeBranchId.value;
   try {
     const data = await api(`products?branch_id=${branchId}`);
     if (page.value === next && activeBranchId.value === branchId) products.value = data;
   } catch (e) { if (page.value === next && activeBranchId.value === branchId) error.value = e.message; }
+});
+watch(page, async next => {
+  if (!session.value?.permissions?.use_workspace || loading.value || !activeBranchId.value) return;
+  if (next === 'dashboard' || (next === 'reports' && !hasWorkspaceData())) {
+    try { await refresh(); } catch (exception) { error.value = exception.message; }
+  } else if (!hasWorkspaceData()) {
+    clearTimeout(documentFilterTimer);
+    clearTimeout(productSearchTimer);
+    await ensureWorkspaceData();
+  }
 });
 const movements = ref([]);
 const expenses = ref([]);
@@ -638,7 +653,8 @@ function clientAccessLabel(client) {
   if (client.access_paused) return 'Paused by admin';
   return client.subscription_active ? 'Available' : 'Subscription inactive';
 }
-function openCollectionSale(alert) {
+async function openCollectionSale(alert) {
+  if (!await ensureWorkspaceData()) return;
   const sale = documents.value.find(document => document.id === alert.document.id);
   if (sale) openSalePayment(sale, alert.id);
   else {
@@ -704,8 +720,10 @@ async function applySystemUpdate() {
   finally { busy.value = false; }
 }
 
-async function refresh() {
+async function refresh({ fullWorkspace = false } = {}) {
   const requests = [];
+  let requestedBranchId = null;
+  const requestedPage = page.value;
   if (session.value?.permissions?.use_workspace) {
     branches.value = await api('branches');
     const storedBranch = localStorage.getItem(`uddog-branch-${session.value.user.organization_id}`);
@@ -714,11 +732,17 @@ async function refresh() {
       || branches.value.find(branch => branch.active);
     activeBranchId.value = selectedBranch?.id || '';
     if (selectedBranch) localStorage.setItem(`uddog-branch-${session.value.user.organization_id}`, String(selectedBranch.id));
-    if (isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss', 'cash_movement'].includes(reportKind.value)) {
+    requestedBranchId = String(activeBranchId.value);
+    if (page.value === 'dashboard' && !fullWorkspace) {
+      workspaceDataBranchId = null;
+      if (hasAbility('dashboard')) overview.value = await api(`overview${selectedBranch ? `?branch_id=${selectedBranch.id}` : ''}`);
+      return;
+    }
+    if (!fullWorkspace && isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss', 'cash_movement'].includes(reportKind.value)) {
       if (reportKind.value === 'product_lifecycle_ledger') products.value = await api('products?lookup=1');
       return;
     }
-    if (page.value === 'reports') {
+    if (!fullWorkspace && page.value === 'reports') {
       const [reportContacts, reportProducts] = await Promise.all([
         hasAbility('contacts', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns') ? api('contacts') : Promise.resolve([]),
         hasAbility('products', 'purchases', 'sales', 'pos_sale', 'sales_returns', 'resales', 'purchase_returns', 'inventory') ? api('products?lookup=1') : Promise.resolve([]),
@@ -764,6 +788,29 @@ async function refresh() {
   if (session.value?.permissions?.manage_users && (session.value?.permissions?.use_workspace || session.value?.permissions?.manage_clients)) requests.push(api('users').then(data => { users.value = data; }));
   if (session.value?.permissions?.use_workspace && session.value?.permissions?.manage_system_setup) requests.push(api('system-setup').then(data => { systemSetup.value = data; }));
   await Promise.all(requests);
+  if (requestedBranchId === String(activeBranchId.value) && requestedPage === page.value) workspaceDataBranchId = requestedBranchId;
+}
+async function ensureWorkspaceData() {
+  if (hasWorkspaceData()) return true;
+  const branchId = String(activeBranchId.value);
+  const requestedPage = page.value;
+  if (workspaceDataRequest && (workspaceDataRequest.page !== requestedPage || workspaceDataRequest.branchId !== branchId)) {
+    try { await workspaceDataRequest.promise; } catch {}
+    if (page.value !== requestedPage || String(activeBranchId.value) !== branchId) return false;
+    return ensureWorkspaceData();
+  }
+  if (!workspaceDataRequest || workspaceDataRequest.branchId !== branchId) {
+    const previouslyBusy = busy.value;
+    busy.value = true;
+    const request = { branchId, page: requestedPage, promise: null };
+    request.promise = refresh({ fullWorkspace: true }).finally(() => {
+      if (workspaceDataRequest === request) workspaceDataRequest = null;
+      busy.value = previouslyBusy;
+    });
+    workspaceDataRequest = request;
+  }
+  try { await workspaceDataRequest.promise; return hasWorkspaceData() && page.value === requestedPage && String(activeBranchId.value) === branchId; }
+  catch (exception) { error.value = exception.message; return false; }
 }
 async function initialize() {
   try {
@@ -1473,6 +1520,7 @@ async function toggleEcommerceProduct(product, visible) {
   finally { busy.value = false; }
 }
 async function openProduct(product = null, context = '') {
+  if (!await ensureWorkspaceData()) return;
   clearProductImages();
   productImages.value = (product?.ecommerce_images || []).map(path => ({ path, url: `/api/products/${product.id}/images/${path.split('/').pop()}` }));
   if (page.value === 'products' && session.value?.shared_stock_sales) {
@@ -1525,6 +1573,7 @@ function openContact(contact = null, context = '') {
   modal.value = 'contact';
 }
 async function openDocument(type = page.value) {
+  if (!await ensureWorkspaceData()) return;
   if (['resale', 'purchase_return', 'sale_return'].includes(type)) {
     try { documentReferences.value = await api(`documents?branch_id=${activeBranchId.value}`); }
     catch (e) { error.value = e.message; return; }
@@ -1712,7 +1761,8 @@ function openExpense(expense = null) {
     : { branch_id: activeBranchId.value, category: 'Rent', description: '', amount: '', expense_date: today(), payment_method: 'cash', notes: '' };
   modal.value = 'expense';
 }
-function openPurchasePayment(purchase) {
+async function openPurchasePayment(purchase) {
+  if (!await ensureWorkspaceData()) return;
   const selectedPurchase = documents.value.find(document => document.id === purchase.id) || purchase;
   const installment = selectedPurchase.purchaseInstallments?.find(item => Number(item.balance_due) > 0);
   clearMessages(); purchaseBeingPaid.value = selectedPurchase;
@@ -1727,7 +1777,8 @@ function setPurchaseInstallmentAmount(event) {
   const installment = purchaseBeingPaid.value?.purchaseInstallments?.find(item => Number(item.id) === Number(event.target.value));
   if (installment) purchasePaymentForm.value.amount = Number(installment.balance_due).toFixed(2);
 }
-function openSalePayment(sale, installmentId = null) {
+async function openSalePayment(sale, installmentId = null) {
+  if (!await ensureWorkspaceData()) return;
   const selectedSale = documents.value.find(document => document.id === sale.id) || sale;
   const installment = selectedSale.installments?.find(item => Number(item.id) === Number(installmentId))
     || selectedSale.installments?.find(item => Number(item.balance_due) > 0);
@@ -1749,7 +1800,8 @@ function setSaleInstallmentAmount(event) {
   const installment = saleBeingPaid.value?.installments?.find(item => Number(item.id) === Number(event.target.value));
   if (installment) salePaymentForm.value.amount = Number(installment.balance_due).toFixed(2);
 }
-function openCustomerCollection(customer) {
+async function openCustomerCollection(customer) {
+  if (!await ensureWorkspaceData()) return;
   const dueSale = customerDueDocuments(customer.contact_id || customer.id)[0];
   if (dueSale) openSalePayment(dueSale);
   else toast('No unpaid sale in the current branch for this customer.');

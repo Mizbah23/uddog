@@ -212,7 +212,7 @@ class WorkspaceController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function overview(Request $request): JsonResponse
+    public function overview(Request $request, DocumentBalanceLoader $balances): JsonResponse
     {
         $organizationId = $this->organizationId();
         $branchId = $this->branchId($request, $organizationId);
@@ -226,33 +226,40 @@ class WorkspaceController extends Controller
         $visiblePurchaseTypes = $canViewPurchases ? ['purchase', 'purchase_return'] : [];
         $visibleTypes = [...$visibleSaleTypes, ...$visiblePurchaseTypes];
         $documents = Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId);
-        $yearDocuments = (clone $documents)->whereIn('type', $visibleTypes)->whereYear('document_date', now()->year)->with(['items.product:id,name,unit'])->get();
-        $monthlyTotals = collect(range(1, 12))->mapWithKeys(fn (int $month) => [$month => ['month' => now()->setDate(now()->year, $month, 1)->format('M'), 'sales' => 0, 'purchases' => 0]]);
-        $productSales = [];
-        foreach ($yearDocuments as $document) {
-            $month = (int) $document->document_date->format('n');
-            $monthTotal = $monthlyTotals->get($month);
-            if (in_array($document->type, ['sale', 'resale', 'sale_return'], true)) {
-                $sign = $document->type === 'sale_return' ? -1 : 1;
-                $monthTotal['sales'] += $sign * (float) $document->total;
-                foreach ($document->items as $item) {
-                    $product = $item->product;
-                    if (! $product) {
-                        continue;
-                    }
-                    $productSales[$product->id] ??= ['id' => $product->id, 'name' => $product->name, 'unit' => $product->unit, 'quantity_mills' => 0];
-                    $productSales[$product->id]['quantity_mills'] += $sign * (int) round((float) $item->quantity * 1000);
-                }
-            } elseif (in_array($document->type, ['purchase', 'purchase_return'], true)) {
-                $monthTotal['purchases'] += ($document->type === 'purchase_return' ? -1 : 1) * (float) $document->total;
+        $yearStart = now()->startOfYear();
+        $yearEnd = $yearStart->copy()->addYear();
+        $monthlyTotals = collect(range(1, 12))->mapWithKeys(fn (int $month) => [$month => ['month' => $yearStart->copy()->month($month)->format('M'), 'sales' => 0, 'purchases' => 0]]);
+        if ($user->hasRole(UserRole::Admin)) {
+            $monthlyQuery = (clone $documents)->whereIn('type', $visibleTypes)
+                ->where('document_date', '>=', $yearStart->toDateString())
+                ->where('document_date', '<', $yearEnd->toDateString());
+            foreach (range(1, 12) as $month) {
+                $start = $yearStart->copy()->month($month);
+                $dates = [$start->toDateString(), $start->copy()->addMonth()->toDateString()];
+                $monthlyQuery->selectRaw("SUM(CASE WHEN document_date >= ? AND document_date < ? THEN CASE WHEN type IN ('sale', 'resale') THEN total WHEN type = 'sale_return' THEN -total ELSE 0 END ELSE 0 END) AS sales_{$month}", $dates)
+                    ->selectRaw("SUM(CASE WHEN document_date >= ? AND document_date < ? THEN CASE WHEN type = 'purchase' THEN total WHEN type = 'purchase_return' THEN -total ELSE 0 END ELSE 0 END) AS purchases_{$month}", $dates);
             }
-            $monthlyTotals->put($month, $monthTotal);
+            $totals = $monthlyQuery->toBase()->first();
+            foreach (range(1, 12) as $month) {
+                $monthlyTotals->put($month, [
+                    'month' => $monthlyTotals->get($month)['month'],
+                    'sales' => (float) ($totals->{'sales_'.$month} ?? 0),
+                    'purchases' => (float) ($totals->{'purchases_'.$month} ?? 0),
+                ]);
+            }
         }
+        $productSales = DocumentItem::query()->join('documents', 'documents.id', '=', 'document_items.document_id')
+            ->where('documents.organization_id', $organizationId)->where('documents.branch_id', $branchId)
+            ->whereIn('documents.type', $visibleSaleTypes)
+            ->where('documents.document_date', '>=', $yearStart->toDateString())
+            ->where('documents.document_date', '<', $yearEnd->toDateString())
+            ->selectRaw("document_items.product_id, SUM(CASE WHEN documents.type = 'sale_return' THEN -document_items.quantity ELSE document_items.quantity END) AS quantity")
+            ->groupBy('document_items.product_id')->toBase()->pluck('quantity', 'product_id');
         $rankedProducts = $products->map(fn (Product $product) => [
             'id' => $product->id,
             'name' => $product->name,
             'unit' => $product->unit,
-            'quantity' => max(0, ($productSales[$product->id]['quantity_mills'] ?? 0) / 1000),
+            'quantity' => max(0, (float) ($productSales[$product->id] ?? 0)),
         ]);
         $highestSellingProducts = $rankedProducts
             ->filter(fn (array $product) => $product['quantity'] > 0)
@@ -321,6 +328,19 @@ class WorkspaceController extends Controller
                 })
             : collect();
 
+        $customerDueSales = $canViewSales ? (clone $documents)
+            ->whereIn('type', array_values(array_filter([
+                $user->hasPermission(Permission::Sales) ? 'sale' : null,
+                $user->hasPermission(Permission::Resales) ? 'resale' : null,
+            ])))
+            ->whereRaw('total > amount_paid')->with('contact:id,name,phone')->get() : new Collection;
+        $balances->load($customerDueSales);
+        $customerDueSales = $customerDueSales->filter(fn (Document $sale): bool => (float) $sale->balance_due > 0);
+        $recentDocuments = (clone $documents)
+            ->whereIn('type', $visibleTypes)->with('contact:id,name')->latest()->limit(6)
+            ->get(['id', 'contact_id', 'number', 'type', 'document_date', 'created_at', 'total'])
+            ->each(fn (Document $document) => $document->setAppends([]));
+
         return response()->json([
             'cash' => $cash,
             'products' => $products->count(),
@@ -328,24 +348,14 @@ class WorkspaceController extends Controller
             'low_stock' => $products->filter(fn (Product $product) => ! $product->stock_source_product_id && (float) $product->quantity_on_hand <= (float) $product->reorder_level)->count(),
             'sales_total' => $canViewSales ? (clone $documents)->whereIn('type', ['sale', 'resale'])->sum('total') - (clone $documents)->where('type', 'sale_return')->sum('total') : 0,
             'purchase_total' => $canViewPurchases ? (clone $documents)->where('type', 'purchase')->sum('total') : 0,
-            'recent_documents' => (clone $documents)->when($visibleTypes, fn ($query) => $query->whereIn('type', $visibleTypes), fn ($query) => $query->whereRaw('1 = 0'))->with('contact')->latest()->limit(6)->get(),
+            'recent_documents' => $recentDocuments,
             'low_stock_products' => $lowStockProducts,
             'monthly_totals' => $monthlyTotals->values(),
             'highest_selling_products' => $highestSellingProducts,
             'lowest_selling_products' => $lowestSellingProducts,
             'collection_alerts' => $collectionAlerts,
             'supplier_due_list' => $canViewPurchases ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->where('type', 'purchase')->whereRaw('amount_paid < total')->with('contact:id,name', 'purchaseReturns:id,purchase_id,total', 'saleReturns:id,sale_id,number,document_date,total,payment_method')->get()->map(fn (Document $purchase) => ['id' => $purchase->id, 'number' => $purchase->number, 'date' => $purchase->document_date, 'supplier' => $purchase->contact?->name, 'amount_due' => number_format(max(0, (float) $purchase->total - (float) $purchase->amount_paid - (float) $purchase->purchaseReturns->sum('total')), 2, '.', '')])->filter(fn (array $purchase) => (float) $purchase['amount_due'] > 0)->sortByDesc('amount_due')->take(8)->values() : collect(),
-            'customer_due_list' => $canViewSales ? Document::query()
-                ->where('organization_id', $organizationId)
-                ->where('branch_id', $branchId)
-                ->whereIn('type', array_values(array_filter([
-                    $user->hasPermission(Permission::Sales) ? 'sale' : null,
-                    $user->hasPermission(Permission::Resales) ? 'resale' : null,
-                ])))
-                ->whereRaw('total > amount_paid')
-                ->with('contact:id,name,phone')
-                ->get()
-                ->filter(fn (Document $sale) => (float) $sale->balance_due > 0)
+            'customer_due_list' => $customerDueSales
                 ->groupBy('contact_id')
                 ->map(fn ($sales) => [
                     'contact_id' => $sales->first()->contact_id,
@@ -354,8 +364,10 @@ class WorkspaceController extends Controller
                     'invoices_count' => $sales->count(),
                     'amount_due' => number_format($sales->sum(fn (Document $sale) => (float) $sale->balance_due), 2, '.', ''),
                     'oldest_due_date' => $sales->min('document_date'),
-                ])->sortByDesc(fn (array $row) => (float) $row['amount_due'])->take(8)->values() : collect(),
-            'overdue_customers' => $canViewSales ? Document::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->whereIn('type', array_values(array_filter([$user->hasPermission(Permission::Sales) ? 'sale' : null, $user->hasPermission(Permission::Resales) ? 'resale' : null])))->whereRaw('(total - amount_paid) > 0')->whereDate('document_date', '<=', today()->subDays(30))->with('contact:id,name,phone')->orderBy('document_date')->limit(8)->get()->map(fn (Document $sale) => ['id' => $sale->id, 'number' => $sale->number, 'date' => $sale->document_date, 'customer' => $sale->contact?->name, 'phone' => $sale->contact?->phone, 'amount_due' => $sale->balance_due, 'days_outstanding' => $sale->document_date->diffInDays(today())]) : collect(),
+                ])->sortByDesc(fn (array $row) => (float) $row['amount_due'])->take(8)->values(),
+            'overdue_customers' => $customerDueSales->filter(fn (Document $sale): bool => $sale->document_date->lte(today()->subDays(30)))
+                ->sortBy('document_date')->take(8)->values()
+                ->map(fn (Document $sale): array => ['id' => $sale->id, 'number' => $sale->number, 'date' => $sale->document_date, 'customer' => $sale->contact?->name, 'phone' => $sale->contact?->phone, 'amount_due' => $sale->balance_due, 'days_outstanding' => $sale->document_date->diffInDays(today())]),
         ]);
     }
 
