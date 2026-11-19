@@ -10,11 +10,51 @@ use App\Models\Product;
 use App\Models\User;
 use App\Permission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ProfitLossReportTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_profit_report_uses_two_aggregate_queries_for_large_invoice_history(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $product = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Report item', 'unit' => 'pc']);
+        $sale = $this->document($owner, $branch, 'sale', 'PERF-BASE', 100);
+        $base = $sale->getAttributes();
+        unset($base['id']);
+        $rows = [];
+        for ($index = 0; $index < 400; $index++) {
+            $rows[] = [...$base, 'number' => 'PERF-'.$index];
+        }
+        foreach (array_chunk($rows, 100) as $chunk) {
+            DB::table('documents')->insert($chunk);
+        }
+        $items = Document::where('organization_id', $owner->organization_id)->pluck('id')
+            ->map(fn ($id) => ['document_id' => $id, 'product_id' => $product->id, 'quantity' => 1, 'unit_price' => 100, 'cost_price' => 60, 'line_total' => 100])->all();
+        foreach (array_chunk($items, 100) as $chunk) {
+            DB::table('document_items')->insert($chunk);
+        }
+        $this->actingAs($owner);
+        DB::enableQueryLog();
+        try {
+            DB::flushQueryLog();
+            $started = microtime(true);
+            $response = $this->getJson('/api/reports?report=profit_loss&branch_id='.$branch->id);
+            $queries = collect(DB::getQueryLog())->filter(fn ($query) => str_contains(strtolower($query['query']), 'sum('))->values();
+            $elapsed = round((microtime(true) - $started) * 1000, 1);
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+
+        $response->assertOk()->assertJsonPath('summary.net_sales', 40100)
+            ->assertJsonPath('summary.cost_of_sales', 24060)->assertJsonPath('summary.net_profit', 16040);
+        $this->assertCount(2, $queries);
+        fwrite(STDERR, 'Profit report with 401 invoices: '.$elapsed.' ms, 2 aggregate queries.'.PHP_EOL);
+    }
 
     public function test_owner_can_compare_one_branch_with_all_branches_and_expenses_are_grouped_by_account(): void
     {
