@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Permission;
 use App\ReportType;
 use App\Services\CashBalanceService;
+use App\Services\DocumentBalanceLoader;
 use App\Services\DocumentDeletionService;
 use App\Services\InventoryService;
 use App\Services\PackageLimitService;
@@ -586,7 +587,7 @@ class WorkspaceController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function documents(Request $request): JsonResponse
+    public function documents(Request $request, DocumentBalanceLoader $balances): JsonResponse
     {
         $filters = $request->validate([
             'paginate' => ['sometimes', 'boolean'],
@@ -631,6 +632,8 @@ class WorkspaceController extends Controller
 
         if ($request->boolean('paginate')) {
             $results = $query->orderByDesc('document_date')->orderByDesc('id')->paginate($filters['per_page'] ?? 25);
+            $balances->load($results->getCollection());
+            $this->prepareInvoiceReferences($results->getCollection());
 
             return response()->json([
                 'data' => $results->items(),
@@ -639,7 +642,23 @@ class WorkspaceController extends Controller
             ]);
         }
 
-        return response()->json($query->latest()->get());
+        $documents = $query->latest()->get();
+        $balances->load($documents);
+        $this->prepareInvoiceReferences($documents);
+
+        return response()->json($documents);
+    }
+
+    private function prepareInvoiceReferences(Collection $documents): void
+    {
+        foreach ($documents as $document) {
+            foreach (['purchase', 'sale', 'purchaseReturns', 'saleReturns'] as $relation) {
+                $references = $document->getRelation($relation);
+                foreach ($references instanceof Collection ? $references : collect([$references])->filter() as $reference) {
+                    $reference->setAppends([]);
+                }
+            }
+        }
     }
 
     public function saveDocument(Request $request, InventoryService $inventory): JsonResponse
@@ -844,7 +863,14 @@ class WorkspaceController extends Controller
         $organizationId = $this->organizationId();
         $branchId = $this->branchId($request, $organizationId);
 
-        return response()->json(StockMovement::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)->with('branch', 'product', 'document')->when($request->query('product_id'), fn ($q, $id) => $q->where('product_id', $id))->latest()->limit(200)->get());
+        $movements = StockMovement::query()->where('organization_id', $organizationId)->where('branch_id', $branchId)
+            ->with('branch', 'product', 'document:id,number,type,document_date')
+            ->when($request->query('product_id'), fn ($q, $id) => $q->where('product_id', $id))->latest()->limit(200)->get();
+        foreach ($movements as $movement) {
+            $movement->document?->setAppends([]);
+        }
+
+        return response()->json($movements);
     }
 
     public function adjust(Request $request, int $product, InventoryService $inventory): JsonResponse

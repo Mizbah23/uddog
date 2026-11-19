@@ -51,6 +51,7 @@ class WarrantyController extends Controller
             ->get()
             ->map(function (DocumentItem $item) {
                 [$expiresAt, $status] = $this->warrantyStatus($item);
+                $item->document?->setAppends([]);
 
                 return [
                     'id' => $item->id,

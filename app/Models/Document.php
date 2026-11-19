@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\DocumentBalanceLoader;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Document extends TenantModel
@@ -10,9 +11,16 @@ class Document extends TenantModel
 
     protected $appends = ['stock_profit', 'total_profit', 'balance_due', 'payment_status', 'correction_version'];
 
+    private ?int $serializationBalanceDue = null;
+
     protected function casts(): array
     {
         return ['document_date' => 'date:Y-m-d', 'installment_start_date' => 'date:Y-m-d', 'first_installment_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount' => 'decimal:2', 'tax' => 'decimal:2', 'delivery_cost' => 'decimal:2', 'interest_rate' => 'decimal:2', 'interest_amount' => 'decimal:2', 'gold_exchange_weight' => 'decimal:3', 'gold_exchange_rate' => 'decimal:2', 'gold_exchange_value' => 'decimal:2', 'total' => 'decimal:2', 'amount_paid' => 'decimal:2', 'down_payment' => 'decimal:2'];
+    }
+
+    public function setBalanceDueForSerialization(int $balance): void
+    {
+        $this->serializationBalanceDue = $balance;
     }
 
     public function contact()
@@ -122,33 +130,10 @@ class Document extends TenantModel
     public function getBalanceDueAttribute(): string
     {
         if (in_array($this->type, ['sale', 'resale'], true)) {
-            $sales = self::query()->where('organization_id', $this->organization_id)
-                ->where('contact_id', $this->contact_id)->whereIn('type', ['sale', 'resale'])
-                ->orderBy('document_date')->orderBy('id')->get(['id', 'total', 'amount_paid']);
-            $balances = $sales->mapWithKeys(fn (self $sale): array => [
-                $sale->id => max(0, (int) round((float) $sale->total * 100) - (int) round((float) $sale->amount_paid * 100)),
-            ])->all();
-            $returns = self::query()->where('organization_id', $this->organization_id)
-                ->where('contact_id', $this->contact_id)->where('type', 'sale_return')
-                ->where(fn ($query) => $query->where('payment_method', 'credit')->orWhereNull('payment_method'))
-                ->get(['sale_id', 'total']);
-            $credit = 0;
-            foreach ($returns as $return) {
-                $amount = (int) round((float) $return->total * 100);
-                $applied = min($amount, $balances[$return->sale_id] ?? 0);
-                if (isset($balances[$return->sale_id])) {
-                    $balances[$return->sale_id] -= $applied;
-                }
-                $credit += $amount - $applied;
-            }
-            foreach ($balances as &$balance) {
-                $applied = min($credit, $balance);
-                $balance -= $applied;
-                $credit -= $applied;
-            }
-            unset($balance);
+            $balance = $this->serializationBalanceDue
+                ?? (app(DocumentBalanceLoader::class)->forContacts((int) $this->organization_id, [$this->contact_id])[$this->id] ?? 0);
 
-            return number_format(($balances[$this->id] ?? 0) / 100, 2, '.', '');
+            return number_format($balance / 100, 2, '.', '');
         }
 
         $purchaseReturns = $this->type === 'purchase'
