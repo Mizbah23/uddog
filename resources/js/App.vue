@@ -1,5 +1,6 @@
 <script setup>
 import BannerCarousel from './BannerCarousel.vue';
+import { createSaleFormLoader } from './saleFormData';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { installLocalization, translate } from './localization';
 import PosReceipt from './PosReceipt.vue';
@@ -76,6 +77,10 @@ const language = ref(localStorage.getItem('uddog-language') || 'en');
 const loading = ref(true);
 let workspaceDataBranchId = null;
 let workspaceDataRequest = null;
+const saleFormLoader = createSaleFormLoader(api);
+const saleFormLoading = ref(false);
+const saleFormError = ref('');
+let saleFormDataBranchId = null;
 function hasWorkspaceData() { return workspaceDataBranchId === String(activeBranchId.value); }
 const busy = ref(false);
 const error = ref('');
@@ -165,7 +170,7 @@ async function loadDocumentHistory(targetPage = 1) {
 watch([page, search, () => documentFilters.value.date_from, () => documentFilters.value.date_to], () => {
   clearTimeout(documentFilterTimer);
   if (!historyTypes.includes(page.value)) { documentRequestVersion++; documentLoading.value = false; return; }
-  if (!hasWorkspaceData()) return;
+  if (!hasWorkspaceData() && !(page.value === 'sale' && saleFormDataBranchId === String(activeBranchId.value))) return;
   documentRequestVersion++;
   documentHistory.value = [];
   documentLoading.value = true;
@@ -246,7 +251,7 @@ watch(page, async (next, previous) => {
 });
 watch(page, async next => {
   if (!session.value?.permissions?.use_workspace || loading.value || !activeBranchId.value) return;
-  if (next === 'dashboard' || (next === 'reports' && !hasWorkspaceData())) {
+  if (['dashboard', 'sale'].includes(next) || (next === 'reports' && !hasWorkspaceData())) {
     try { await refresh(); } catch (exception) { error.value = exception.message; }
   } else if (!hasWorkspaceData()) {
     clearTimeout(documentFilterTimer);
@@ -721,6 +726,8 @@ async function applySystemUpdate() {
 }
 
 async function refresh({ fullWorkspace = false } = {}) {
+  saleFormLoader.invalidate();
+  saleFormDataBranchId = null;
   const requests = [];
   let requestedBranchId = null;
   const requestedPage = page.value;
@@ -736,6 +743,11 @@ async function refresh({ fullWorkspace = false } = {}) {
     if (page.value === 'dashboard' && !fullWorkspace) {
       workspaceDataBranchId = null;
       if (hasAbility('dashboard')) overview.value = await api(`overview${selectedBranch ? `?branch_id=${selectedBranch.id}` : ''}`);
+      return;
+    }
+    if (page.value === 'sale' && !fullWorkspace) {
+      workspaceDataBranchId = null;
+      await Promise.all([ensureSaleFormData(), loadDocumentHistory(documentPagination.value.page)]);
       return;
     }
     if (!fullWorkspace && isReportView.value && ['supplier_tt', 'product_ledger', 'product_lifecycle_ledger', 'general_ledger', 'profit_loss', 'cash_movement'].includes(reportKind.value)) {
@@ -789,6 +801,16 @@ async function refresh({ fullWorkspace = false } = {}) {
   if (session.value?.permissions?.use_workspace && session.value?.permissions?.manage_system_setup) requests.push(api('system-setup').then(data => { systemSetup.value = data; }));
   await Promise.all(requests);
   if (requestedBranchId === String(activeBranchId.value) && requestedPage === page.value) workspaceDataBranchId = requestedBranchId;
+}
+async function ensureSaleFormData() {
+  if (hasWorkspaceData() || saleFormDataBranchId === String(activeBranchId.value)) return;
+  const branchId = String(activeBranchId.value);
+  const data = await saleFormLoader.load(branchId, { goldStore: Boolean(session.value?.gold_store) });
+  if (branchId !== String(activeBranchId.value)) throw new Error('The active branch changed. Please reopen the sale.');
+  products.value = data.products;
+  contacts.value = data.contacts;
+  if (session.value?.gold_store) goldRates.value = data.goldRates;
+  saleFormDataBranchId = branchId;
 }
 async function ensureWorkspaceData() {
   if (hasWorkspaceData()) return true;
@@ -1573,7 +1595,7 @@ function openContact(contact = null, context = '') {
   modal.value = 'contact';
 }
 async function openDocument(type = page.value) {
-  if (!await ensureWorkspaceData()) return;
+  if (type !== 'sale' && !await ensureWorkspaceData()) return;
   if (['resale', 'purchase_return', 'sale_return'].includes(type)) {
     try { documentReferences.value = await api(`documents?branch_id=${activeBranchId.value}`); }
     catch (e) { error.value = e.message; return; }
@@ -1582,7 +1604,21 @@ async function openDocument(type = page.value) {
   clearMessages();
   documentCreateContext.value = '';
   documentForm.value = { type, contact_id: type === 'sale' ? soleDefaultCustomerId.value : type === 'purchase' ? soleSupplierId.value : '', purchase_id: '', sale_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', amount_paid: '0', payment_method: ['sale_return', 'purchase_return'].includes(type) ? 'credit' : (session.value?.operational_setup?.sales?.default_payment_method || 'cash'), down_payment: '0', interest_rate: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', gold_exchange_weight: '0', gold_exchange_purity: '22K', notes: '', items: [{ product_id: '', quantity: 1, unit_price: '0.00' }] };
+  saleFormError.value = '';
+  saleFormLoading.value = false;
   modal.value = 'document';
+  if (type === 'sale') {
+    const form = documentForm.value;
+    saleFormLoading.value = true;
+    try {
+      await ensureSaleFormData();
+      if (documentForm.value === form && !form.contact_id) form.contact_id = soleDefaultCustomerId.value;
+    } catch (exception) {
+      if (documentForm.value === form) saleFormError.value = exception.message;
+    } finally {
+      if (documentForm.value === form) saleFormLoading.value = false;
+    }
+  }
 }
 function openInvoice(document) {
   invoicePdfError.value = '';
@@ -2137,6 +2173,7 @@ async function completePosSale() {
   } catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 async function saveDocument() {
+  if (saleFormLoading.value || saleFormError.value) return;
   error.value = ''; busy.value = true;
   try {
     const result = await api('documents', { method: 'POST', body: { ...documentForm.value, branch_id: activeBranchId.value } });
@@ -3136,7 +3173,10 @@ async function stopSupportSession() {
       </form>
       <form v-else-if="modal === 'client'" @submit.prevent="saveClient"><div class="form-grid"><label class="field"><span>Company name *</span><input v-model="clientForm.name" required placeholder="Business name"></label><label class="field"><span>Named subdomain (optional)</span><input v-model="clientForm.subdomain" maxlength="63" pattern="[a-zA-Z][a-zA-Z0-9-]*" placeholder="demo" autocapitalize="none" spellcheck="false"><small>Leave blank for the numeric company address. A name also keeps the numeric address available.</small></label><label class="field"><span>Subscription plan</span><select v-model="clientForm.plan_name" @change="selectSubscriptionPlan"><option v-if="!clientForm.plan_name" value="" disabled>Select a plan</option><option v-else-if="!subscriptionPlans.includes(clientForm.plan_name)" :value="clientForm.plan_name" disabled>{{ clientForm.plan_name }} · existing plan</option><option v-for="plan in subscriptionPlans" :key="plan" :value="plan">{{ plan }}</option></select></label><label class="field"><span>Subscription status *</span><select v-model="clientForm.subscription_status" required><option value="trial">Trial</option><option value="active">Active</option><option value="past_due">Past due</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select></label><label class="field"><span>Valid until</span><input v-model="clientForm.subscription_ends_at" type="date"></label><label class="field"><span>{{ translate('Annual Renew Fee', language) }} (৳)</span><input v-model="clientForm.annual_renew_fee" type="number" min="0" max="9999999999.99" step="0.01" :placeholder="translate('Select a plan to fill the renewal fee', language)"><small>{{ translate('Filled from the selected package. You can set a custom annual fee.', language) }}</small></label><div class="form-section-title span-2">{{ translate('Company package limits', language) }}</div><p v-if="clientForm.subdomain?.toLowerCase() === 'demo'" class="payment-plan-note span-2">{{ translate('The demo company is exempt from package limits.', language) }}</p><template v-else><label class="field"><span>{{ translate('Active branch limit', language) }}</span><input v-model="clientForm.package_limits.branches" type="number" min="1" max="1000000" step="1" :placeholder="translate('Unlimited', language)"></label><label class="field"><span>{{ translate('Active user limit (including owner)', language) }}</span><input v-model="clientForm.package_limits.users" type="number" min="1" max="1000000" step="1" :placeholder="translate('Unlimited', language)"></label><label class="field span-2"><span>{{ translate('Sales invoice limit', language) }}</span><input v-model="clientForm.package_limits.sale_invoices" type="number" min="1" max="2147483647" step="1" :placeholder="translate('Unlimited', language)"></label><div class="span-2"><button type="button" class="btn-secondary-app small" @click="resetPackageLimits">{{ translate('Reset package defaults', language) }}</button><p class="branch-access-help">{{ translate('These limits apply only to this company. Leave a limit blank for unlimited. Downgrades keep existing records and block additions above the allowance. Deleting invoices frees invoice slots; deactivating users frees user slots.', language) }}</p></div></template><label class="field checkbox-field span-2"><input v-model="clientForm.gold_store" type="checkbox"><span>Enable gold-store system — weight-based products, metal rates, jewelry sales, old-gold exchange, and goldsmith jobs</span></label><label v-if="editingId" class="field checkbox-field span-2"><input v-model="clientForm.shared_stock_sales" type="checkbox"><span>Enable shared stock sales — sell multiple product names from one stock product</span><small>Only selected companies can link sales products to a shared stock source. Existing links are retained if this is turned off.</small></label><label class="field checkbox-field span-2"><input v-model="clientForm.ecommerce_enabled" type="checkbox" role="switch"><span>Enable e-commerce</span></label><label class="field checkbox-field span-2"><input v-model="clientForm.ecommerce_pack_sizes" type="checkbox"><span>Show other pack sizes on the storefront</span></label><div class="form-section-title span-2">Owner administrator</div><label class="field"><span>Owner name *</span><input v-model="clientForm.owner_name" required placeholder="Full name"></label><label class="field"><span>Owner email{{ clientForm.owner_mobile ? '' : ' *' }}</span><input v-model.trim="clientForm.owner_email" type="email" :required="!clientForm.owner_mobile" maxlength="255" placeholder="owner@company.com" autocomplete="email"></label><label class="field"><span>Owner phone number{{ clientForm.owner_email ? '' : ' *' }}</span><input v-model.trim="clientForm.owner_mobile" type="tel" inputmode="tel" :required="!clientForm.owner_email" maxlength="30" pattern="\+?[0-9]{7,15}" placeholder="01712345678" autocomplete="tel"><small>Enter an email address, a phone number, or both. The owner can sign in with either.</small></label><label class="field" :class="{ 'span-2': !editingId }"><span>{{ clientForm.owner_exists ? 'New owner password (optional)' : 'Temporary password *' }}</span><input v-model="clientForm.owner_password" type="password" :required="!clientForm.owner_exists" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label><label v-if="editingId" class="field checkbox-field"><input v-model="clientForm.owner_active" type="checkbox"><span>Owner account active</span></label><label class="field span-2"><span>Support notes</span><textarea v-model="clientForm.notes" rows="3" placeholder="Subscription or company support notes"></textarea></label></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy">{{ busy ? 'Saving...' : editingId ? 'Save company and owner' : 'Create company and owner' }}</button></div></form>
       <form v-else-if="modal === 'user'" @submit.prevent="saveUser"><div class="form-grid"><label class="field"><span>Full name *</span><input v-model="userForm.name" required autocomplete="name" placeholder="User name"></label><label class="field"><span>Email address{{ userForm.role === 'superadmin' || !userForm.mobile ? ' *' : '' }}</span><input v-model.trim="userForm.email" type="email" :required="userForm.role === 'superadmin' || !userForm.mobile" maxlength="255" autocomplete="email" placeholder="name@company.com"></label><label class="field"><span>Phone number{{ userForm.role !== 'superadmin' && !userForm.email ? ' *' : '' }}</span><input v-model.trim="userForm.mobile" type="tel" inputmode="tel" :required="userForm.role !== 'superadmin' && !userForm.email" maxlength="30" pattern="\+?[0-9]{7,15}" autocomplete="tel" placeholder="01712345678"></label><label class="field"><span>{{ editingId ? 'New password (optional)' : 'Password *' }}</span><input v-model="userForm.password" type="password" :required="!editingId" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label><label class="field"><span>Role *</span><select v-model="userForm.role" required><option v-if="session.user.role === 'superadmin'" value="superadmin">Superadmin</option><option v-if="session.user.role === 'superadmin'" value="admin">Owner admin</option><option value="manager">Manager</option><option value="staff">Staff</option></select></label><label v-if="session.user.role === 'superadmin' && userForm.role !== 'superadmin'" class="field"><span>Company *</span><select v-model="userForm.organization_id" required><option value="" disabled>Select a company</option><option v-for="client in clients" :key="client.id" :value="client.id">{{ client.name }}</option></select></label><label class="field checkbox-field"><input v-model="userForm.active" type="checkbox"><span>Active user</span></label><template v-if="['manager', 'staff'].includes(userForm.role)"><div class="form-section-title span-2">Allowed branches *</div><div class="branch-access-grid span-2"><label v-for="branch in branches.filter(branch => branch.active)" :key="branch.id" class="branch-access-option"><input v-model="userForm.branch_ids" type="checkbox" :value="branch.id"><span class="product-avatar category-avatar"><MapPin :size="16" /></span><span><strong>{{ branch.name }}</strong><small>{{ branch.code }}</small></span></label></div><p class="branch-access-help span-2">This user can view and operate only in the selected branches. Select every branch they should be able to use.</p></template><template v-if="userForm.role !== 'superadmin'"><div class="form-section-title span-2">Workspace permissions</div><div class="permission-grid span-2"><label v-for="permission in permissionOptions" :key="permission.value" class="permission-option"><input v-model="userForm.permissions" type="checkbox" :value="permission.value"><span>{{ permission.label }}</span></label></div><p v-if="userForm.role === 'admin'" class="branch-access-help span-2">Owner admins retain user and system setup management.</p></template><section v-if="userForm.role !== 'superadmin'" class="user-report-preview span-2"><div class="user-report-preview-head"><strong>Report access</strong><span>{{ userAccessibleReports.length }} of {{ reportKinds.length }} selected</span></div><p>Choose which reports this user can open. First select a related workspace permission above.</p><div class="permission-grid report-permission-grid"><label v-for="report in reportKinds" :key="report.id" class="permission-option" :class="{ 'report-permission-locked': !canGrantReport(report) }" :title="canGrantReport(report) ? '' : 'Select a related workspace permission above first.'"><input v-model="userForm.report_permissions" type="checkbox" :value="report.id" :disabled="!canGrantReport(report)"><span>{{ report.label }}</span></label></div></section></div><div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy">{{ busy ? 'Saving...' : 'Save user and access' }}</button></div></form>
-      <form v-else @submit.prevent="saveDocument">
+      <form v-else @submit.prevent="saveDocument" :aria-busy="saleFormLoading">
+        <p v-if="saleFormLoading" class="payment-plan-note" role="status">{{ language === 'bn' ? 'পণ্য ও ক্রেতার তথ্য লোড হচ্ছে…' : 'Loading products and customers…' }}</p>
+        <div v-if="saleFormError" class="alert-box error" role="alert">{{ saleFormError }} <button type="button" class="btn-secondary-app small" @click="openDocument('sale')">{{ language === 'bn' ? 'আবার চেষ্টা করুন' : 'Try again' }}</button></div>
+        <fieldset :disabled="saleFormLoading || Boolean(saleFormError)" style="border: 0; padding: 0; margin: 0; min-width: 0;">
         <section v-if="session.gold_store && ['sale', 'resale'].includes(documentForm.type)" class="payment-terms-card gold-exchange-card"><div><span class="eyebrow">GOLD EXCHANGE</span><h3>Old gold received from customer</h3></div><div class="form-grid"><label class="field"><span>Weight (g)</span><input v-model="documentForm.gold_exchange_weight" type="number" min="0" step="0.001"></label><label class="field"><span>Purity</span><select v-model="documentForm.gold_exchange_purity"><option v-for="rate in goldRates.filter(rate => rate.metal === 'gold')" :key="rate.id" :value="rate.purity">{{ rate.purity }} · {{ money(rate.rate_per_gram) }}/g</option></select></label><div class="payment-plan-note span-2">Estimated exchange credit: {{ money(goldExchangeAmount) }}. The system locks the branch rate and reduces the customer’s balance.</div></div></section>
         <div class="form-grid">
           <label v-if="documentForm.type === 'purchase_return'" class="field span-2"><span>Original purchase *</span><select v-model="documentForm.purchase_id" required @change="choosePurchase"><option value="" disabled>Select a purchase</option><option v-for="purchase in purchaseOptions" :key="purchase.id" :value="purchase.id">{{ purchase.number }} · {{ purchase.contact?.name }} · {{ date(purchase.document_date) }}</option></select></label>
@@ -3160,7 +3200,8 @@ async function stopSupportSession() {
         </div></section>
         <section v-if="session.operational_setup?.store?.allow_cash_handover && ['sale_return', 'purchase_return'].includes(documentForm.type)" class="payment-terms-card"><div><span class="eyebrow">{{ language === 'bn' ? 'নগদ সমন্বয়' : 'CASH RECONCILIATION' }}</span><h3>{{ documentForm.type === 'sale_return' ? (language === 'bn' ? 'ক্রেতাকে কীভাবে ফেরত দেওয়া হয়েছে?' : 'How was the customer refunded?') : (language === 'bn' ? 'সরবরাহকারী কীভাবে ফেরত দিয়েছেন?' : 'How did the supplier refund you?') }}</h3></div><label class="field"><span>{{ language === 'bn' ? 'ফেরতের পদ্ধতি' : 'Refund method' }} *</span><select v-model="documentForm.payment_method" required><option value="credit">{{ language === 'bn' ? 'নগদ লেনদেন হয়নি / বকেয়ায় সমন্বয়' : 'No cash exchanged / credit adjustment' }}</option><option value="cash">{{ language === 'bn' ? 'নগদ' : 'Cash' }}</option><option value="card">Card</option><option value="mobile_banking">Mobile banking</option><option value="bank_transfer">Bank transfer</option></select><small>{{ language === 'bn' ? 'নগদ বেছে নিলে সম্পূর্ণ ফেরতের টাকা এই ব্যবহারকারীর হাতে নগদে যোগ বা বিয়োগ হবে।' : 'Selecting cash records the full return amount as cash received or paid by you.' }}</small></label></section>
         <div class="document-bottom"><label class="field notes-field"><span>Notes</span><textarea v-model="documentForm.notes" rows="3" placeholder="Optional transaction notes"></textarea></label><div class="totals-box"><div><span>Subtotal</span><strong>{{ money(docSubtotal) }}</strong></div><label><span>Discount</span><input v-model="documentForm.discount" type="number" min="0" step="0.01"></label><label><span>Tax</span><input v-model="documentForm.tax" type="number" min="0" step="0.01"></label><div v-if="docInterestAmount > 0" class="total-interest"><span>Interest charge</span><strong>{{ money(docInterestAmount) }}</strong></div><div class="grand-total"><span>Total</span><strong>{{ money(docTotal) }}</strong></div></div></div>
-        <div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy || docTotal < 0 || !documentCanSave">{{ busy ? 'Saving...' : `Save ${label(documentForm.type).toLowerCase()}` }}</button></div>
+        </fieldset>
+        <div class="modal-actions"><button type="button" class="btn-secondary-app" @click="closeModal()">Cancel</button><button class="btn-primary-app" :disabled="busy || saleFormLoading || Boolean(saleFormError) || docTotal < 0 || !documentCanSave">{{ busy ? 'Saving...' : `Save ${label(documentForm.type).toLowerCase()}` }}</button></div>
       </form>
     </div></div>
   </div>
