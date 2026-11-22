@@ -113,12 +113,12 @@ class TenantOperationsTest extends TestCase
             $this->assertSame(1, DB::connection('tenant')->table('sale_corrections')->where('organization_id', $company->id)->count());
             $this->assertSame(3, (int) DB::connection('tenant')->table('product_stocks')->value('quantity_on_hand'));
         });
-        $company->update(['ecommerce_enabled' => true]);
+        $company->update(['ecommerce_enabled' => true, 'system_settings' => ['ecommerce' => ['delivery_areas' => [['name' => 'Tenant area', 'charge' => 0]]]]]);
         $this->putJson('http://'.$company->id.'.test/api/products/'.$product['id'].'/ecommerce', ['ecommerce_visible' => true])->assertOk();
         $this->getJson('http://'.$company->id.'.test/online-store/catalog')->assertOk()->assertJsonPath('products.0.id', $product['id'])->assertJsonPath('products.0.in_stock', true);
         $this->postJson('http://'.$company->id.'.test/online-store/orders', [
             'checkout_token' => (string) Str::uuid(), 'customer_name' => 'Tenant online customer', 'phone' => '01712345678',
-            'address' => 'Tenant delivery address', 'expected_total' => 20, 'items' => [['product_id' => $product['id'], 'quantity' => 1]],
+            'address' => 'Tenant delivery address', 'delivery_area' => 'Tenant area', 'expected_total' => 20, 'items' => [['product_id' => $product['id'], 'quantity' => 1]],
         ])->assertCreated();
         $this->assertSame(0, DB::connection('sqlite')->table('ecommerce_orders')->count());
         $this->assertSame(0, DB::connection('sqlite')->table('package_usages')->count());

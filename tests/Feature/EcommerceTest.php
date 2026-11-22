@@ -22,7 +22,7 @@ class EcommerceTest extends TestCase
     {
         config(['tenancy.base_domain' => 'uddog-soft.com']);
         $owner = User::factory()->admin()->create();
-        $owner->organization->update(['subdomain' => 'liton', 'ecommerce_enabled' => true, 'phone' => '01712345678', 'address' => 'Liton Market, Dhaka']);
+        $owner->organization->update(['subdomain' => 'liton', 'ecommerce_enabled' => true, 'phone' => '01712345678', 'address' => 'Liton Market, Dhaka', 'system_settings' => ['ecommerce' => ['delivery_areas' => [['name' => 'Dhaka', 'charge' => 0]]]]]);
         $product = Product::create(['organization_id' => $owner->organization_id, 'name' => 'Online product', 'unit' => 'pc', 'cost_price' => 10, 'sale_price' => 25, 'active' => true, 'ecommerce_visible' => true, 'quantity_on_hand' => 20]);
 
         return [$owner, $product];
@@ -30,7 +30,7 @@ class EcommerceTest extends TestCase
 
     private function checkout(Product $product): array
     {
-        return ['checkout_token' => (string) Str::uuid(), 'customer_name' => 'Online Customer', 'phone' => '01812345678', 'address' => 'Dhaka delivery address', 'expected_total' => '50.00', 'items' => [['product_id' => $product->id, 'quantity' => 2]]];
+        return ['checkout_token' => (string) Str::uuid(), 'customer_name' => 'Online Customer', 'phone' => '01812345678', 'address' => 'Dhaka delivery address', 'delivery_area' => 'Dhaka', 'expected_total' => '50.00', 'items' => [['product_id' => $product->id, 'quantity' => 2]]];
     }
 
     public function test_order_flags_are_private_and_match_phone_variants_within_the_store(): void
@@ -88,22 +88,27 @@ class EcommerceTest extends TestCase
             : Http::response(['consignment' => ['consignment_id' => 42, 'tracking_code' => 'SFR-42']])]);
 
         $setup = $owner->organization->setup();
-        $setup['ecommerce']['delivery_cost'] = 60.25;
+        $setup['ecommerce']['delivery_areas'] = [['name' => 'Dhaka', 'charge' => 60.25], ['name' => 'Savar', 'charge' => 90]];
         $this->actingAs($owner)->putJson('/api/system-setup', $setup)
-            ->assertOk()->assertJsonPath('ecommerce.delivery_cost', 60.25);
+            ->assertOk()->assertJsonPath('ecommerce.delivery_areas.0.charge', 60.25);
         $this->getJson('http://liton.uddog-soft.com/online-store/catalog')
-            ->assertOk()->assertJsonPath('store.appearance.delivery_cost', 60.25);
+            ->assertOk()->assertJsonPath('store.appearance.delivery_areas.0.charge', 60.25);
 
         $checkout = $this->checkout($product);
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$checkout, 'delivery_area' => 'Unknown'])
+            ->assertUnprocessable()->assertJsonValidationErrors('delivery_area');
+        $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$checkout, 'delivery_area' => 'Savar', 'expected_total' => '110.25'])
+            ->assertUnprocessable()->assertJsonValidationErrors('items');
         $this->postJson('http://liton.uddog-soft.com/online-store/orders', $checkout)
             ->assertUnprocessable()->assertJsonValidationErrors('items');
         $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$checkout, 'expected_total' => '110.25'])
             ->assertCreated();
         $order = EcommerceOrder::firstOrFail();
         $this->assertSame('60.25', $order->delivery_cost);
+        $this->assertStringEndsWith(', Dhaka', $order->address);
         $this->assertSame('110.25', $order->total);
 
-        $setup['ecommerce']['delivery_cost'] = 80;
+        $setup['ecommerce']['delivery_areas'][0]['charge'] = 80;
         $this->putJson('/api/system-setup', $setup)->assertOk();
         $this->postJson('http://liton.uddog-soft.com/online-store/orders', [...$checkout, 'expected_total' => '110.25'])
             ->assertCreated()->assertJsonPath('number', $order->number);
