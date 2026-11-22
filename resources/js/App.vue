@@ -439,7 +439,7 @@ function resetEcommerceAppearance() {
   removedHeroImages.value = [...new Set([...(systemSetup.value.ecommerce.hero_images ?? []), ...removedHeroImages.value])];
   systemSetup.value.ecommerce = {
     name: '', hero: '', subtitle: '', primary_color: '#173e36', hero_color: '#f0eee4',
-    accent_color: '#b7794a', logo_url: null, delivery_cost: systemSetup.value.ecommerce.delivery_cost ?? 0,
+    accent_color: '#b7794a', logo_url: null, delivery_areas: systemSetup.value.ecommerce.delivery_areas ?? [],
   };
 }
 
@@ -2918,13 +2918,17 @@ async function stopSupportSession() {
                   <small>{{ logoFile?.name || 'PNG, JPG or WebP · Up to 2 MB' }} · Also used as the browser tab icon.</small>
                 </div>
               </div>
-              <div class="setup-company-fields setup-ecommerce-fields">
-                <label class="field">
-                  <span>Delivery cost (BDT)</span>
-                  <input v-model.number="systemSetup.ecommerce.delivery_cost" type="number" min="0" max="999999.99" step="0.01" required>
-                  <small>Charged once per order. Set to 0 for free delivery.</small>
-                </label>
-              </div>
+              <fieldset class="setup-ecommerce-palette">
+                <legend>Delivery areas</legend>
+                <p class="payment-plan-note">Customers choose a delivery area at checkout. Enter 0 for free delivery in an area.</p>
+                <p v-if="!systemSetup.ecommerce.delivery_areas.length" class="payment-plan-note">Add a delivery area to enable online checkout.</p>
+                <div v-for="(area, index) in systemSetup.ecommerce.delivery_areas" :key="index" class="setup-company-fields setup-ecommerce-fields">
+                  <label class="field"><span>Area name</span><input v-model.trim="area.name" maxlength="100" required placeholder="e.g. Mirpur"></label>
+                  <label class="field"><span>Delivery charge (BDT)</span><input v-model.number="area.charge" type="number" min="0" max="999999.99" step="0.01" required></label>
+                  <button type="button" class="btn-secondary-app small" @click="systemSetup.ecommerce.delivery_areas.splice(index, 1)">Remove area</button>
+                </div>
+                <button type="button" class="btn-secondary-app" :disabled="systemSetup.ecommerce.delivery_areas.length >= 100" @click="systemSetup.ecommerce.delivery_areas.push({ name: '', charge: '' })"><Plus :size="16" /> Add delivery area</button>
+              </fieldset>
               <fieldset class="setup-ecommerce-palette">
                 <legend>Hero carousel</legend>
                 <label class="field setup-hero-upload">

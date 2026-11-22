@@ -313,6 +313,7 @@ class EcommerceController extends Controller
         $data = $request->validate([
             'checkout_token' => ['required', 'uuid'], 'customer_name' => ['required', 'string', 'max:100'],
             'phone' => ['required', 'string', 'regex:/\A\+?[0-9]{7,15}\z/D'], 'address' => ['required', 'string', 'max:1000'],
+            'delivery_area' => ['required', 'string', 'max:100'],
             'notes' => ['nullable', 'string', 'max:1000'], 'expected_total' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
             'items' => ['required', 'array', 'min:1', 'max:50'], 'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0', 'max:999999', 'decimal:0,3'],
@@ -325,7 +326,12 @@ class EcommerceController extends Controller
             }
             $items = [];
             $requestedStock = [];
-            $deliveryCost = Organization::query()->findOrFail($organization->id)->setup()['ecommerce']['delivery_cost'];
+            $deliveryAreas = Organization::query()->findOrFail($organization->id)->setup()['ecommerce']['delivery_areas'];
+            $deliveryArea = collect($deliveryAreas)->firstWhere('name', '===', $data['delivery_area']);
+            if (! $deliveryArea) {
+                throw ValidationException::withMessages(['delivery_area' => 'This delivery area is unavailable. Refresh the store and select an available area.']);
+            }
+            $deliveryCost = $deliveryArea['charge'];
             $total = (int) round((float) $deliveryCost * 100);
             foreach ($data['items'] as $item) {
                 $product = Product::query()->where('organization_id', $organization->id)->where('active', true)
@@ -363,7 +369,7 @@ class EcommerceController extends Controller
             return EcommerceOrder::create([
                 'organization_id' => $organization->id, 'branch_id' => $branch->id, 'checkout_token' => $data['checkout_token'],
                 'number' => $number, 'customer_name' => $data['customer_name'], 'phone' => $data['phone'],
-                'address' => $data['address'], 'notes' => $data['notes'] ?? null, 'items' => $items,
+                'address' => $data['address'].', '.$deliveryArea['name'], 'notes' => $data['notes'] ?? null, 'items' => $items,
                 'delivery_cost' => $deliveryCost, 'total' => number_format($total / 100, 2, '.', ''), 'status' => 'pending',
             ]);
         });
