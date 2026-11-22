@@ -2908,7 +2908,7 @@ async function stopSupportSession() {
                     <span class="setup-branding-preview">
                       <img v-if="logoPreview || systemSetup.ecommerce.logo_url"
                         :src="logoPreview || systemSetup.ecommerce.logo_url"
-                        alt="Store logo preview" referrerpolicy="no-referrer">
+                        :alt="translate('Store logo preview', language)" referrerpolicy="no-referrer">
                       <ShoppingBag v-else :size="20" aria-hidden="true" />
                     </span>
                     <input id="store-logo-upload" type="file" accept="image/png,image/jpeg,image/webp" :disabled="busy" @change="selectLogoFile">
@@ -2941,7 +2941,7 @@ async function stopSupportSession() {
                   :images="heroPreviewImages" :language="language" :label="translate('Carousel preview', language)" />
                 <div class="setup-hero-previews">
                   <div v-for="(url, index) in savedHeroImages" :key="url">
-                    <img :src="url" :alt="`Saved banner ${index + 1}`">
+                    <img :src="url" :alt="`${translate('Saved banner', language)} ${(index + 1).toLocaleString(language === 'bn' ? 'bn-BD' : 'en')}`">
                     <button type="button" class="btn-secondary-app" :disabled="busy" @click="removedHeroImages.push(url)">Remove</button>
                   </div>
                   <div v-for="({ preview, file }, index) in heroUploads" :key="preview">
