@@ -1,4 +1,11 @@
 const bangla = {
+    'Overall discount': 'মোট ছাড়',
+    'Discount (%)': 'ছাড় (%)',
+    'Discount amount': 'ছাড়ের পরিমাণ',
+    'Show discount and tax on sales invoices': 'বিক্রয় চালানে ছাড় ও কর দেখান',
+    'Show these rows on the web invoice and downloaded PDF.': 'ওয়েব চালান ও ডাউনলোড করা পিডিএফে এই সারিগুলো দেখান।',
+    'Enter unit prices manually': 'একক মূল্য নিজে লিখুন',
+    'Leave the unit price blank when selecting a product in New Sale.': 'নতুন বিক্রয়ে পণ্য বেছে নিলে একক মূল্যের ঘর খালি থাকবে।',
     'Backup': 'ব্যাকআপ',
     'E-commerce': 'ই-কমার্স',
     'E-commerce appearance': 'ই-কমার্সের নকশা',
