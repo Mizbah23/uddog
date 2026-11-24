@@ -1,4 +1,5 @@
 const bangla = {
+    'Backup': 'ব্যাকআপ',
     'E-commerce': 'ই-কমার্স',
     'E-commerce appearance': 'ই-কমার্সের নকশা',
     'Customize your online store. Leave text blank to use the default.': 'আপনার অনলাইন দোকানের নকশা সাজান। ডিফল্ট লেখা ব্যবহার করতে ঘর খালি রাখুন।',

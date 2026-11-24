@@ -2504,6 +2504,10 @@ async function stopSupportSession() {
         <template v-for="item in nav" :key="item.id">
           <button class="nav-item-app" :class="{ active: page === item.id }" :aria-current="page === item.id ? 'page' : undefined" @click="navigate(item.id)"><component :is="item.icon" :size="18" :stroke-width="1.9" /><span>{{ item.label }}</span><span v-if="item.id === 'ecommerce_orders' && onlineOrderCount > 0" class="online-order-count" :aria-label="`${onlineOrderCount} orders awaiting admin action`">{{ onlineOrderCount }}</span><span v-if="item.id === 'purchase_return'" class="nav-spacer"></span></button>
         </template>
+        <a v-if="session.user.role === 'admin' && session.permissions.use_workspace && !session.impersonation"
+          class="nav-item-app" href="/api/store-backup" download>
+          <Download :size="18" :stroke-width="1.9" /><span>{{ translate('Backup', language) }}</span>
+        </a>
       </nav>
       <div class="sidebar-bottom"><div class="sidebar-help"><div class="help-icon"><component :is="session.user.role === 'superadmin' && !session.impersonation ? Building2 : Boxes" :size="20" /></div><strong>{{ session.user.role === 'superadmin' && !session.impersonation ? 'Subscription control' : 'Inventory at a glance' }}</strong><p>{{ session.user.role === 'superadmin' && !session.impersonation ? 'Manage companies, validity and owner support.' : 'Track every movement from purchase to sale.' }}</p></div><div class="sidebar-user"><div class="avatar">{{ initial(session.user.name) }}</div><div class="user-copy"><strong>{{ session.user.name }}</strong><span>{{ roleLabel(session.user.role) }}</span></div><button class="icon-button" title="Sign out" @click="logout"><LogOut :size="18" /></button></div></div>
     </aside>

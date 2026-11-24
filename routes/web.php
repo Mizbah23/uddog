@@ -18,6 +18,7 @@ use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StockCheckController;
 use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\StoreBackupController;
 use App\Http\Controllers\SupplierAdvanceController;
 use App\Http\Controllers\SupportImpersonationController;
 use App\Http\Controllers\SystemSetupController;
@@ -57,6 +58,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
         Route::delete('support-session', [SupportImpersonationController::class, 'destroy']);
 
         Route::middleware('subscribed')->group(function () {
+            Route::get('store-backup', StoreBackupController::class)->middleware(['role:admin', 'throttle:3,1']);
             Route::get('ecommerce/orders', [EcommerceController::class, 'orders'])->middleware(['role:admin', 'permission:sales']);
             Route::get('ecommerce/flagged-customers', [EcommerceController::class, 'flaggedCustomers'])->middleware(['role:admin', 'permission:sales']);
             Route::put('ecommerce/orders/{order}/flag', [EcommerceController::class, 'updateOrderFlag'])->whereNumber('order')->middleware(['role:admin', 'permission:sales']);
