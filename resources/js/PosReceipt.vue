@@ -1,5 +1,6 @@
 <script setup>
 defineProps({
+  showDiscountTax: { type: Boolean, default: true },
   document: { type: Object, required: true },
   organizationName: { type: String, required: true },
   cashierName: { type: String, required: true },
@@ -42,8 +43,8 @@ defineProps({
 
     <div class="receipt-section receipt-totals">
       <div><span>Subtotal</span><strong>{{ money(document.subtotal) }}</strong></div>
-      <div v-if="Number(document.discount) > 0"><span>Discount</span><strong>-{{ money(document.discount) }}</strong></div>
-      <div v-if="Number(document.tax) > 0"><span>Tax</span><strong>{{ money(document.tax) }}</strong></div>
+      <div v-if="showDiscountTax && Number(document.discount) > 0"><span>Discount</span><strong>-{{ money(document.discount) }}</strong></div>
+      <div v-if="showDiscountTax && Number(document.tax) > 0"><span>Tax</span><strong>{{ money(document.tax) }}</strong></div>
       <div v-if="Number(document.interest_amount) > 0"><span>Interest charge</span><strong>{{ money(document.interest_amount) }}</strong></div>
       <div class="receipt-grand-total"><span>Total</span><strong>{{ money(document.total) }}</strong></div>
       <div><span>Sale payment type</span><strong>{{ paymentTypeLabel(document.payment_type) }}</strong></div>

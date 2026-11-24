@@ -62,6 +62,8 @@ class Organization extends Model
         return [
             'sales' => array_replace([
                 'allow_due_sales' => true,
+                'manual_unit_price' => false,
+                'show_invoice_discount_tax' => true,
                 'allow_installment_sales' => true,
                 'allow_sales_returns' => true,
                 'allow_resales' => true,

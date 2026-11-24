@@ -53,7 +53,9 @@ class SystemSetupController extends Controller
             'company.name' => ['required_with:company', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($organization)],
             'company.phone' => ['nullable', 'string', 'max:50'],
             'company.address' => ['nullable', 'string', 'max:1000'],
-            'sales' => ['required', 'array:allow_due_sales,allow_installment_sales,allow_sales_returns,allow_resales,default_payment_method'],
+            'sales' => ['required', 'array:show_invoice_discount_tax,manual_unit_price,allow_due_sales,allow_installment_sales,allow_sales_returns,allow_resales,default_payment_method'],
+            'sales.show_invoice_discount_tax' => ['sometimes', 'boolean'],
+            'sales.manual_unit_price' => ['sometimes', 'boolean'],
             'sales.allow_due_sales' => ['required', 'boolean'],
             'sales.allow_installment_sales' => ['required', 'boolean'],
             'sales.allow_sales_returns' => ['required', 'boolean'],
@@ -119,7 +121,15 @@ class SystemSetupController extends Controller
 
                 $current->update([
                     ...($data['company'] ?? []),
-                    'system_settings' => [...collect($data)->only(['sales', 'purchases', 'supplier_advances', 'store'])->all(), 'ecommerce' => $branding],
+                    'system_settings' => [
+                        ...collect($data)->only(['purchases', 'supplier_advances', 'store'])->all(),
+                        'sales' => [
+                            ...$data['sales'],
+                            'show_invoice_discount_tax' => (bool) ($data['sales']['show_invoice_discount_tax'] ?? $current->setup()['sales']['show_invoice_discount_tax']),
+                            'manual_unit_price' => (bool) ($data['sales']['manual_unit_price'] ?? $current->setup()['sales']['manual_unit_price']),
+                        ],
+                        'ecommerce' => $branding,
+                    ],
                 ]);
 
                 return array_diff(

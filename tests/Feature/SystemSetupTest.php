@@ -25,6 +25,21 @@ class SystemSetupTest extends TestCase
         ];
     }
 
+    public function test_owner_can_toggle_manual_unit_pricing_for_their_store(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $this->actingAs($owner)->getJson('/api/system-setup')->assertOk()->assertJsonPath('sales.manual_unit_price', false);
+
+        $settings = $this->settings();
+        $settings['sales']['manual_unit_price'] = true;
+        $this->putJson('/api/system-setup', $settings)->assertOk()->assertJsonPath('sales.manual_unit_price', true);
+        $this->getJson('/api/session')->assertOk()->assertJsonPath('operational_setup.sales.manual_unit_price', true);
+        $this->putJson('/api/system-setup', $this->settings())->assertOk()->assertJsonPath('sales.manual_unit_price', true);
+
+        $settings['sales']['manual_unit_price'] = false;
+        $this->putJson('/api/system-setup', $settings)->assertOk()->assertJsonPath('sales.manual_unit_price', false);
+    }
+
     public function test_storefront_uses_its_company_branding_and_can_restore_defaults(): void
     {
         config(['tenancy.base_domain' => 'uddog-soft.com']);
