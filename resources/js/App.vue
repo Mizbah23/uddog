@@ -1331,30 +1331,36 @@ const documentCanSave = computed(() => {
 const roadmapCompleted = computed(() => roadmapItems.filter(item => item.status === 'Completed').length);
 const salesTargetTotals = computed(() => salesTargets.value.reduce((totals, target) => ({ target: totals.target + Number(target.target_amount || 0), actual: totals.actual + Number(target.actual_amount || 0) }), { target: 0, actual: 0 }));
 const purchaseStep = computed(() => !documentForm.value.contact_id ? 1 : !documentForm.value.items.every(item => item.product_id) ? 2 : 3);
-const saleDiscountPercent = ref(null);
-const docSubtotal = computed(() => documentForm.value.items.reduce((sum, item) => {
-  const lineTotal = Number(item.quantity || 0) * Number(item.unit_price || 0);
-  return sum + Math.round((lineTotal + Number.EPSILON) * 100);
-}, 0) / 100);
-const docDiscount = computed(() => {
-  if (documentForm.value.type === 'sale' && saleDiscountPercent.value !== null) {
-    return Math.round(Math.round(docSubtotal.value * 100) * Number(saleDiscountPercent.value) / 100) / 100;
-  }
-  return Number(documentForm.value.discount || 0);
-});
-const saleDiscountAmountInput = computed({
-  get: () => saleDiscountPercent.value === null ? documentForm.value.discount : docDiscount.value.toFixed(2),
-  set(amount) {
-    saleDiscountPercent.value = null;
-    documentForm.value.discount = amount;
-  },
-});
-const saleDiscountPercentInput = computed({
-  get: () => saleDiscountPercent.value ?? (docSubtotal.value > 0
-    ? Number((docDiscount.value * 100 / docSubtotal.value).toFixed(2))
-    : ''),
-  set(percent) { saleDiscountPercent.value = percent; },
-});
+function transactionSubtotal(items) {
+  return items.reduce((sum, item) => {
+    const lineTotal = Number(item.quantity || 0) * Number(item.unit_price || 0);
+    return sum + Math.round((lineTotal + Number.EPSILON) * 100);
+  }, 0) / 100;
+}
+
+function useTransactionDiscount(form, subtotal) {
+  const percent = ref(null);
+  const amount = computed(() => percent.value === null
+    ? Number(form.value.discount || 0)
+    : Math.round(Math.round(subtotal.value * 100) * Number(percent.value) / 100) / 100);
+  const amountInput = computed({
+    get: () => percent.value === null ? form.value.discount : amount.value.toFixed(2),
+    set(value) {
+      percent.value = null;
+      form.value.discount = value;
+    },
+  });
+  const percentInput = computed({
+    get: () => percent.value ?? (subtotal.value > 0 ? Number((amount.value * 100 / subtotal.value).toFixed(2)) : ''),
+    set(value) { percent.value = value; },
+  });
+  const valid = computed(() => amount.value >= 0 && amount.value <= subtotal.value
+    && (percent.value === null || (Number(percent.value) >= 0 && Number(percent.value) <= 100)));
+  return { amount, amountInput, percentInput, valid, reset: () => { percent.value = null; } };
+}
+
+const docSubtotal = computed(() => transactionSubtotal(documentForm.value.items));
+const { amount: docDiscount, amountInput: saleDiscountAmountInput, percentInput: saleDiscountPercentInput, reset: resetSaleDiscount } = useTransactionDiscount(documentForm, docSubtotal);
 const docBaseTotal = computed(() => Math.max(0, docSubtotal.value - docDiscount.value + Number(documentForm.value.tax || 0)));
 const docInterestAmount = computed(() => documentForm.value.payment_type === 'installment' && ['sale', 'resale'].includes(documentForm.value.type)
   ? Math.round(Math.max(0, docBaseTotal.value - Number(documentForm.value.down_payment || 0) - goldExchangeAmount.value) * Number(documentForm.value.interest_rate || 0)) / 100
@@ -1384,8 +1390,9 @@ watch([modal, soleSupplierId], ([currentModal, supplierId]) => {
 watch([page, soleDefaultCustomerId], ([currentPage, customerId]) => {
   if (currentPage === 'pos' && customerId && !posForm.value.contact_id) posForm.value.contact_id = customerId;
 });
-const posSubtotal = computed(() => posForm.value.items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0), 0));
-const posBaseTotal = computed(() => Math.max(0, posSubtotal.value - Number(posForm.value.discount || 0) + Number(posForm.value.tax || 0)));
+const posSubtotal = computed(() => transactionSubtotal(posForm.value.items));
+const { amount: posDiscount, amountInput: posDiscountAmountInput, percentInput: posDiscountPercentInput, valid: posDiscountValid, reset: resetPosDiscount } = useTransactionDiscount(posForm, posSubtotal);
+const posBaseTotal = computed(() => Math.max(0, posSubtotal.value - posDiscount.value + Number(posForm.value.tax || 0)));
 const posInterestAmount = computed(() => posForm.value.payment_type === 'installment'
   ? Math.round(Math.max(0, posBaseTotal.value - Number(posForm.value.down_payment || 0) - posGoldExchangeAmount.value) * Number(posForm.value.interest_rate || 0)) / 100
   : 0);
@@ -1451,7 +1458,8 @@ const posCanCheckout = computed(() => posCustomers.value.some(contact => contact
   && posForm.value.items.length > 0
   && posSharedStockValid.value
   && posForm.value.items.every(item => Number(item.quantity) > 0 && Number(item.quantity) * transactionUnitFactor(item) <= Number(item.stock))
-  && Number(posForm.value.discount || 0) <= posSubtotal.value
+  && posDiscountValid.value
+  && posForm.value.items.every(item => String(item.unit_price ?? '').trim() !== '' && Number.isFinite(Number(item.unit_price)) && Number(item.unit_price) >= 0)
   && posInitialPayment.value >= 0
   && (posForm.value.payment_type === 'installment'
     ? posInitialPayment.value < posBaseTotal.value - posGoldExchangeAmount.value
@@ -1475,6 +1483,7 @@ const stockProducts = computed(() => products.value.filter(product => !product.s
 const lowStock = p => Number(p.available_quantity ?? p.quantity_on_hand) <= Number(p.reorder_level);
 
 function resetPos() {
+  resetPosDiscount();
   posForm.value = { contact_id: soleDefaultCustomerId.value, document_date: today(), discount: '0', tax: '0', payment_type: 'full', payment_method: session.value?.operational_setup?.sales?.default_payment_method || 'cash', down_payment: '0', interest_rate: '0', installment_count: 3, installment_frequency: 'monthly', installment_start_date: today(), gold_exchange_weight: '0', gold_exchange_purity: '22K', amount_paid: '0', notes: '', items: [] };
   posSearch.value = '';
 }
@@ -1534,7 +1543,7 @@ function addPosProduct(product) {
     existing.quantity = Math.min(Math.floor(Number(existing.stock) / transactionUnitFactor(existing)), Number(existing.quantity) + 1);
     return;
   }
-  posForm.value.items.push({ product_id: product.id, name: product.name, sku: product.sku, unit: product.unit, base_unit: product.unit, previous_conversion: 1, stock: product.available_quantity ?? product.quantity_on_hand, quantity: 1, unit_price: product.is_gold_item ? goldUnitPrice(product) : product.sale_price || '0.00' });
+  posForm.value.items.push({ product_id: product.id, name: product.name, sku: product.sku, unit: product.unit, base_unit: product.unit, previous_conversion: 1, stock: product.available_quantity ?? product.quantity_on_hand, quantity: 1, unit_price: requiresManualUnitPrice('sale') ? '' : (product.is_gold_item ? goldUnitPrice(product) : product.sale_price || '0.00') });
 }
 function changePosQuantity(item, change) {
   item.quantity = Math.max(0.001, Math.min(Number(item.stock) / transactionUnitFactor(item), Number(item.quantity || 0) + change));
@@ -1633,7 +1642,7 @@ async function openDocument(type = page.value) {
   if (!operationEnabled(type)) { error.value = 'This workflow is disabled in System Setup.'; return; }
   clearMessages();
   documentCreateContext.value = '';
-  saleDiscountPercent.value = null;
+  resetSaleDiscount();
   documentForm.value = { type, contact_id: type === 'sale' ? soleDefaultCustomerId.value : type === 'purchase' ? soleSupplierId.value : '', purchase_id: '', sale_id: '', document_date: today(), discount: '0', tax: '0', payment_type: 'full', amount_paid: '0', payment_method: ['sale_return', 'purchase_return'].includes(type) ? 'credit' : (session.value?.operational_setup?.sales?.default_payment_method || 'cash'), down_payment: '0', interest_rate: '0', installment_count: 3, installment_frequency: 'monthly', first_installment_date: '', gold_exchange_weight: '0', gold_exchange_purity: '22K', notes: '', items: [newDocumentLine(type)] };
   saleFormError.value = '';
   saleFormLoading.value = false;
@@ -2192,11 +2201,12 @@ async function deleteContact(contact) {
   finally { busy.value = false; }
 }
 async function completePosSale() {
+  if (busy.value || !posCanCheckout.value) return;
   error.value = ''; busy.value = true;
   try {
     const payload = {
       type: 'sale', sale_channel: 'pos', branch_id: activeBranchId.value, contact_id: posForm.value.contact_id,
-      document_date: posForm.value.document_date, discount: posForm.value.discount,
+      document_date: posForm.value.document_date, discount: posDiscount.value.toFixed(2),
       tax: posForm.value.tax, payment_type: posForm.value.payment_type, payment_method: posForm.value.payment_method,
       amount_paid: posCashPayment.value.toFixed(2), down_payment: posForm.value.down_payment,
       gold_exchange_weight: posForm.value.gold_exchange_weight, gold_exchange_purity: posForm.value.gold_exchange_purity,
@@ -2822,7 +2832,7 @@ async function stopSupportSession() {
             <section class="panel pos-catalog">
               <form class="pos-scanner" @submit.prevent="scanPosBarcode"><ScanLine :size="22" /><div><strong>Scan product barcode</strong><span>Keep this field focused and scan; the product is added when Enter is received.</span></div><input v-model="barcodeScan" inputmode="numeric" autocomplete="off" autofocus placeholder="Scan EAN-13 or enter SKU" aria-label="Scan product barcode"><button class="btn-primary-app" type="submit">Add</button></form>
               <div class="pos-catalog-head"><div class="search-box pos-search"><Search :size="18" /><input v-model="posSearch" placeholder="Search by product, SKU, barcode or category..."></div><span>{{ posProducts.length }} available products</span></div>
-              <div v-if="posProducts.length" class="pos-product-grid"><button v-for="product in posProducts" :key="product.id" class="pos-product-card" @click="addPosProduct(product)"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.sku || product.category?.name || 'No SKU' }}</small></div><span class="pos-product-price">{{ money(product.sale_price) }}</span><small class="pos-product-stock">{{ qty(product.available_quantity ?? product.quantity_on_hand) }} {{ product.unit }} in stock<span v-if="product.stock_source_product_id"> · shared</span></small><span class="pos-add"><Plus :size="15" /> Add</span></button></div>
+              <div v-if="posProducts.length" class="pos-product-grid"><button v-for="product in posProducts" :key="product.id" class="pos-product-card" @click="addPosProduct(product)"><span class="product-avatar">{{ initial(product.name) }}</span><div><strong>{{ product.name }}</strong><small>{{ product.sku || product.category?.name || 'No SKU' }}</small></div><span v-if="!requiresManualUnitPrice('sale')" class="pos-product-price">{{ money(product.sale_price) }}</span><small class="pos-product-stock">{{ qty(product.available_quantity ?? product.quantity_on_hand) }} {{ product.unit }} in stock<span v-if="product.stock_source_product_id"> · shared</span></small><span class="pos-add"><Plus :size="15" /> Add</span></button></div>
               <div v-else class="empty-state"><Package :size="32" /><strong>No stocked products found</strong><span>Purchase or adjust stock before creating a POS sale.</span></div>
             </section>
             <aside class="panel pos-checkout">
@@ -2831,7 +2841,14 @@ async function stopSupportSession() {
               <div class="pos-customer"><label class="field"><span>Customer *</span><div class="field-action"><select v-model="posForm.contact_id" required><option value="" disabled>Select a customer</option><option v-for="customer in posCustomers" :key="customer.id" :value="customer.id">{{ customer.name }}{{ customer.phone ? ` · ${customer.phone}` : '' }}</option></select><button class="btn-secondary-app small create-inline" type="button" @click="createPosCustomer"><Plus :size="16" /> New</button></div><small v-if="!posCustomers.length">Create a customer before checkout.</small></label></div>
               <div v-if="posForm.items.length" class="pos-cart"><div v-for="(item, index) in posForm.items" :key="item.product_id" class="pos-cart-item"><div class="pos-cart-title"><div><strong>{{ item.name }}</strong><small>{{ item.sku || `${qty(item.stock)} ${item.base_unit} available` }}</small></div><button class="icon-button" title="Remove" @click="posForm.items.splice(index, 1)"><Trash2 :size="15" /></button></div><div class="pos-cart-controls"><div class="quantity-control"><button @click="changePosQuantity(item, -1)"><Minus :size="14" /></button><input v-model="item.quantity" type="number" :min="['pc', 'pcs'].includes(item.base_unit) && item.unit === item.base_unit ? 1 : 0.001" :max="Number(item.stock) / transactionUnitFactor(item)" :step="['pc', 'pcs'].includes(item.base_unit) && item.unit === item.base_unit ? 1 : 0.001" aria-label="Quantity"><button @click="changePosQuantity(item, 1)"><Plus :size="14" /></button></div><label><span>Unit</span><select v-model="item.unit" :aria-label="`Unit for ${item.name}`" @change="changeTransactionUnit(item)"><option v-for="unit in transactionUnitOptions(item.product_id)" :key="unit.value" :value="unit.value">{{ unit.label }}</option></select></label><label><span>Price per {{ item.unit }}</span><input v-model="item.unit_price" type="number" min="0" step="0.01"></label><strong>{{ money(Number(item.quantity) * Number(item.unit_price)) }}</strong></div><small v-if="Number(item.quantity) * transactionUnitFactor(item) > Number(item.stock)" class="pos-line-error">Only {{ qty(item.stock) }} {{ item.base_unit }} available.</small></div></div>
               <div v-else class="empty-state pos-empty"><ShoppingCart :size="30" /><strong>Your cart is empty</strong><span>Choose a product to begin the sale.</span></div>
-              <div class="pos-summary"><div><span>Subtotal</span><strong>{{ money(posSubtotal) }}</strong></div><label><span>Discount</span><input v-model="posForm.discount" type="number" min="0" :max="posSubtotal" step="0.01"></label><label><span>Tax</span><input v-model="posForm.tax" type="number" min="0" step="0.01"></label><div class="pos-grand-total"><span>Total</span><strong>{{ money(posTotal) }}</strong></div></div>
+              <div class="pos-summary"><div><span>Subtotal</span><strong>{{ money(posSubtotal) }}</strong></div><div class="sale-discount-row">
+            <span id="pos-discount-label">{{ translate('Overall discount', language) }}</span>
+            <div class="sale-discount-controls" role="group" aria-labelledby="pos-discount-label">
+              <input v-model.number="posDiscountAmountInput" type="number" inputmode="decimal" min="0" :max="posSubtotal" step="0.01" :aria-label="translate('Discount amount', language)">
+              <input v-model.number="posDiscountPercentInput" type="number" inputmode="decimal" min="0" max="100" step="0.01" :aria-label="translate('Discount (%)', language)">
+              <span aria-hidden="true">%</span>
+            </div>
+          </div><label><span>Tax</span><input v-model="posForm.tax" type="number" min="0" step="0.01"></label><div class="pos-grand-total"><span>Total</span><strong>{{ money(posTotal) }}</strong></div></div>
               <div class="pos-payment"><div class="pos-section-title"><Banknote :size="17" /><strong>Payment terms</strong></div><label class="field"><span>Sale type *</span><select v-model="posForm.payment_type" @change="setPosPayment"><option value="full">Immediate / full payment</option><option value="installment">Down payment + installment</option><option value="due">Due sale</option></select></label><div v-if="posForm.payment_type !== 'due'" class="pos-payment-grid"><label class="field"><span>Payment method *</span><select v-model="posForm.payment_method"><option value="cash">Cash</option><option value="card">Card</option><option value="mobile_banking">Mobile banking</option><option value="bank_transfer">Bank transfer</option></select></label><label v-if="posForm.payment_type === 'installment'" class="field"><span>Down payment</span><input v-model="posForm.down_payment" type="number" min="0" :max="posBaseTotal" step="0.01" @input="setPosPayment"></label><div v-else class="field"><span>Collected now</span><strong class="payment-total">{{ money(posTotal) }}</strong></div></div><div v-if="posForm.payment_type === 'installment'" class="pos-payment-grid"><label class="field"><span>Interest rate (%)</span><input v-model="posForm.interest_rate" type="number" min="0" max="100" step="0.01"><small>Flat interest on the financed balance.</small></label><label class="field"><span>Installments</span><input v-model="posForm.installment_count" type="number" min="1" max="120" step="1"></label><label class="field"><span>Frequency</span><select v-model="posForm.installment_frequency"><option value="weekly">Weekly</option><option value="half_monthly">Every 15 days</option><option value="monthly">Monthly</option></select></label><label class="field"><span>Start date</span><input v-model="posForm.installment_start_date" type="date" :min="posForm.document_date" required><small>First payment: {{ posInstallmentRows[0]?.due_date ? date(posInstallmentRows[0].due_date) : 'Choose a valid start date' }}</small></label></div><div v-if="posInstallmentRows.length" class="installment-plan-preview"><div class="installment-plan-head"><strong>Installment plan</strong><small>{{ posInstallmentRows.length }} payments · {{ frequencyLabel(posForm.installment_frequency) }} · starts {{ date(posForm.installment_start_date) }}</small></div><div class="installment-plan-stats"><div><span>Financed amount</span><strong>{{ money(posFinancedAmount) }}</strong></div><div><span>Interest charge</span><strong>{{ money(posInterestAmount) }}</strong></div><div><span>Total to collect</span><strong>{{ money(posBalance) }}</strong></div></div><div class="installment-plan-table-wrap"><table class="installment-plan-table"><thead><tr><th>#</th><th>Due date</th><th>Day</th><th>Principal</th><th>Interest</th><th>Installment</th></tr></thead><tbody><tr v-for="row in posInstallmentRows" :key="row.sequence"><td>{{ row.sequence }}</td><td>{{ date(row.due_date) }}</td><td>{{ weekday(row.due_date) }}</td><td>{{ money(row.principal) }}</td><td>{{ money(row.interest) }}</td><td><strong>{{ money(row.amount) }}</strong></td></tr></tbody></table></div><small class="installment-plan-footnote">The final payment includes any rounding difference. These due dates will appear on the invoice.</small></div><div v-if="posForm.payment_type === 'due'" class="payment-plan-note">No payment is collected today. The full total is recorded as customer due.</div><div v-if="posInterestAmount > 0" class="payment-plan-note">Interest charge: {{ money(posInterestAmount) }}</div><div class="pos-balance" :class="{ due: posBalance > 0 }"><span>{{ posForm.payment_type === 'installment' ? 'Scheduled balance' : 'Balance due' }}</span><strong>{{ money(posBalance) }}</strong></div><label class="field"><span>Notes</span><textarea v-model="posForm.notes" rows="2" placeholder="Optional sale notes"></textarea></label></div>
               <button class="btn-primary-app pos-complete" :disabled="busy || !posCanCheckout" @click="completePosSale"><ReceiptText :size="18" /> {{ busy ? 'Completing sale...' : `Complete sale · ${money(posTotal)}` }}</button>
             </aside>
@@ -3027,7 +3044,7 @@ async function stopSupportSession() {
                 <label class="field setup-company-address"><span>Company address</span><textarea v-model.trim="systemSetup.company.address" rows="3" maxlength="1000" autocomplete="street-address" placeholder="Street, city and postal code"></textarea></label>
               </div>
             </section>
-            <section class="panel setup-panel setup-sales"><div class="setup-panel-heading"><span class="setup-section-icon sales"><ShoppingCart :size="20" /></span><div><h2>Sales</h2><p>Payment choices and optional sale types</p></div></div><div class="setup-options"><label class="setup-option"><span><strong>Show discount and tax on sales invoices</strong><small>Show these rows on the web invoice and downloaded PDF.</small></span><input v-model="systemSetup.sales.show_invoice_discount_tax" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Enter unit prices manually</strong><small>Leave the unit price blank when selecting a product in New Sale.</small></span><input v-model="systemSetup.sales.manual_unit_price" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Due sales</strong><small>Let customers pay the full amount later</small></span><input v-model="systemSetup.sales.allow_due_sales" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Installments</strong><small>Accept a down payment and schedule the rest</small></span><input v-model="systemSetup.sales.allow_installment_sales" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Sales returns</strong><small>Allow refunds against earlier sales</small></span><input v-model="systemSetup.sales.allow_sales_returns" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Resales</strong><small>Allow resale transactions</small></span><input v-model="systemSetup.sales.allow_resales" type="checkbox" role="switch"></label></div><label class="field setup-field"><span>Default payment method</span><select v-model="systemSetup.sales.default_payment_method"><option value="cash">Cash</option><option value="card">Card</option><option value="mobile_banking">Mobile banking</option><option value="bank_transfer">Bank transfer</option></select><small>Preselected for new sales; staff can change it per transaction.</small></label></section>
+            <section class="panel setup-panel setup-sales"><div class="setup-panel-heading"><span class="setup-section-icon sales"><ShoppingCart :size="20" /></span><div><h2>Sales</h2><p>Payment choices and optional sale types</p></div></div><div class="setup-options"><label class="setup-option"><span><strong>Show discount and tax on sales invoices</strong><small>Show these rows on the web invoice and downloaded PDF.</small></span><input v-model="systemSetup.sales.show_invoice_discount_tax" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Enter unit prices manually</strong><small>Leave the unit price blank when selecting a product in New Sale or POS.</small></span><input v-model="systemSetup.sales.manual_unit_price" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Due sales</strong><small>Let customers pay the full amount later</small></span><input v-model="systemSetup.sales.allow_due_sales" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Installments</strong><small>Accept a down payment and schedule the rest</small></span><input v-model="systemSetup.sales.allow_installment_sales" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Sales returns</strong><small>Allow refunds against earlier sales</small></span><input v-model="systemSetup.sales.allow_sales_returns" type="checkbox" role="switch"></label><label class="setup-option"><span><strong>Resales</strong><small>Allow resale transactions</small></span><input v-model="systemSetup.sales.allow_resales" type="checkbox" role="switch"></label></div><label class="field setup-field"><span>Default payment method</span><select v-model="systemSetup.sales.default_payment_method"><option value="cash">Cash</option><option value="card">Card</option><option value="mobile_banking">Mobile banking</option><option value="bank_transfer">Bank transfer</option></select><small>Preselected for new sales; staff can change it per transaction.</small></label></section>
             <div class="setup-side">
               <section class="panel setup-panel">
                 <div class="setup-panel-heading"><span class="setup-section-icon purchases"><ShoppingBag :size="20" /></span><div><h2>Purchases</h2><p>Supplier return preferences</p></div></div>

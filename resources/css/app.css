@@ -35,7 +35,8 @@
 .product-image-previews{display:flex;gap:12px;flex-wrap:wrap}.product-image-previews>div{position:relative;width:100px;height:100px;border:1px solid #e5e3ef;border-radius:10px;overflow:hidden;background:#fff}.product-image-previews img{width:100%;height:100%;object-fit:contain}.product-image-previews button{position:absolute;right:2px;top:2px;display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#fff;color:#a33;box-shadow:0 1px 5px #0002}.product-image-upload input[type=file]{width:100%;min-height:44px;padding:8px}
 .online-order-count{margin-left:auto;min-width:24px;padding:3px 7px;border-radius:20px;background:#dc2626;color:#fff;font-size:12px;font-weight:700;text-align:center;animation:order-count-blink 1.4s ease-in-out infinite}@keyframes order-count-blink{50%{opacity:.4}}@media(prefers-reduced-motion:reduce){.online-order-count{animation:none}}
 
-.totals-box > .sale-discount-row {
+.totals-box > .sale-discount-row,
+.pos-summary > .sale-discount-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
   gap: 6px;
@@ -46,7 +47,8 @@
   align-items: center;
   gap: 4px;
 }
-.totals-box .sale-discount-controls input {
+.totals-box .sale-discount-controls input,
+.pos-summary .sale-discount-controls input {
   width: 100%;
   min-width: 0;
   padding-inline: 4px;
