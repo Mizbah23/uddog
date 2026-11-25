@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Organization;
 use App\SubscriptionStatus;
+use App\Support\StorefrontDomains;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -29,6 +30,7 @@ class StoreClientRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255', 'unique:organizations,name'],
             'subdomain' => ['nullable', 'string', 'max:63', 'regex:/\A[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\z/D', Rule::notIn(['admin', 'www', 'mail', 'ftp', 'cpanel', 'webmail', 'autodiscover', 'autoconfig']), Rule::unique('organizations', 'subdomain')],
+            'storefront_domain' => StorefrontDomains::rules(),
             'plan_name' => ['nullable', 'string', 'max:100'],
             'package_limits' => ['nullable', 'array:branches,users,sale_invoices'],
             'package_limits.branches' => ['nullable', 'integer', 'min:1', 'max:1000000'],
@@ -53,6 +55,10 @@ class StoreClientRequest extends FormRequest
     {
         if (! $this->exists('annual_renew_fee') && is_string($this->input('plan_name'))) {
             $this->merge(['annual_renew_fee' => Organization::ANNUAL_RENEW_FEES[$this->input('plan_name')] ?? null]);
+        }
+
+        if (is_string($this->input('storefront_domain'))) {
+            $this->merge(['storefront_domain' => strtolower(rtrim(trim($this->input('storefront_domain')), '.')) ?: null]);
         }
 
         if (is_string($this->input('subdomain'))) {

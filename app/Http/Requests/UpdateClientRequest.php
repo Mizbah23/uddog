@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Organization;
 use App\SubscriptionStatus;
+use App\Support\StorefrontDomains;
 use App\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,6 +34,7 @@ class UpdateClientRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($this->route('client'))],
             'subdomain' => ['nullable', 'string', 'max:63', 'regex:/\A[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\z/D', Rule::notIn(['admin', 'www', 'mail', 'ftp', 'cpanel', 'webmail', 'autodiscover', 'autoconfig']), Rule::unique('organizations', 'subdomain')->ignore($this->route('client'))],
+            'storefront_domain' => StorefrontDomains::rules($organization),
             'plan_name' => ['nullable', 'string', 'max:100'],
             'package_limits' => ['nullable', 'array:branches,users,sale_invoices'],
             'package_limits.branches' => ['nullable', 'integer', 'min:1', 'max:1000000'],
@@ -68,6 +70,10 @@ class UpdateClientRequest extends FormRequest
             if ($company && $this->input('plan_name') !== $company->plan_name) {
                 $this->merge(['annual_renew_fee' => Organization::ANNUAL_RENEW_FEES[$this->input('plan_name')] ?? $company->annual_renew_fee]);
             }
+        }
+
+        if (is_string($this->input('storefront_domain'))) {
+            $this->merge(['storefront_domain' => strtolower(rtrim(trim($this->input('storefront_domain')), '.')) ?: null]);
         }
 
         if (is_string($this->input('subdomain'))) {

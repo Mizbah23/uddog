@@ -28,6 +28,7 @@ use App\Services\InventoryService;
 use App\Services\PackageLimitService;
 use App\Services\SaleCorrectionService;
 use App\SubscriptionStatus;
+use App\Support\StorefrontDomains;
 use App\TenantContext;
 use App\UserRole;
 use Illuminate\Database\Eloquent\Collection;
@@ -58,7 +59,7 @@ class WorkspaceController extends Controller
         }
         $organization = $user?->organization;
         $storefrontHost = $organization
-            ? array_search($organization->id, config('tenancy.storefront_domains', []))
+            ? StorefrontDomains::preferredHost($organization)
             : false;
         $expiryDate = $organization?->subscription_ends_at;
         $abilities = $user ? collect(Permission::cases())

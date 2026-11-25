@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\StorefrontDomains;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,7 +18,8 @@ class StorefrontDomain
     {
         $host = strtolower($request->getHost());
         abort_if(in_array($host, ['nishajagro.bd.poolcaresaudi.com', 'www.nishajagro.bd.poolcaresaudi.com'], true), 404);
-        if (array_key_exists($host, config('tenancy.storefront_domains', []))) {
+        if ($companyId = StorefrontDomains::companyForHost($host)) {
+            $request->attributes->set(StorefrontDomains::REQUEST_COMPANY, $companyId);
             abort_unless($request->is('/', 'sitemap.xml', 'online-store', 'online-store/*'), 404);
             config(['session.domain' => null]);
         }

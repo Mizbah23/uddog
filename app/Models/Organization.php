@@ -14,7 +14,7 @@ class Organization extends Model
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'plan_name', 'annual_renew_fee', 'package_limits', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'ecommerce_pack_sizes', 'shared_stock_sales', 'ecommerce_enabled', 'notes', 'system_settings', 'tenant_database'];
+    protected $fillable = ['name', 'phone', 'address', 'subdomain', 'storefront_domain', 'plan_name', 'annual_renew_fee', 'package_limits', 'subscription_status', 'subscription_ends_at', 'access_paused', 'gold_store', 'ecommerce_pack_sizes', 'shared_stock_sales', 'ecommerce_enabled', 'notes', 'system_settings', 'tenant_database'];
 
     public const ANNUAL_RENEW_FEES = ['Starter' => 4000, 'Standard' => 7000, 'Premium' => 12000];
 

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LogicException;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class TenantDatabaseTest extends TestCase
@@ -88,7 +89,9 @@ class TenantDatabaseTest extends TestCase
         $this->getJson('http://nested.demo.test/api/session')->assertNotFound();
     }
 
-    public function test_custom_storefront_domain_is_canonical_for_its_tenant_sitemap_and_products(): void
+    #[TestWith([true])]
+    #[TestWith([false])]
+    public function test_custom_storefront_domain_is_canonical_for_its_tenant_sitemap_and_products(bool $legacy): void
     {
         $company = Organization::factory()->create(['subdomain' => 'demo', 'ecommerce_enabled' => true]);
         $database = 'uddog_test_'.Str::random(16);
@@ -97,7 +100,11 @@ class TenantDatabaseTest extends TestCase
         $this->tenantFiles[] = $path;
         $company->update(['tenant_database' => $database]);
         $this->configureTenancy();
-        config(['tenancy.storefront_domains' => ['shop.example' => (string) $company->id]]);
+        if ($legacy) {
+            config(['tenancy.storefront_domains' => ['shop.example' => (string) $company->id]]);
+        } else {
+            $company->update(['storefront_domain' => 'shop.example']);
+        }
 
         $product = app(TenantContext::class)->run($company, function () use ($company): Product {
             $this->assertSame(0, Artisan::call('migrate', ['--database' => 'tenant', '--force' => true, '--no-interaction' => true]));
@@ -111,6 +118,8 @@ class TenantDatabaseTest extends TestCase
         });
 
         $productPath = '/online-store/products/'.$product->id;
+        $this->get('https://shop.example/dashboard')->assertNotFound();
+        $this->get('https://shop.example/')->assertOk();
         $this->get('https://shop.example/sitemap.xml')->assertOk()
             ->assertSee('<loc>https://shop.example/</loc>', false)
             ->assertSee('<loc>https://shop.example'.$productPath.'</loc>', false);
