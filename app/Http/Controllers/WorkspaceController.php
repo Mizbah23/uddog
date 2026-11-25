@@ -645,7 +645,7 @@ class WorkspaceController extends Controller
         if ($request->boolean('paginate')) {
             $results = $query->orderByDesc('document_date')->orderByDesc('id')->paginate($filters['per_page'] ?? 25);
             $balances->load($results->getCollection());
-            $this->prepareInvoiceReferences($results->getCollection());
+            $this->prepareDocumentHistory($results->getCollection());
 
             return response()->json([
                 'data' => $results->items(),
@@ -656,14 +656,18 @@ class WorkspaceController extends Controller
 
         $documents = $query->latest()->get();
         $balances->load($documents);
-        $this->prepareInvoiceReferences($documents);
+        $this->prepareDocumentHistory($documents);
 
         return response()->json($documents);
     }
 
-    private function prepareInvoiceReferences(Collection $documents): void
+    private function prepareDocumentHistory(Collection $documents): void
     {
+        $hideProfit = Auth::user()->hasRole(UserRole::Staff, UserRole::Manager);
         foreach ($documents as $document) {
+            if ($hideProfit) {
+                $document->makeHidden(['stock_profit', 'total_profit']);
+            }
             foreach (['purchase', 'sale', 'purchaseReturns', 'saleReturns'] as $relation) {
                 $references = $document->getRelation($relation);
                 foreach ($references instanceof Collection ? $references : collect([$references])->filter() as $reference) {

@@ -2894,7 +2894,7 @@ async function stopSupportSession() {
                       <span v-if="doc.purchase">Original purchase: <strong>{{ doc.purchase.number }}</strong></span>
                       <span v-if="doc.sale">Original sale: <strong>{{ doc.sale.number }}</strong></span>
                       <span v-if="['sale', 'resale', 'purchase', 'sale_return'].includes(page)">Payment: <strong>{{ historyPaymentLabel(doc) }}</strong> · Paid {{ money(doc.amount_paid) }} · Due {{ money(doc.balance_due) }}</span>
-                      <span v-if="['sale', 'resale'].includes(page)">Stock profit: <strong>{{ money(doc.stock_profit) }}</strong> · Total profit: <strong>{{ money(doc.total_profit) }}</strong></span>
+                      <span v-if="['sale', 'resale'].includes(page) && doc.stock_profit != null && doc.total_profit != null">Stock profit: <strong>{{ money(doc.stock_profit) }}</strong> · Total profit: <strong>{{ money(doc.total_profit) }}</strong></span>
                       <span v-if="doc.notes">{{ doc.notes }}</span>
                     </div>
                     <div v-for="item in doc.items" :key="item.id" class="detail-line"><span>{{ item.product?.name }} <small v-if="item.product?.sku">({{ item.product.sku }})</small></span><span>{{ qty(item.entered_quantity ?? item.quantity) }} {{ item.entered_unit || item.product?.unit }} × {{ money(item.entered_unit_price ?? item.unit_price) }}</span><strong>{{ money(item.line_total) }}</strong></div>

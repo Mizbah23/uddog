@@ -17,6 +17,30 @@ class DocumentSerializationPerformanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_sales_history_only_exposes_profit_to_the_owner(): void
+    {
+        $owner = User::factory()->admin()->create();
+        $branch = $owner->organization->branches()->firstOrFail();
+        $customer = Contact::create(['organization_id' => $owner->organization_id, 'type' => 'customer', 'name' => 'Customer']);
+        $sale = Document::create([
+            'organization_id' => $owner->organization_id, 'branch_id' => $branch->id,
+            'contact_id' => $customer->id, 'created_by' => $owner->id,
+            'type' => 'sale', 'number' => 'PROFIT-1', 'document_date' => '2026-11-19',
+            'subtotal' => 100, 'total' => 100, 'amount_paid' => 100,
+        ]);
+        $url = '/api/documents?type=sale&branch_id='.$branch->id;
+        $this->actingAs($owner)->getJson($url)->assertOk()->assertJsonStructure([['stock_profit', 'total_profit']]);
+
+        $staff = User::factory()->staff()->create(['organization_id' => $owner->organization_id]);
+        $manager = User::factory()->create(['organization_id' => $owner->organization_id]);
+        foreach ([$staff, $manager] as $user) {
+            $this->actingAs($user)->getJson($url)->assertOk()->assertJsonPath('0.id', $sale->id)
+                ->assertJsonMissingPath('0.stock_profit')->assertJsonMissingPath('0.total_profit');
+            $this->getJson($url.'&paginate=1&date_from=2026-11-19')->assertOk()->assertJsonPath('data.0.id', $sale->id)
+                ->assertJsonMissingPath('data.0.stock_profit')->assertJsonMissingPath('data.0.total_profit');
+        }
+    }
+
     #[TestWith(['/api/documents?paginate=1&type=sale&per_page=30'])]
     #[TestWith(['/api/documents'])]
     #[TestWith(['/api/documents', 400])]
