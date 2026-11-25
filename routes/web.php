@@ -14,6 +14,7 @@ use App\Http\Controllers\ProductDamageController;
 use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ResourceUsageController;
 use App\Http\Controllers\SalesTargetController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StockCheckController;
@@ -162,6 +163,7 @@ Route::prefix('api')->middleware(ResolveTenant::class)->group(function () {
         });
 
         Route::middleware('role:superadmin')->group(function () {
+            Route::get('resource-usage', ResourceUsageController::class)->middleware('throttle:12,1');
             Route::get('system-updates', [SystemUpdateController::class, 'show']);
             Route::post('system-updates', [SystemUpdateController::class, 'store'])->middleware('throttle:2,1');
             Route::get('clients', [ClientController::class, 'index']);
@@ -183,7 +185,7 @@ Route::view('/password/reset/{token}', 'app')->middleware(ResolveTenant::class)-
 Route::view('/app', 'app')->middleware(ResolveTenant::class)->name('app.home');
 Route::permanentRedirect('/fake_orders', '/fake-orders')->middleware(ResolveTenant::class);
 Route::view('/{workspacePage}', 'app')
-    ->where('workspacePage', 'ecommerce_orders|fake-orders|dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|profile')
+    ->where('workspacePage', 'ecommerce_orders|fake-orders|dashboard|products|categories|branches|customers|suppliers|supplier_advances|purchase|pos|sale|sale_return|resale|purchase_return|inventory|product_damages|stock_checks|stock_transfers|warranties|sales_targets|expenses|gold_rates|gold_jobs|gold_report|reports|admin_dashboard|clients|access_control|users|staff|system_setup|roadmap|resource-usage|profile')
     ->middleware(ResolveTenant::class);
 
 Route::get('/', function (Request $request) {
