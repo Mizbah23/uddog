@@ -28,6 +28,7 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Middleware\ResolveTenant;
+use App\Support\StorefrontDomains;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -190,7 +191,7 @@ Route::view('/{workspacePage}', 'app')
 
 Route::get('/', function (Request $request) {
     $host = strtolower($request->getHost());
-    if (array_key_exists($host, config('tenancy.storefront_domains', []))) {
+    if ($request->attributes->has(StorefrontDomains::REQUEST_COMPANY)) {
         return app(ResolveTenant::class)->handle($request, fn () => app(EcommerceController::class)->show($request));
     }
     if (config('tenancy.enabled') && $host === 'www.'.strtolower((string) config('tenancy.base_domain'))) {
@@ -220,7 +221,7 @@ Route::get('/sitemap.xml', function (Request $request) {
         config('tenancy.base_domain'),
     ]));
 
-    if (array_key_exists($host, config('tenancy.storefront_domains', []))
+    if ($request->attributes->has(StorefrontDomains::REQUEST_COMPANY)
         || (! in_array($host, $centralHosts, true)
             && (config('tenancy.enabled') || str_ends_with($host, '.'.strtolower((string) config('tenancy.base_domain')))))) {
         return app(ResolveTenant::class)->handle($request, fn () => app(EcommerceController::class)->sitemap($request));

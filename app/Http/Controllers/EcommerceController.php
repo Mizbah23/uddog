@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\ProductStock;
 use App\Services\InventoryService;
 use App\Services\SteadfastCourier;
+use App\Support\StorefrontDomains;
 use App\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,9 @@ class EcommerceController extends Controller
     private function publicStore(Request $request): Organization
     {
         $organization = app(TenantContext::class)->organization();
+        if (! $organization && ! config('tenancy.enabled') && $request->attributes->has(StorefrontDomains::REQUEST_COMPANY)) {
+            $organization = Organization::query()->findOrFail($request->attributes->get(StorefrontDomains::REQUEST_COMPANY));
+        }
         if (! $organization && ! config('tenancy.enabled')) {
             $suffix = '.'.strtolower((string) config('tenancy.base_domain'));
             $host = strtolower($request->getHost());
@@ -189,20 +193,20 @@ class EcommerceController extends Controller
 
     private function storefrontOrigin(Request $request, Organization $organization): string
     {
-        $host = array_search($organization->id, config('tenancy.storefront_domains'), false);
+        $host = StorefrontDomains::preferredHost($organization);
 
-        if ($host === false || $host === $request->getHost() || ! config('tenancy.enabled')) {
+        if ($host === null || $host === $request->getHost()) {
             return $request->getSchemeAndHttpHost();
         }
 
-        return $request->getScheme().'://'.$host;
+        return 'https://'.$host;
     }
 
     private function storefrontUrl(string $origin): string
     {
         $host = parse_url($origin, PHP_URL_HOST);
 
-        return $origin.(array_key_exists($host, config('tenancy.storefront_domains')) ? '/' : route('ecommerce.storefront', [], false));
+        return $origin.(StorefrontDomains::companyForHost($host) !== null ? '/' : route('ecommerce.storefront', [], false));
     }
 
     public function branding(Request $request, string $image): StreamedResponse

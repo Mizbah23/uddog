@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Organization;
 use App\Models\SupportImpersonation;
+use App\Support\StorefrontDomains;
 use App\TenantContext;
 use Closure;
 use Illuminate\Http\Request;
@@ -35,7 +36,7 @@ class ResolveTenant
                 abort(403, 'Open your company subdomain to use this account.');
             }
         } else {
-            $customCompany = config('tenancy.storefront_domains', [])[$host] ?? null;
+            $customCompany = $request->attributes->get(StorefrontDomains::REQUEST_COMPANY);
             if ($customCompany) {
                 $organization = Organization::query()->whereNotNull('tenant_database')->whereKey($customCompany)->where('ecommerce_enabled', true)->firstOrFail();
                 $context->activate($organization);
