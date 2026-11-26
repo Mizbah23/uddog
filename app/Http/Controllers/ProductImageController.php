@@ -16,12 +16,13 @@ class ProductImageController extends Controller
         $organization = $request->user()->organization()->firstOrFail();
         abort_unless($organization->ecommerce_enabled, 403);
         $record = Product::query()->where('organization_id', $organization->id)->findOrFail($product);
-        abort_unless($record->ecommerce_visible, 422, 'Enable online-store visibility before uploading images.');
         $data = $request->validate([
             'keep' => ['sometimes', 'array', 'max:5'], 'keep.*' => ['required', 'string', 'max:255', 'distinct'],
             'images' => ['sometimes', 'array', 'max:5'],
             'images.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240', 'dimensions:max_width=6000,max_height=6000'],
         ]);
+
+        abort_unless($record->ecommerce_visible || empty($data['images']), 422, 'Enable online-store visibility before uploading images.');
 
         return response()->json($images->replace($record, $data['keep'] ?? [], $request->file('images', [])));
     }

@@ -74,6 +74,27 @@ class ProductImageTest extends TestCase
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 
+    public function test_removing_photos_from_a_hidden_product_and_deleting_the_product_clean_up_storage(): void
+    {
+        [$owner, $product] = $this->records();
+        $disk = Storage::disk('local');
+        $directory = "product-images/{$owner->organization_id}/{$product->id}";
+        $paths = ["{$directory}/first.jpg", "{$directory}/second.jpg"];
+        foreach ($paths as $path) {
+            $disk->put($path, 'photo');
+        }
+        $disk->put('product-images/999/999/other.jpg', 'other store photo');
+        $product->update(['ecommerce_images' => $paths, 'ecommerce_visible' => false]);
+
+        $this->postJson("/api/products/{$product->id}/images", ['keep' => [$paths[1]]])->assertOk();
+        $disk->assertMissing($paths[0]);
+        $disk->assertExists($paths[1]);
+
+        $this->deleteJson("/api/products/{$product->id}")->assertOk();
+        $disk->assertMissing($paths[1]);
+        $disk->assertExists('product-images/999/999/other.jpg');
+    }
+
     public function test_no_photos_preserves_the_current_fallback_and_uploads_require_online_visibility(): void
     {
         [$owner, $product] = $this->records();
