@@ -39,6 +39,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -535,6 +536,9 @@ class WorkspaceController extends Controller
 
             $saved->stocks()->delete();
             $saved->delete();
+            $saved->getConnection()->afterCommit(
+                fn () => Storage::disk('local')->deleteDirectory("product-images/{$organizationId}/{$product}"),
+            );
         });
 
         return response()->json(['ok' => true]);

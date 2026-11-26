@@ -111,6 +111,12 @@ class SystemSetupController extends Controller
                 $current = Organization::query()->lockForUpdate()->findOrFail($organization->id);
                 $oldBranding = $current->setup()['ecommerce'];
                 $branding = array_replace($oldBranding, $data['ecommerce'] ?? []);
+                // Older settings could reference the same upload as both logo and favicon.
+                if ($branding['logo_url'] !== $oldBranding['logo_url']
+                    && $oldBranding['favicon_url'] === $oldBranding['logo_url']
+                    && ! array_key_exists('favicon_url', $data['ecommerce'] ?? [])) {
+                    $branding['favicon_url'] = null;
+                }
                 $branding['hero_images'] = [
                     ...array_diff($oldBranding['hero_images'], $data['remove_hero_images'] ?? []),
                     ...$newHeroImages,

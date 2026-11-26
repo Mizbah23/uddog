@@ -2044,14 +2044,16 @@ async function saveProduct() {
   error.value = ''; busy.value = true;
   try {
     const upload = new FormData();
-    if (productForm.value.ecommerce_visible && productImagesChanged.value) {
+    if (productImagesChanged.value) {
       for (const image of productImages.value) {
-        if (image.file) upload.append('images[]', await prepareProductImage(image.file), 'photo.jpg');
+        if (image.file) {
+          if (productForm.value.ecommerce_visible) upload.append('images[]', await prepareProductImage(image.file), 'photo.jpg');
+        }
         else upload.append('keep[]', image.path);
       }
     }
     const result = await api(editingId.value ? `products/${editingId.value}` : 'products', { method: editingId.value ? 'PUT' : 'POST', body: productForm.value });
-    if (productForm.value.ecommerce_visible && productImagesChanged.value) {
+    if (productImagesChanged.value) {
       editingId.value = result.id;
       const updated = await api(`products/${result.id}/images`, { method: 'POST', body: upload });
       clearProductImages();
